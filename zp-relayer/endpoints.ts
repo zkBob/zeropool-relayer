@@ -70,10 +70,11 @@ async function getJob(req: Request, res: Response) {
   const job = await txQueue.getJob(jobId)
   if (job) {
     const state = await job.getState()
-    const txHash = job.returnvalue
+    const {txHash, elapsed} = job.returnvalue
     res.json({
       state,
       txHash,
+      elapsed
     })
   } else {
     res.json(`Job ${jobId} not found`)

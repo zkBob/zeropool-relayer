@@ -11,7 +11,8 @@ export interface TxPayload {
   txProof: Proof
   txType: TxType
   rawMemo: string
-  depositSignature: string | null
+  depositSignature: string | null,
+  created: number
 }
 export const txQueue = new Queue<TxPayload, string>(TX_QUEUE_NAME, {
   connection: redis

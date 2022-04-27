@@ -81,6 +81,7 @@ async function processTx(job: Job<TxPayload>) {
     txType,
     rawMemo,
     depositSignature,
+    created
   } = job.data
   const jobId = job.id
 
@@ -137,7 +138,8 @@ async function processTx(job: Job<TxPayload>) {
   logger.debug(`${logPrefix} Adding tx to storage`)
   pool.txs.add(contractTransferIndex, Buffer.from(commitAndMemo, 'hex'))
 
-  return txHash
+  const elapsed = Date.now() -  (created??0)
+  return {txHash, elapsed }
 }
 
 

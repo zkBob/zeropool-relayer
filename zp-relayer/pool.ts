@@ -113,6 +113,7 @@ class Pool {
     )
 
     // TODO maybe store memo in redis as a path to a file
+    const created = Date.now()
     const job = await txQueue.add('test-tx', {
       to: config.poolAddress,
       amount: '0',
@@ -121,6 +122,7 @@ class Pool {
       txType,
       rawMemo,
       depositSignature,
+      created
     })
     logger.debug(`Added job: ${job.id}`)
     return job.id
