@@ -139,7 +139,7 @@ async function processTx(job: Job<TxPayload>) {
   pool.txs.add(contractTransferIndex, Buffer.from(commitAndMemo, 'hex'))
 
   const elapsed = Date.now() -  (created??0)
-  return {txHash, elapsed }
+  return {txHash, elapsed, created }
 }
 
 

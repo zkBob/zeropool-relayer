@@ -54,7 +54,7 @@ async function getTransactions(req: Request, res: Response, next: NextFunction) 
     next(new Error("limit must be a positive number"))
     return
   }
-  
+
   const offset = Number(req.query.offset as string || '0')
   if (isNaN(offset) || offset < 0) {
     next(new Error("offset must be a positive number or zero"))
@@ -67,18 +67,28 @@ async function getTransactions(req: Request, res: Response, next: NextFunction) 
 
 async function getJob(req: Request, res: Response) {
   const jobId = req.params.id
+
   const job = await txQueue.getJob(jobId)
   if (job) {
     const state = await job.getState()
-    const {txHash, elapsed} = job.returnvalue
-    res.json({
-      state,
-      txHash,
-      elapsed
-    })
+    try {
+      const { txHash, elapsed, created } = job.returnvalue
+      res.json({
+        state,
+        txHash,
+        created,
+        elapsed
+      })
+    } catch (error) {
+      const response_message = `job ${jobId} state:${state}`;
+      logger.error(response_message,`\nerror:${error}`);
+      res.status(500).json(response_message).end;
+      
+    }
   } else {
     res.json(`Job ${jobId} not found`)
   }
+
 }
 
 function relayerInfo(req: Request, res: Response) {
