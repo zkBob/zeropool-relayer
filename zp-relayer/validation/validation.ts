@@ -20,7 +20,7 @@ const AjvG2Point: JSONSchemaType<[[string, string], [string, string]]> = {
   items: [AjvG1Point, AjvG1Point],
 }
 
-const AjvSnarkProofSchema: JSONSchemaType<SnarkProof> = {
+const AjvSnarkProof: JSONSchemaType<SnarkProof> = {
   type: 'object',
   properties: {
     a: AjvG1Point,
@@ -30,38 +30,44 @@ const AjvSnarkProofSchema: JSONSchemaType<SnarkProof> = {
   required: ['a', 'b', 'c'],
 }
 
-const AjvProofSchema: JSONSchemaType<Proof> = {
+const AjvProof: JSONSchemaType<Proof> = {
   type: 'object',
   properties: {
     inputs: {
       type: 'array',
       items: { type: 'string' },
     },
-    proof: AjvSnarkProofSchema,
+    proof: AjvSnarkProof,
   },
   required: ['inputs', 'proof'],
 }
 
-const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
+const AjvSignature: JSONSchemaType<string | null> = {
+  type: 'string',
+  nullable: true,
+  pattern: '^[a-fA-F0-9]{128}$',
+}
+
+const AjvSendTransaction: JSONSchemaType<PoolTx> = {
   type: 'object',
   properties: {
-    proof: AjvProofSchema,
+    proof: AjvProof,
     memo: AjvString,
     txType: {
       type: 'string',
       enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
     },
-    depositSignature: { type: 'string', nullable: true },
+    depositSignature: AjvSignature,
   },
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
+const AjvSendTransactions: JSONSchemaType<PoolTx[]> = {
   type: 'array',
-  items: AjvSendTransactionSchema,
+  items: AjvSendTransaction,
 }
 
-const AjvGetTransactionsSchema: JSONSchemaType<{
+const AjvGetTransactions: JSONSchemaType<{
   limit: number
   offset: number
   optimistic: boolean
@@ -86,7 +92,7 @@ const AjvGetTransactionsSchema: JSONSchemaType<{
   required: [],
 }
 
-const AjvGetTransactionsV2Schema: JSONSchemaType<{
+const AjvGetTransactionsV2: JSONSchemaType<{
   limit: number
   offset: number
 }> = {
@@ -106,10 +112,10 @@ const AjvGetTransactionsV2Schema: JSONSchemaType<{
   required: [],
 }
 
-const validateSendTransaction = ajv.compile(AjvSendTransactionSchema)
-const validateSendTransactions = ajv.compile(AjvSendTransactionsSchema)
-const validateGetTransactions = ajv.compile(AjvGetTransactionsSchema)
-const validateGetTransactionsV2 = ajv.compile(AjvGetTransactionsV2Schema)
+const validateSendTransaction = ajv.compile(AjvSendTransaction)
+const validateSendTransactions = ajv.compile(AjvSendTransactions)
+const validateGetTransactions = ajv.compile(AjvGetTransactions)
+const validateGetTransactionsV2 = ajv.compile(AjvGetTransactionsV2)
 
 function checkErrors(validate: ValidateFunction) {
   return (data: any) => {

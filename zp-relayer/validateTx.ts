@@ -101,13 +101,11 @@ export async function checkAssertion(f: Function, errStr: string) {
   }
 }
 
-export async function validateTx({ txType, proof, memo, depositSignature }: PoolTx) {
+export async function validateTx({ txType, proof, memo }: PoolTx) {
   const buf = Buffer.from(memo, 'hex')
   const txData = getTxData(buf, txType)
 
   await checkAssertion(() => checkFee(txData.fee), `Fee too low`)
-  // Signature should start with `0x`, so size is 2+(64*2)=130
-  await checkAssertion(() => depositSignature === null || checkSize(depositSignature, 130), `Invalid signature`)
 
   if (txType === TxType.WITHDRAWAL) {
     const nativeAmount = (txData as WithdrawTxData).nativeAmount
