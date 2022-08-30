@@ -24,7 +24,7 @@ services:
     ports:
       - 6379:6379
   relayer:
-    image: lok52/zp-relayer:${RELAYER_VERSION:-latest}
+    image: ghcr.io/zkbob/zkbob-relayer:${RELAYER_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.relayer

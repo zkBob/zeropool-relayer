@@ -5,7 +5,7 @@ services:
     command: [redis-server, --appendonly, 'yes']
     image: redis:6.2.6
   relayer:
-    image: lok52/zp-relayer:latest
+    image: ghcr.io/zkbob/zkbob-relayer:latest
     depends_on:
       - redis
     env_file: zp-relayer/.env
