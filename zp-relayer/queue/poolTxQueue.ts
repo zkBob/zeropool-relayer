@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq'
-import { redis } from './redisClient'
+import { redis } from '../services/redisClient'
 import { TX_QUEUE_NAME } from '../utils/constants'
 import { Proof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'

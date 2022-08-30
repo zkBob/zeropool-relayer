@@ -2,7 +2,7 @@ import fs from 'fs'
 import { Request, Response, NextFunction } from 'express'
 import { pool } from './pool'
 import { logger } from './services/appLogger'
-import { poolTxQueue } from './services/poolTxQueue'
+import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
 import { proveTx } from './prover'
 import {
