@@ -7,7 +7,7 @@ env:
   DOCKER_REGISTRY: ghcr.io
   DOCKER_USERNAME: ${{ github.actor }}
   DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-  IMAGE_NAME: ghcr.io/akolotov/zkbob-relayer
+  IMAGE_NAME: ghcr.io/zkBob/zkbob-relayer
 
 jobs:
   build-amd64:
