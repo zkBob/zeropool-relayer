@@ -1,5 +1,5 @@
 import { pool } from './pool'
-import { GasPrice } from './services/GasPrice'
+import { GasPrice } from './services/gas-price'
 import { web3 } from './services/web3'
 import config from './config'
 import { Mutex } from 'async-mutex'
@@ -12,7 +12,10 @@ export async function init() {
   await initializeDomain(web3)
 
   await pool.init()
-  const gasPriceService = new GasPrice(web3, config.gasPriceUpdateInterval, config.gasPriceEstimationType, {})
+  const gasPriceService = new GasPrice(web3, config.gasPriceUpdateInterval, config.gasPriceEstimationType, {
+    speedType: config.gasPriceSpeedType,
+    factor: config.gasPriceFactor,
+  })
   await gasPriceService.start()
   const workerMutex = new Mutex()
   ;(await createPoolTxWorker(gasPriceService, workerMutex)).run()

@@ -1,15 +1,15 @@
 import { Job, Queue, Worker } from 'bullmq'
-import { web3 } from '../services/web3'
-import { logger } from '../services/appLogger'
-import { SENT_TX_QUEUE_NAME } from '../utils/constants'
-import { pool } from '../pool'
-import { SentTxPayload, sentTxQueue } from '../queue/sentTxQueue'
-import { redis } from '../services/redisClient'
-import type { GasPrice, EstimationType, GasPriceValue } from '../services/GasPrice'
+import { web3 } from '@/services/web3'
+import { logger } from '@/services/appLogger'
+import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
+import { pool } from '@/pool'
+import { SentTxPayload, sentTxQueue } from '@/queue/sentTxQueue'
+import { redis } from '@/services/redisClient'
+import type { GasPrice, EstimationType, GasPriceValue } from '@/services/gas-price'
 import type { TransactionConfig } from 'web3-core'
 import type { Mutex } from 'async-mutex'
-import { withMutex } from '../utils/helpers'
-import config from '../config'
+import { withMutex } from '@/utils/helpers'
+import config from '@/config'
 
 const token = 'RELAYER'
 
@@ -120,7 +120,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       const oldGasPrice = txConfig.gasPrice
       const newGasPrice = gasPrice.getPrice()
 
-      logger.warn('Tx unmined; updating gasPrice: %o -> %o', oldGasPrice, newGasPrice)
+      logger.warn('Tx %s is not mined; updating gasPrice: %o -> %o', txHash, oldGasPrice, newGasPrice)
 
       const newTxConfig = updateTxGasPrice(txConfig, newGasPrice)
 

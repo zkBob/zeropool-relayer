@@ -9,5 +9,8 @@
     "strict": true,
     "declaration": true,
     "lib": ["es2019.array", "dom"]
+  },
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
   }
 }
