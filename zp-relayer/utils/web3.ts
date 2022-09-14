@@ -59,3 +59,15 @@ export async function getChainId(web3: Web3) {
     throw new Error('Chain Id cannot be obtained')
   }
 }
+
+export async function getBlockNumber(web3: Web3) {
+  try {
+    logger.debug('Getting block number')
+    const blockNumber = await web3.eth.getBlockNumber()
+    logger.debug('Block number obtained %d', blockNumber)
+    return blockNumber
+  } catch (e) {
+    if (e instanceof Error) logger.error(e.message)
+    throw new Error(`Block Number cannot be obtained`)
+  }
+}
