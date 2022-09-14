@@ -2,8 +2,8 @@ import Ajv, { JSONSchemaType } from 'ajv'
 import { isAddress } from 'web3-utils'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
-import type { PoolTx } from '../pool'
-import { ZERO_ADDRESS } from '../utils/constants'
+import type { PoolTx } from '@/pool'
+import { ZERO_ADDRESS } from '@/utils/constants'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 

@@ -1,31 +1,30 @@
 import type Web3 from 'web3'
-import { toBN, toWei } from 'web3-utils'
-import config from '../config'
-import { setIntervalAndRun } from '../utils/helpers'
+import { toWei } from 'web3-utils'
+import config from '@/config'
+import { setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
 import { GasPriceOracle } from 'gas-price-oracle'
-import type { GasPriceKey } from 'gas-price-oracle/lib/types'
-import { logger } from './appLogger'
+import { logger } from '@/services/appLogger'
+import {
+  EstimationType,
+  FetchFunc,
+  EstimationOptions,
+  GasPriceValue,
+  EstimationEIP1559,
+  EstimationOracle,
+  EstimationPolygonGSV2,
+  EstimationWeb3,
+  PolygonGSV2Response,
+  PolygonGSV2GasPriceKey,
+  GasPriceKey,
+} from './types'
 
-// GasPrice fields
-interface LegacyGasPrice {
-  gasPrice: string
+const polygonGasPriceKeyMapping: Record<GasPriceKey, PolygonGSV2GasPriceKey> = {
+  low: 'safeLow',
+  standard: 'standard',
+  fast: 'fast',
+  instant: 'fast',
 }
-interface EIP1559GasPrice {
-  maxFeePerGas: string
-  maxPriorityFeePerGas: string
-}
-export type GasPriceValue = LegacyGasPrice | EIP1559GasPrice
-
-type EstimationEIP1559 = 'eip1559-gas-estimation'
-type EstimationOracle = 'gas-price-oracle'
-type EstimationWeb3 = 'web3'
-export type EstimationType = EstimationEIP1559 | EstimationOracle | EstimationWeb3
-
-type EstimationOracleOptions = { speedType: GasPriceKey; factor: number }
-type EstimationOptions<ET extends EstimationType> = ET extends EstimationOracle ? EstimationOracleOptions : {}
-
-type FetchFunc<ET extends EstimationType> = (_: EstimationOptions<ET>) => Promise<GasPriceValue>
 
 export class GasPrice<ET extends EstimationType> {
   private fetchGasPriceInterval: NodeJS.Timeout | null = null
@@ -63,16 +62,17 @@ export class GasPrice<ET extends EstimationType> {
     return this.cachedGasPrice
   }
 
-  private getFetchFunc(estimationType: ET): FetchFunc<ET> {
+  private getFetchFunc(estimationType: EstimationType): FetchFunc<EstimationType> {
     const funcs: Record<EstimationType, FetchFunc<EstimationType>> = {
-      'web3': this.fetchGasPriceWeb3,
-      'eip1559-gas-estimation': this.fetchGasPriceEIP1559,
+      'web3': this.fetchWeb3,
+      'eip1559-gas-estimation': this.fetchEIP1559,
       'gas-price-oracle': this.fetchGasPriceOracle,
+      'polygon-gasstation-v2': this.fetchPolygonGasStationV2,
     }
     return funcs[estimationType]
   }
 
-  private fetchGasPriceEIP1559: FetchFunc<EstimationEIP1559> = async () => {
+  private fetchEIP1559: FetchFunc<EstimationEIP1559> = async () => {
     // @ts-ignore
     const options = await estimateFees(this.web3)
     const res = {
@@ -82,21 +82,31 @@ export class GasPrice<ET extends EstimationType> {
     return res
   }
 
-  private fetchGasPriceWeb3: FetchFunc<EstimationWeb3> = async () => {
+  private fetchWeb3: FetchFunc<EstimationWeb3> = async () => {
     const gasPrice = await this.web3.eth.getGasPrice()
     return { gasPrice }
   }
 
-  // TODO: defaults to Mainnet; provide options for other supported oracles
   private fetchGasPriceOracle: FetchFunc<EstimationOracle> = async options => {
     const gasPriceOracle = new GasPriceOracle()
-    const json = await gasPriceOracle.fetchGasPricesOffChain()
-    const gasPrice = GasPrice.normalizeGasPrice(json[options.speedType], options.factor).toString(10)
+    const json = await gasPriceOracle.legacy.fetchGasPricesOffChain()
+    const gasPrice = GasPrice.normalizeGasPrice(json[options.speedType], options.factor)
     return { gasPrice }
   }
 
-  static normalizeGasPrice(oracleGasPrice: number, factor: number, limits = null) {
-    const gasPrice = oracleGasPrice * factor
-    return toBN(toWei(gasPrice.toFixed(2).toString(), 'gwei'))
+  private fetchPolygonGasStationV2: FetchFunc<EstimationPolygonGSV2> = async options => {
+    const response = await fetch('https://gasstation-mainnet.matic.network/v2')
+    const json: PolygonGSV2Response = await response.json()
+    const speedType = polygonGasPriceKeyMapping[options.speedType]
+    const { maxFee, maxPriorityFee } = json[speedType]
+    return {
+      maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
+      maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
+    }
+  }
+
+  static normalizeGasPrice(rawGasPrice: number, factor = 1) {
+    const gasPrice = rawGasPrice * factor
+    return toWei(gasPrice.toFixed(2).toString(), 'gwei')
   }
 }

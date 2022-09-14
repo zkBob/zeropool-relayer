@@ -1,6 +1,6 @@
 import BN from 'bn.js'
 import { padLeft, toBN } from 'web3-utils'
-import { logger } from '../services/appLogger'
+import { logger } from '@/services/appLogger'
 import { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'

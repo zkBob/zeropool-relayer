@@ -13,7 +13,9 @@
 | TREE_UPDATE_PARAMS_PATH | Local path to tree update parameters | string |
 | TX_VK_PATH | Local path to transaction curcuit verification key | string |
 | GAS_PRICE_FALLBACK | Default fallback gas price | integer |
-| GAS_PRICE_ESTIMATION_TYPE | Gas price estimation type | `web3` / `gas-price-oracle` / `eip1559-gas-estimation` |
+| GAS_PRICE_ESTIMATION_TYPE | Gas price estimation type | `web3` / `gas-price-oracle` / `eip1559-gas-estimation` / `polygon-gasstation-v2` |
+| GAS_PRICE_SPEED_TYPE | This parameter specifies the desirable transaction speed | `instant` / `fast` / `standard` / `low` |
+| GAS_PRICE_FACTOR | A value that will multiply the gas price of the oracle to convert it to gwei. If the oracle API returns gas prices in gwei then this can be set to `1`. Also, it could be used to intentionally pay more gas than suggested by the oracle to guarantee the transaction verification. E.g. `1.25` or `1.5`. | integer |
 | GAS_PRICE_UPDATE_INTERVAL | Interval in milliseconds used to get the updated gas price value using specified estimation type | integer |
 | RELAYER_LOG_LEVEL | Log level | Winston log level |
 | RELAYER_REDIS_URL | Url to redis instance | URL |

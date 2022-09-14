@@ -1,7 +1,7 @@
-import config from '../config'
+import config from '@/config'
 import { recoverTypedSignature, SignTypedDataVersion } from '@metamask/eth-sig-util'
 import Web3 from 'web3'
-import TokenAbi from '../abi/token-abi.json'
+import TokenAbi from '@/abi/token-abi.json'
 import { getChainId } from './web3'
 import { AbiItem } from 'web3-utils'
 

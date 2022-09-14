@@ -1,7 +1,7 @@
 import './env'
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
-import type { EstimationType } from './services/GasPrice'
+import type { EstimationType, GasPriceKey } from './services/gas-price'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -20,6 +20,8 @@ const config = {
   txVKPath: process.env.TX_VK_PATH || './params/transfer_verification_key.json',
   gasPriceFallback: process.env.GAS_PRICE_FALLBACK as string,
   gasPriceEstimationType: (process.env.GAS_PRICE_ESTIMATION_TYPE as EstimationType) || 'web3',
+  gasPriceSpeedType: (process.env.GAS_PRICE_SPEED_TYPE as GasPriceKey) || 'fast',
+  gasPriceFactor: Number((process.env.GAS_PRICE_FACTOR as string) || '1'),
   gasPriceUpdateInterval: parseInt(process.env.GAS_PRICE_UPDATE_INTERVAL || '5000'),
   logLevel: process.env.RELAYER_LOG_LEVEL || 'debug',
   redisUrl: process.env.RELAYER_REDIS_URL,

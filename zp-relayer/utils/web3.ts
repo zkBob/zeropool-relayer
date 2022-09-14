@@ -1,6 +1,6 @@
 import Web3 from 'web3'
 import { Contract, PastEventOptions } from 'web3-eth-contract'
-import { logger } from '../services/appLogger'
+import { logger } from '@/services/appLogger'
 
 export async function getNonce(web3: Web3, address: string) {
   try {
