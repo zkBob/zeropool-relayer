@@ -180,9 +180,6 @@ class Pool {
           state.addCommitment(Math.floor(index / OUTPLUSONE), Helpers.strToNum(outCommit))
           state.addTx(index, Buffer.from(commitAndMemo, 'hex'))
         }
-        console.log(returnValues.index, index)
-        console.log(this.state.getMerkleRoot())
-        console.log(await this.PoolInstance.methods.roots(index).call())
       }
     }
 
