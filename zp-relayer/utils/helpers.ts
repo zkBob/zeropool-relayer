@@ -99,7 +99,6 @@ export async function setIntervalAndRun(f: () => Promise<void> | void, interval:
 
 export async function withMutex<R>(mutex: Mutex, f: () => Promise<R>): Promise<R> {
   const release = await mutex.acquire()
-  logger.info('ACQUIRED MUTEX')
   try {
     const res = await f()
     return res
@@ -107,6 +106,5 @@ export async function withMutex<R>(mutex: Mutex, f: () => Promise<R>): Promise<R
     throw e
   } finally {
     release()
-    logger.info('RELEASED MUTEX')
   }
 }

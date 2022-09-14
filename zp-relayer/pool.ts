@@ -7,7 +7,7 @@ import config from './config'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
-import { getEvents, getTransaction } from './utils/web3'
+import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
 import { validateTx } from './validateTx'
 import { PoolState } from './state'
@@ -84,7 +84,7 @@ class Pool {
     if (this.isInitialized) return
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
-    await this.syncState()
+    await this.syncState(config.startBlock)
     this.isInitialized = true
   }
 
@@ -108,8 +108,13 @@ class Pool {
     return job.id
   }
 
-  async syncState(fromBlock: number | string = 'earliest') {
-    logger.debug('Syncing state...')
+  async getLastBlockToProcess() {
+    const lastBlockNumber = await getBlockNumber(web3)
+    return lastBlockNumber
+  }
+
+  async syncState(fromBlock: number) {
+    logger.debug('Syncing state; starting from block %d', fromBlock)
 
     const localIndex = this.state.getNextIndex()
     const localRoot = this.state.getMerkleRoot()
@@ -131,53 +136,61 @@ class Pool {
       missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
     }
 
-    const events = await getEvents(this.PoolInstance, 'Message', {
-      fromBlock,
-      filter: {
-        index: missedIndices,
-      },
-    })
+    const lastBlockNumber = await this.getLastBlockToProcess()
+    let finishBlock = fromBlock
+    for (let startBlock = fromBlock; finishBlock <= lastBlockNumber; startBlock = finishBlock) {
+      finishBlock += config.eventsProcessingBatchSize
+      const events = await getEvents(this.PoolInstance, 'Message', {
+        fromBlock: startBlock,
+        toBlock: finishBlock,
+        filter: {
+          index: missedIndices,
+        },
+      })
 
-    if (events.length !== missedIndices.length) {
-      logger.error('Not all events found')
-      return
+      for (let i = 0; i < events.length; i++) {
+        const { returnValues, transactionHash } = events[i]
+        const memoString: string = returnValues.message
+        if (!memoString) {
+          throw new Error('incorrect memo in event')
+        }
+
+        const { input } = await getTransaction(web3, transactionHash)
+        const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
+
+        const parser = new PoolCalldataParser(calldata)
+
+        const nullifier = parser.getField('nullifier')
+        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+
+        const outCommitRaw = parser.getField('outCommit')
+        const outCommit = web3.utils.hexToNumberString(outCommitRaw)
+
+        const txTypeRaw = parser.getField('txType')
+        const txType = toTxType(txTypeRaw)
+
+        const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
+        const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
+
+        const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
+        const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
+
+        const index = Number(returnValues.index) - OUTPLUSONE
+        for (let state of [this.state, this.optimisticState]) {
+          state.addCommitment(Math.floor(index / OUTPLUSONE), Helpers.strToNum(outCommit))
+          state.addTx(index, Buffer.from(commitAndMemo, 'hex'))
+        }
+        console.log(returnValues.index, index)
+        console.log(this.state.getMerkleRoot())
+        console.log(await this.PoolInstance.methods.roots(index).call())
+      }
     }
 
-    for (let i = 0; i < events.length; i++) {
-      const { returnValues, transactionHash } = events[i]
-      const memoString: string = returnValues.message
-      if (!memoString) {
-        throw new Error('incorrect memo in event')
-      }
-
-      const { input } = await getTransaction(web3, transactionHash)
-      const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
-
-      const parser = new PoolCalldataParser(calldata)
-
-      const nullifier = parser.getField('nullifier')
-      await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
-
-      const outCommitRaw = parser.getField('outCommit')
-      const outCommit = web3.utils.hexToNumberString(outCommitRaw)
-
-      const txTypeRaw = parser.getField('txType')
-      const txType = toTxType(txTypeRaw)
-
-      const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
-      const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
-
-      const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
-      const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
-
-      const index = Number(returnValues.index) - OUTPLUSONE
-      for (let state of [this.state, this.optimisticState]) {
-        state.addCommitment(Math.floor(index / OUTPLUSONE), Helpers.strToNum(outCommit))
-        state.addTx(index, Buffer.from(commitAndMemo, 'hex'))
-      }
+    const newLocalRoot = this.state.getMerkleRoot()
+    logger.debug(`LOCAL ROOT AFTER UPDATE ${localRoot}`)
+    if (newLocalRoot !== contractRoot) {
+      logger.error('State is corrupted, roots mismatch')
     }
-
-    logger.debug(`LOCAL ROOT AFTER UPDATE ${this.state.getMerkleRoot()}`)
   }
 
   verifyProof(proof: SnarkProof, inputs: Array<string>) {
