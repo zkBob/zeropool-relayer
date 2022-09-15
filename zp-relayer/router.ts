@@ -27,9 +27,6 @@ router.use((err: any, req: Request, res: Response, next: NextFunction) => {
   next()
 })
 
-// Used only for testing as proving on client is now slow
-router.post('/proof_tx', endpoints.txProof)
-
 router.get('/', endpoints.root)
 router.post('/sendTransaction', wrapErr(endpoints.sendTransaction))
 router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
