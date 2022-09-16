@@ -1,10 +1,8 @@
-import fs from 'fs'
 import { Request, Response, NextFunction } from 'express'
 import { pool } from './pool'
 import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
-import { proveTx } from './prover'
 import {
   checkGetLimits,
   checkGetTransactions,
@@ -12,29 +10,6 @@ import {
   checkSendTransactionErrors,
   checkSendTransactionsErrors,
 } from './validation/validation'
-
-const txProof = (() => {
-  let txProofNum = 0
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      logger.debug('Proving tx...')
-      const { pub, sec } = req.body
-      if (logger.isDebugEnabled()) {
-        const TX_PROOFS_DIR = 'tx_proofs'
-        if (!fs.existsSync(TX_PROOFS_DIR)) {
-          fs.mkdirSync(TX_PROOFS_DIR, { recursive: true })
-        }
-        fs.writeFileSync(`${TX_PROOFS_DIR}/object${txProofNum}.json`, JSON.stringify([pub, sec], null, 2))
-        txProofNum += 1
-      }
-      const proof = await proveTx(pub, sec)
-      logger.debug('Tx proved')
-      res.json(proof)
-    } catch (err) {
-      next(err)
-    }
-  }
-})()
 
 async function sendTransactions(req: Request, res: Response, next: NextFunction) {
   const errors = checkSendTransactionsErrors(req.body)
@@ -185,7 +160,6 @@ function root(req: Request, res: Response) {
 }
 
 export default {
-  txProof,
   sendTransaction,
   sendTransactions,
   merkleRoot,
