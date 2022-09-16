@@ -7,6 +7,7 @@ import {
   checkGetLimits,
   checkGetTransactions,
   checkGetTransactionsV2,
+  checkMerkleRootErrors,
   checkSendTransactionErrors,
   checkSendTransactionsErrors,
 } from './validation/validation'
@@ -48,6 +49,13 @@ async function sendTransaction(req: Request, res: Response, next: NextFunction) 
 }
 
 async function merkleRoot(req: Request, res: Response, next: NextFunction) {
+  const errors = checkMerkleRootErrors(req.params)
+  if (errors) {
+    logger.info('Request errors: %o', errors)
+    res.status(400).json({ errors })
+    return
+  }
+
   const index = req.params.index
   const root = await pool.getContractMerkleRoot(index)
   res.json(root)

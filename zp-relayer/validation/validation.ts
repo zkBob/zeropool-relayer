@@ -134,6 +134,18 @@ const AjvGetLimitsSchema: JSONSchemaType<{
   required: [],
 }
 
+const AjvMerkleRootSchema: JSONSchemaType<{
+  index: string | number
+}> = {
+  type: 'object',
+  properties: {
+    index: {
+      type: 'integer',
+    },
+  },
+  required: ['index'],
+}
+
 function checkErrors<T>(schema: JSONSchemaType<T>) {
   const validate = ajv.compile(schema)
   return (data: any) => {
@@ -147,6 +159,7 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
   }
 }
 
+export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
 export const checkSendTransactionErrors = checkErrors(AjvSendTransactionSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
 export const checkGetTransactions = checkErrors(AjvGetTransactionsSchema)
