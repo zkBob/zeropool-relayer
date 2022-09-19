@@ -37,5 +37,7 @@ router.get('/job/:id', wrapErr(endpoints.getJob))
 router.get('/info', wrapErr(endpoints.relayerInfo))
 router.get('/fee', wrapErr(endpoints.getFee))
 router.get('/limits', wrapErr(endpoints.getLimits))
+router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
+router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
 
 export default router
