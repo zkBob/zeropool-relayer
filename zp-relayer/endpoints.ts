@@ -163,6 +163,13 @@ async function getLimits(req: Request, res: Response) {
   res.json(limitsFetch)
 }
 
+function getParamsHash(type: 'tree' | 'transfer') {
+  const hash = type === 'tree' ? pool.treeParamsHash : pool.transferParamsHash
+  return (req: Request, res: Response) => {
+    res.json({ hash })
+  }
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
@@ -177,5 +184,6 @@ export default {
   relayerInfo,
   getFee,
   getLimits,
+  getParamsHash,
   root,
 }

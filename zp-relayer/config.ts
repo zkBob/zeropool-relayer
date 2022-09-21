@@ -17,6 +17,7 @@ const config = {
   relayerFee: toBN(process.env.RELAYER_FEE as string),
   maxFaucet: toBN(process.env.MAX_NATIVE_AMOUNT_FAUCET as string),
   treeUpdateParamsPath: process.env.TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
+  transferParamsPath: process.env.TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
   txVKPath: process.env.TX_VK_PATH || './params/transfer_verification_key.json',
   gasPriceFallback: process.env.GAS_PRICE_FALLBACK as string,
   gasPriceEstimationType: (process.env.GAS_PRICE_ESTIMATION_TYPE as EstimationType) || 'web3',

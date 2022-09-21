@@ -10,7 +10,8 @@
 | RELAYER_GAS_LIMIT | Gas limit for pool transactions | integer |
 | RELAYER_FEE | Minimal accepted relayer fee (in tokens | integer |
 | MAX_NATIVE_AMOUNT_FAUCET | Maximal amount of faucet value (in ETH) | integer |
-| TREE_UPDATE_PARAMS_PATH | Local path to tree update parameters | string |
+| TREE_UPDATE_PARAMS_PATH | Local path to tree update circuit parameters | string |
+| TRANSFER_PARAMS_PATH | Local path to transfer circuit parameters | string |
 | TX_VK_PATH | Local path to transaction curcuit verification key | string |
 | GAS_PRICE_FALLBACK | Default fallback gas price | integer |
 | GAS_PRICE_ESTIMATION_TYPE | Gas price estimation type | `web3` / `gas-price-oracle` / `eip1559-gas-estimation` / `polygon-gasstation-v2` |
