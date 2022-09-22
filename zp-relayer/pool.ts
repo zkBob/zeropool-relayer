@@ -11,7 +11,6 @@ import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
-import { validateTx } from './validateTx'
 import { PoolState } from './state'
 
 import { TxType } from 'zp-memo-parser'
@@ -103,10 +102,6 @@ class Pool {
   }
 
   async transact(txs: PoolTx[]) {
-    for (const tx of txs) {
-      await validateTx(tx)
-    }
-
     const queueTxs = txs.map(({ proof, txType, memo, depositSignature }) => {
       return {
         amount: '0',

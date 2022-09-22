@@ -11,6 +11,7 @@ import { web3 } from './services/web3'
 import { numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS } from './utils/constants'
+import { TxPayload } from './queue/poolTxQueue'
 
 const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
@@ -27,7 +28,7 @@ type OptionError = Error | null
 export async function checkAssertion(f: () => Promise<OptionError> | OptionError) {
   const err = await f()
   if (err) {
-    logger.error('Assertion error: %s', err.message)
+    logger.warn('Assertion error: %s', err.message)
     throw err
   }
 }
@@ -201,9 +202,17 @@ async function getRecoveredAddress(
   return recoveredAddress
 }
 
-export async function validateTx({ txType, proof, memo, depositSignature }: PoolTx) {
-  const buf = Buffer.from(memo, 'hex')
+export async function validateTx(
+  { txType, rawMemo, txProof, depositSignature }: TxPayload,
+  delta: Delta,
+  nullifier: string
+) {
+  const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
+
+  await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
+  await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
+  await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
 
   await checkAssertion(() => checkFee(txData.fee))
 
@@ -212,9 +221,7 @@ export async function validateTx({ txType, proof, memo, depositSignature }: Pool
     await checkAssertion(() => checkNativeAmount(nativeAmount))
   }
 
-  await checkAssertion(() => checkTxProof(proof))
-
-  const delta = parseDelta(proof.inputs[3])
+  await checkAssertion(() => checkTxProof(txProof))
 
   const tokenAmountWithFee = delta.tokenAmount.add(txData.fee)
   await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData, toBN('0')))
@@ -222,7 +229,7 @@ export async function validateTx({ txType, proof, memo, depositSignature }: Pool
   const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
   let userAddress = ZERO_ADDRESS
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
-    userAddress = await getRecoveredAddress(txType, proof.inputs[1], txData, requiredTokenAmount, depositSignature)
+    userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
     await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
   }
 
