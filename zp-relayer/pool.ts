@@ -36,6 +36,7 @@ export interface Limits {
   dailyUserDepositCap: BN
   dailyUserDepositCapUsage: BN
   depositCap: BN
+  tier: BN
 }
 
 export interface LimitsFetch {
@@ -60,6 +61,7 @@ export interface LimitsFetch {
       available: string
     }
   }
+  tier: string
 }
 
 class Pool {
@@ -234,6 +236,7 @@ class Pool {
       dailyUserDepositCap: toBN(limits.dailyUserDepositCap),
       dailyUserDepositCapUsage: toBN(limits.dailyUserDepositCapUsage),
       depositCap: toBN(limits.depositCap),
+      tier: toBN(limits.tier),
     }
   }
 
@@ -260,6 +263,7 @@ class Pool {
           available: limits.dailyWithdrawalCap.sub(limits.dailyWithdrawalCapUsage).toString(10),
         },
       },
+      tier: limits.tier.toString(10),
     }
     return limitsFetch
   }
