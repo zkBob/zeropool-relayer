@@ -4,25 +4,20 @@ import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } f
 import { Helpers, Proof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
 import config from './config'
-import { Limits, pool, PoolTx } from './pool'
-import { NullifierSet } from './nullifierSet'
+import { Limits, pool } from './pool'
+import { NullifierSet } from './state/nullifierSet'
 import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
 import { numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
+import { getTxProofField, parseDelta } from './utils/proofInputs'
+import { RootSet } from './state/rootSet'
 
 const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
 const ZERO = toBN(0)
-
-export interface Delta {
-  transferIndex: BN
-  energyAmount: BN
-  tokenAmount: BN
-  poolId: BN
-}
 
 type OptionError = Error | null
 export async function checkAssertion(f: () => Promise<OptionError> | OptionError) {
@@ -91,16 +86,6 @@ export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmo
     return new Error('Tx specific fields are incorrect')
   }
   return null
-}
-
-export function parseDelta(delta: string): Delta {
-  const { poolId, index, e, v } = Helpers.parseDelta(delta)
-  return {
-    transferIndex: toBN(index),
-    energyAmount: toBN(e),
-    tokenAmount: toBN(v),
-    poolId: toBN(poolId),
-  }
 }
 
 export function checkNativeAmount(nativeAmount: BN | null) {
@@ -202,14 +187,30 @@ async function getRecoveredAddress(
   return recoveredAddress
 }
 
-export async function validateTx(
-  { txType, rawMemo, txProof, depositSignature }: TxPayload,
-  delta: Delta,
-  nullifier: string
-) {
+async function checkRoot(index: BN, proofRoot: string, poolSet: RootSet, optimisticSet: RootSet) {
+  const indexStr = index.toString(10)
+
+  const root = (await poolSet.get(indexStr)) || (await optimisticSet.get(indexStr))
+
+  if (root === null) {
+    return new Error(`Root ${proofRoot} at ${indexStr} not found`)
+  }
+  if (root !== proofRoot) {
+    return new Error(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
+  }
+
+  return null
+}
+
+export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload) {
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
+  const root = getTxProofField(txProof, 'root')
+  const nullifier = getTxProofField(txProof, 'nullifier')
+  const delta = parseDelta(getTxProofField(txProof, 'delta'))
+
+  await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.state.roots, pool.optimisticState.roots))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))

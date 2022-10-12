@@ -1,4 +1,4 @@
-import { redis } from './services/redisClient'
+import { redis } from '../services/redisClient'
 
 export class NullifierSet {
   constructor(public name: string) {}

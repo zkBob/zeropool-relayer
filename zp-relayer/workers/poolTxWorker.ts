@@ -12,10 +12,11 @@ import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
 import config from '@/config'
 import { redis } from '@/services/redisClient'
-import { parseDelta, validateTx } from '@/validateTx'
+import { validateTx } from '@/validateTx'
 import type { EstimationType, GasPrice } from '@/services/gas-price'
 import type { Mutex } from 'async-mutex'
 import { getChainId } from '@/utils/web3'
+import { getTxProofField } from '@/utils/proofInputs'
 
 const WORKER_OPTIONS = {
   autorun: false,
@@ -36,13 +37,9 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
-      const nullifier = txProof.inputs[1]
-      const outCommit = txProof.inputs[2]
-      const delta = parseDelta(txProof.inputs[3])
+      await validateTx(tx)
 
-      await validateTx(tx, delta, nullifier)
-
-      const { data, commitIndex } = await processTx(job.id as string, tx, pool)
+      const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
 
       const nonce = await incrNonce()
       logger.info(`${logPrefix} nonce: ${nonce}`)
@@ -63,12 +60,20 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
 
         await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
 
+        const nullifier = getTxProofField(txProof, 'nullifier')
+        const outCommit = getTxProofField(txProof, 'out_commit')
+
         const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
         const txData = numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
 
         pool.optimisticState.updateState(commitIndex, outCommit, txData)
-        logger.info('Adding nullifier %s to OS', nullifier)
+        logger.debug('Adding nullifier %s to OS', nullifier)
         await pool.optimisticState.nullifiers.add([nullifier])
+        const poolIndex = (commitIndex + 1) * OUTPLUSONE
+        logger.debug('Adding root %s at %s to OS', rootAfter, poolIndex)
+        await pool.optimisticState.roots.add({
+          [poolIndex]: rootAfter,
+        })
 
         txHashes.push(txHash)
 
@@ -76,6 +81,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
           txHash,
           {
             payload: tx,
+            root: rootAfter,
             outCommit,
             commitIndex,
             txHash,

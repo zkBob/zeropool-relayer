@@ -1,7 +1,7 @@
 import { Job, Queue, Worker } from 'bullmq'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
+import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { pool } from '@/pool'
 import { SentTxPayload, sentTxQueue } from '@/queue/sentTxQueue'
 import { redis } from '@/services/redisClient'
@@ -68,7 +68,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       return null
     }
 
-    const { txHash, txData, commitIndex, outCommit, nullifier, payload } = job.data
+    const { txHash, txData, commitIndex, outCommit, nullifier, root } = job.data
 
     const tx = await web3.eth.getTransactionReceipt(txHash)
     if (tx) {
@@ -84,6 +84,13 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         await pool.state.nullifiers.add([nullifier])
         logger.info('Removing nullifier %s from OS', nullifier)
         await pool.optimisticState.nullifiers.remove([nullifier])
+
+        // Add root to confirmed state and remove from optimistic one
+        const poolIndex = ((commitIndex + 1) * OUTPLUSONE).toString(10)
+        logger.info('Adding root %s %s to PS', poolIndex, root)
+        await pool.state.roots.add({ [poolIndex]: root })
+        logger.info('Removing root %s %s from OS', poolIndex, root)
+        await pool.optimisticState.roots.remove([poolIndex])
 
         const node1 = pool.state.getCommitment(commitIndex)
         const node2 = pool.optimisticState.getCommitment(commitIndex)
@@ -110,6 +117,9 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         pool.optimisticState.rollbackTo(pool.state)
         logger.info('Clearing optimistic nullifiers...')
         await pool.optimisticState.nullifiers.clear()
+        logger.info('Clearing optimistic roots...')
+        await pool.optimisticState.roots.clear()
+
         const root1 = pool.state.getMerkleRoot()
         const root2 = pool.optimisticState.getMerkleRoot()
         logger.info(`Assert roots are equal: ${root1}, ${root2}, ${root1 === root2}`)

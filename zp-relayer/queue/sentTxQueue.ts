@@ -6,6 +6,7 @@ import type { TransactionConfig } from 'web3-core'
 
 export interface SentTxPayload {
   payload: TxPayload
+  root: string
   outCommit: string
   commitIndex: number
   txHash: string

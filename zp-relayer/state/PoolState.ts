@@ -1,17 +1,20 @@
-import { logger } from './services/appLogger'
-import { OUTPLUSONE } from './utils/constants'
+import { logger } from '@/services/appLogger'
+import { OUTPLUSONE } from '@/utils/constants'
 import { MerkleTree, TxStorage, MerkleProof, Constants, Helpers } from 'libzkbob-rs-node'
 import { NullifierSet } from './nullifierSet'
+import { RootSet } from './rootSet'
 
 export class PoolState {
   private tree: MerkleTree
   private txs: TxStorage
   public nullifiers: NullifierSet
+  public roots: RootSet
 
   constructor(private name: string) {
     this.tree = new MerkleTree(`./${name}Tree.db`)
     this.txs = new TxStorage(`./${name}Txs.db`)
     this.nullifiers = new NullifierSet(`${name}-nullifiers`)
+    this.roots = new RootSet(`${name}-roots`)
   }
 
   getVirtualTreeProofInputs(outCommit: string, transferNum?: number) {
