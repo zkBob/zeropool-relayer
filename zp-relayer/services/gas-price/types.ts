@@ -1,8 +1,8 @@
 // GasPrice fields
-interface LegacyGasPrice {
+export interface LegacyGasPrice {
   gasPrice: string
 }
-interface EIP1559GasPrice {
+export interface EIP1559GasPrice {
   maxFeePerGas: string
   maxPriorityFeePerGas: string
 }

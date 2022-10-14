@@ -1,5 +1,6 @@
+import BN from 'bn.js'
 import type Web3 from 'web3'
-import { toWei } from 'web3-utils'
+import { toWei, toBN } from 'web3-utils'
 import config from '@/config'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
@@ -17,6 +18,8 @@ import {
   PolygonGSV2Response,
   PolygonGSV2GasPriceKey,
   GasPriceKey,
+  LegacyGasPrice,
+  EIP1559GasPrice,
 } from './types'
 
 const polygonGasPriceKeyMapping: Record<GasPriceKey, PolygonGSV2GasPriceKey> = {
@@ -24,6 +27,27 @@ const polygonGasPriceKeyMapping: Record<GasPriceKey, PolygonGSV2GasPriceKey> = {
   standard: 'standard',
   fast: 'fast',
   instant: 'fast',
+}
+
+function isLegacyGasPrice(gp: GasPriceValue): gp is LegacyGasPrice {
+  return 'gasPrice' in gp
+}
+
+function isEIP1559GasPrice(gp: GasPriceValue): gp is EIP1559GasPrice {
+  return 'maxFeePerGas' in gp && 'maxPriorityFeePerGas' in gp
+}
+
+export function chooseGasPriceOptions(a: GasPriceValue, b: GasPriceValue): GasPriceValue {
+  if (isLegacyGasPrice(a) && isLegacyGasPrice(b)) {
+    return { gasPrice: BN.max(toBN(a.gasPrice), toBN(b.gasPrice)).toString(10) }
+  }
+  if (isEIP1559GasPrice(a) && isEIP1559GasPrice(b)) {
+    return {
+      maxFeePerGas: BN.max(toBN(a.maxFeePerGas), toBN(b.maxFeePerGas)).toString(10),
+      maxPriorityFeePerGas: BN.max(toBN(a.maxPriorityFeePerGas), toBN(b.maxPriorityFeePerGas)).toString(10),
+    }
+  }
+  return b
 }
 
 export class GasPrice<ET extends EstimationType> {

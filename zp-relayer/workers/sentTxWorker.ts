@@ -3,13 +3,13 @@ import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { pool } from '@/pool'
-import { SentTxPayload, sentTxQueue } from '@/queue/sentTxQueue'
+import { SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { redis } from '@/services/redisClient'
-import type { GasPrice, EstimationType, GasPriceValue } from '@/services/gas-price'
-import type { TransactionConfig } from 'web3-core'
+import { GasPrice, EstimationType, chooseGasPriceOptions } from '@/services/gas-price'
 import type { Mutex } from 'async-mutex'
-import { withMutex } from '@/utils/helpers'
+import { withErrorLog, withMutex } from '@/utils/helpers'
 import config from '@/config'
+import { signAndSend } from '@/tx/signAndSend'
 
 const token = 'RELAYER'
 
@@ -29,14 +29,6 @@ async function markFailed(ids: string[]) {
 async function checkMarked(id: string) {
   const inSet = await redis.sismember(REVERTED_SET, id)
   return Boolean(inSet)
-}
-
-function updateTxGasPrice(txConfig: TransactionConfig, newGasPrice: GasPriceValue) {
-  const newTxConfig = {
-    ...txConfig,
-    ...newGasPrice,
-  }
-  return newTxConfig
 }
 
 async function collectBatch<T>(queue: Queue<T>) {
@@ -62,13 +54,15 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
+    const { txHash, txData, commitIndex, outCommit, nullifier, root } = job.data
 
+    // TODO: it is possible that a tx marked as failed could be stuck
+    // in the mempool. Worker should either assure that it is mined
+    // or try to substitute such transaction with another one
     if (await checkMarked(job.id as string)) {
       logger.info('%s marked as failed, skipping', logPrefix)
-      return null
+      return [SentTxState.REVERT, txHash] as SentTxResult
     }
-
-    const { txHash, txData, commitIndex, outCommit, nullifier, root } = job.data
 
     const tx = await web3.eth.getTransactionReceipt(txHash)
     if (tx) {
@@ -99,7 +93,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           logger.error('Commitments are not equal')
         }
 
-        return txHash
+        return [SentTxState.MINED, txHash] as SentTxResult
       } else {
         // Revert
         logger.error('%s Transaction %s reverted at block %s', logPrefix, txHash, tx.blockNumber)
@@ -123,31 +117,44 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         const root1 = pool.state.getMerkleRoot()
         const root2 = pool.optimisticState.getMerkleRoot()
         logger.info(`Assert roots are equal: ${root1}, ${root2}, ${root1 === root2}`)
+        return [SentTxState.REVERT, txHash] as SentTxResult
       }
     } else {
+      // Resend with updated gas price
       const txConfig = job.data.txConfig
 
-      const oldGasPrice = txConfig.gasPrice
-      const newGasPrice = gasPrice.getPrice()
+      const oldGasPrice = job.data.gasPriceOptions
+      const fetchedGasPrice = gasPrice.getPrice()
+
+      const newGasPrice = chooseGasPriceOptions(oldGasPrice, fetchedGasPrice)
 
       logger.warn('Tx %s is not mined; updating gasPrice: %o -> %o', txHash, oldGasPrice, newGasPrice)
 
-      const newTxConfig = updateTxGasPrice(txConfig, newGasPrice)
-
-      const newJobData = {
-        ...job.data,
-        txConfig: newTxConfig,
+      const newTxConfig = {
+        ...txConfig,
+        ...newGasPrice,
       }
+      const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
 
-      await sentTxQueue.add(txHash, newJobData, {
-        priority: txConfig.nonce,
-        delay: config.sentTxDelay,
-      })
+      await sentTxQueue.add(
+        newTxHash,
+        {
+          ...job.data,
+          txHash: newTxHash,
+          txConfig: newTxConfig,
+          gasPriceOptions: newGasPrice,
+        },
+        {
+          priority: txConfig.nonce,
+          delay: config.sentTxDelay,
+        }
+      )
+      return [SentTxState.RESEND, newTxHash] as SentTxResult
     }
   }
-  const sentTxWorker = new Worker<SentTxPayload>(
+  const sentTxWorker = new Worker<SentTxPayload, SentTxResult>(
     SENT_TX_QUEUE_NAME,
-    job => withMutex(mutex, () => sentTxWorkerProcessor(job)),
+    job => withErrorLog(withMutex(mutex, () => sentTxWorkerProcessor(job))),
     WORKER_OPTIONS
   )
 

@@ -5,7 +5,7 @@ import { logger } from '@/services/appLogger'
 import { TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE, MAX_SENT_LIMIT } from '@/utils/constants'
 import { readNonce, updateField, RelayerKeys, incrNonce } from '@/utils/redisFields'
-import { numToHex, truncateMemoTxPrefix, withMutex } from '@/utils/helpers'
+import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
 import { signAndSend } from '@/tx/signAndSend'
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
@@ -52,10 +52,16 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         gas,
         to: config.poolAddress,
         chainId: CHAIN_ID,
-        ...gasPriceOptions,
       }
       try {
-        const txHash = await signAndSend(txConfig, config.relayerPrivateKey, web3)
+        const txHash = await signAndSend(
+          {
+            ...txConfig,
+            ...gasPriceOptions,
+          },
+          config.relayerPrivateKey,
+          web3
+        )
         logger.debug(`${logPrefix} TX hash ${txHash}`)
 
         await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
@@ -80,14 +86,14 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         await sentTxQueue.add(
           txHash,
           {
-            payload: tx,
             root: rootAfter,
             outCommit,
             commitIndex,
             txHash,
             txData,
             nullifier,
-            txConfig: {},
+            txConfig,
+            gasPriceOptions,
           },
           {
             delay: config.sentTxDelay,
@@ -111,7 +117,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
   await updateField(RelayerKeys.NONCE, await readNonce(true))
   const poolTxWorker = new Worker<TxPayload[]>(
     TX_QUEUE_NAME,
-    job => withMutex(mutex, () => poolTxWorkerProcessor(job)),
+    job => withErrorLog(withMutex(mutex, () => poolTxWorkerProcessor(job))),
     WORKER_OPTIONS
   )
 
