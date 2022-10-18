@@ -50,6 +50,22 @@ export function chooseGasPriceOptions(a: GasPriceValue, b: GasPriceValue): GasPr
   return b
 }
 
+export function EIP1559GasPriceWithinLimit(fees: EIP1559GasPrice, maxFeeLimit: BN | null): EIP1559GasPrice {
+  if (!maxFeeLimit) return fees
+
+  const diff = toBN(fees.maxFeePerGas).sub(maxFeeLimit)
+  if (diff.isNeg()) {
+    return fees
+  } else {
+    const maxFeePerGas = maxFeeLimit.toString(10)
+    const maxPriorityFeePerGas = BN.max(toBN(fees.maxPriorityFeePerGas).sub(diff), toBN(0)).toString(10)
+    return {
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    }
+  }
+}
+
 export class GasPrice<ET extends EstimationType> {
   private fetchGasPriceInterval: NodeJS.Timeout | null = null
   private cachedGasPrice: GasPriceValue
@@ -123,10 +139,16 @@ export class GasPrice<ET extends EstimationType> {
     const json: PolygonGSV2Response = await response.json()
     const speedType = polygonGasPriceKeyMapping[options.speedType]
     const { maxFee, maxPriorityFee } = json[speedType]
-    return {
-      maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
-      maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
-    }
+
+    const gasPriceOptions = EIP1559GasPriceWithinLimit(
+      {
+        maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
+        maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
+      },
+      options.maxFeeLimit
+    )
+
+    return gasPriceOptions
   }
 
   static normalizeGasPrice(rawGasPrice: number, factor = 1) {

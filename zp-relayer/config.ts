@@ -24,6 +24,7 @@ const config = {
   gasPriceSpeedType: (process.env.GAS_PRICE_SPEED_TYPE as GasPriceKey) || 'fast',
   gasPriceFactor: parseInt(process.env.GAS_PRICE_FACTOR || '1'),
   gasPriceUpdateInterval: parseInt(process.env.GAS_PRICE_UPDATE_INTERVAL || '5000'),
+  maxFeeLimit: process.env.MAX_FEE_PER_GAS_LIMIT ? toBN(process.env.MAX_FEE_PER_GAS_LIMIT) : null,
   startBlock: parseInt(process.env.START_BLOCK || '0'),
   eventsProcessingBatchSize: parseInt(process.env.EVENTS_PROCESSING_BATCH_SIZE || '10000'),
   logLevel: process.env.RELAYER_LOG_LEVEL || 'debug',
