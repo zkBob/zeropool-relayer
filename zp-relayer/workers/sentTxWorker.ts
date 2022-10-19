@@ -10,6 +10,8 @@ import type { Mutex } from 'async-mutex'
 import { withErrorLog, withMutex } from '@/utils/helpers'
 import config from '@/config'
 import { signAndSend } from '@/tx/signAndSend'
+import { readNonce, updateNonce } from '@/utils/redisFields'
+import { isGasPriceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
 
 const token = 'RELAYER'
 
@@ -48,6 +50,33 @@ async function collectBatch<T>(queue: Queue<T>) {
   )
 
   return jobs
+}
+
+async function clearOptimisticState() {
+  // TODO: a more efficient strategy would be to collect all other jobs
+  // and move them to 'failed' state as we know they will be reverted
+  // To do this we need to acquire a lock for each job. Did not find
+  // an easy way to do that yet. See 'collectBatch'
+
+  // XXX: txs marked as failed potentially could mine
+  // We should either try to resend them until we are sure
+  // they have mined or try to make new replacement txs
+  // with higher gasPrice
+  const jobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
+  const ids = jobs.map(j => j.id as string)
+  logger.info('Marking ids %j as failed', ids)
+  await markFailed(ids)
+
+  logger.info('Rollback optimistic state...')
+  pool.optimisticState.rollbackTo(pool.state)
+  logger.info('Clearing optimistic nullifiers...')
+  await pool.optimisticState.nullifiers.clear()
+  logger.info('Clearing optimistic roots...')
+  await pool.optimisticState.roots.clear()
+
+  const root1 = pool.state.getMerkleRoot()
+  const root2 = pool.optimisticState.getMerkleRoot()
+  logger.info(`Assert roots are equal: ${root1}, ${root2}, ${root1 === root2}`)
 }
 
 export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex) {
@@ -98,25 +127,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Revert
         logger.error('%s Transaction %s reverted at block %s', logPrefix, txHash, tx.blockNumber)
 
-        // TODO: a more efficient strategy would be to collect all other jobs
-        // and move them to 'failed' state as we know they will be reverted
-        // To do this we need to acquire a lock for each job. Did not find
-        // an easy way to do that yet. See 'collectBatch'
-        const jobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
-        const ids = jobs.map(j => j.id as string)
-        logger.info('%s marking ids %j as failed', logPrefix, ids)
-        await markFailed(ids)
-
-        logger.info('Rollback optimistic state...')
-        pool.optimisticState.rollbackTo(pool.state)
-        logger.info('Clearing optimistic nullifiers...')
-        await pool.optimisticState.nullifiers.clear()
-        logger.info('Clearing optimistic roots...')
-        await pool.optimisticState.roots.clear()
-
-        const root1 = pool.state.getMerkleRoot()
-        const root2 = pool.optimisticState.getMerkleRoot()
-        logger.info(`Assert roots are equal: ${root1}, ${root2}, ${root1 === root2}`)
+        await clearOptimisticState()
         return [SentTxState.REVERT, txHash] as SentTxResult
       }
     } else {
@@ -134,22 +145,48 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         ...txConfig,
         ...newGasPrice,
       }
-      const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
 
-      await sentTxQueue.add(
-        newTxHash,
-        {
-          ...job.data,
-          txHash: newTxHash,
-          txConfig: newTxConfig,
-          gasPriceOptions: newGasPrice,
-        },
-        {
+      try {
+        const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
+
+        // Add updated job
+        await sentTxQueue.add(
+          newTxHash,
+          {
+            ...job.data,
+            txHash: newTxHash,
+            txConfig: newTxConfig,
+            gasPriceOptions: newGasPrice,
+          },
+          {
+            priority: txConfig.nonce,
+            delay: config.sentTxDelay,
+          }
+        )
+        return [SentTxState.RESEND, newTxHash] as SentTxResult
+      } catch (e) {
+        const err = e as Error
+        logger.warn('%s: Tx resend failed for %s: %s', logPrefix, txHash, err.message)
+        if (isSameTransactionError(err) || isGasPriceError(err)) {
+          // Force update gas price
+          gasPrice.start()
+        } else if (isNonceError(err)) {
+          await updateNonce(await readNonce(true))
+        } else {
+          // Error can't be handled
+          logger.error('%s: Error cannot be handled: %o', logPrefix, err)
+          // Rollback the tree
+          await clearOptimisticState()
+          return [SentTxState.FAILED, txHash] as SentTxResult
+        }
+
+        // Add same job
+        await sentTxQueue.add(txHash, job.data, {
           priority: txConfig.nonce,
           delay: config.sentTxDelay,
-        }
-      )
-      return [SentTxState.RESEND, newTxHash] as SentTxResult
+        })
+        return [SentTxState.RESEND, txHash] as SentTxResult
+      }
     }
   }
   const sentTxWorker = new Worker<SentTxPayload, SentTxResult>(

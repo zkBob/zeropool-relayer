@@ -4,7 +4,7 @@ import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE, MAX_SENT_LIMIT } from '@/utils/constants'
-import { readNonce, updateField, RelayerKeys, incrNonce } from '@/utils/redisFields'
+import { readNonce, updateField, RelayerKeys, incrNonce, updateNonce } from '@/utils/redisFields'
 import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
 import { signAndSend } from '@/tx/signAndSend'
 import { pool } from '@/pool'
@@ -114,7 +114,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     return txHashes
   }
 
-  await updateField(RelayerKeys.NONCE, await readNonce(true))
+  await updateNonce(await readNonce(true))
   const poolTxWorker = new Worker<TxPayload[]>(
     TX_QUEUE_NAME,
     job => withErrorLog(withMutex(mutex, () => poolTxWorkerProcessor(job))),

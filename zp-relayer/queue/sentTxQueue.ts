@@ -19,6 +19,7 @@ export enum SentTxState {
   MINED = 'MINED',
   REVERT = 'REVERT',
   RESEND = 'RESEND',
+  FAILED = 'FAILED',
 }
 
 export type SentTxResult = [SentTxState, string]
