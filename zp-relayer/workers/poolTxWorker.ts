@@ -37,7 +37,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
-      await validateTx(tx)
+      const txData = await validateTx(tx)
 
       const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
 
@@ -70,9 +70,9 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         const outCommit = getTxProofField(txProof, 'out_commit')
 
         const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
-        const txData = numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+        const prefixedMemo = numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
 
-        pool.optimisticState.updateState(commitIndex, outCommit, txData)
+        pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
         logger.debug('Adding nullifier %s to OS', nullifier)
         await pool.optimisticState.nullifiers.add([nullifier])
         const poolIndex = (commitIndex + 1) * OUTPLUSONE
@@ -86,14 +86,16 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         await sentTxQueue.add(
           txHash,
           {
+            txType,
             root: rootAfter,
             outCommit,
             commitIndex,
             txHash,
-            txData,
+            prefixedMemo,
             nullifier,
             txConfig,
             gasPriceOptions,
+            txData,
           },
           {
             delay: config.sentTxDelay,

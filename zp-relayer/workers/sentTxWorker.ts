@@ -1,17 +1,19 @@
+import type { Mutex } from 'async-mutex'
 import { Job, Queue, Worker } from 'bullmq'
+import { PermittableDepositTxData, TxType } from 'zp-memo-parser'
+import config from '@/config'
+import { pool } from '@/pool'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { pool } from '@/pool'
-import { SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { redis } from '@/services/redisClient'
 import { GasPrice, EstimationType, chooseGasPriceOptions } from '@/services/gas-price'
-import type { Mutex } from 'async-mutex'
 import { withErrorLog, withMutex } from '@/utils/helpers'
-import config from '@/config'
-import { signAndSend } from '@/tx/signAndSend'
 import { readNonce, updateNonce } from '@/utils/redisFields'
+import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
+import { SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
+import { signAndSend } from '@/tx/signAndSend'
+import { checkAssertion, checkDeadline } from '@/validateTx'
 
 const token = 'RELAYER'
 
@@ -83,7 +85,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
-    const { txHash, txData, commitIndex, outCommit, nullifier, root } = job.data
+    const { txType, txHash, prefixedMemo, commitIndex, outCommit, nullifier, root, txData } = job.data
 
     // TODO: it is possible that a tx marked as failed could be stuck
     // in the mempool. Worker should either assure that it is mined
@@ -100,7 +102,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Successful
         logger.debug('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
 
-        pool.state.updateState(commitIndex, outCommit, txData)
+        pool.state.updateState(commitIndex, outCommit, prefixedMemo)
 
         // Add nullifer to confirmed state and remove from optimistic one
         logger.info('Adding nullifier %s to PS', nullifier)
@@ -132,6 +134,11 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
     } else {
       // Resend with updated gas price
+      if (txType === TxType.PERMITTABLE_DEPOSIT) {
+        const deadline = (txData as PermittableDepositTxData).deadline
+        await checkAssertion(() => checkDeadline(deadline))
+      }
+
       const txConfig = job.data.txConfig
 
       const oldGasPrice = job.data.gasPriceOptions

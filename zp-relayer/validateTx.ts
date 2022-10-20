@@ -178,8 +178,6 @@ async function getRecoveredAddress(
       salt: nullifier,
     }
     recoveredAddress = recoverSaltedPermit(message, sig)
-
-    await checkAssertion(() => checkDeadline(deadline))
   } else {
     throw new Error('Unsupported txtype')
   }
@@ -233,7 +231,13 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
     userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
     await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
   }
+  if (txType === TxType.PERMITTABLE_DEPOSIT) {
+    const deadline = (txData as PermittableDepositTxData).deadline
+    await checkAssertion(() => checkDeadline(deadline))
+  }
 
   const limits = await pool.getLimitsFor(userAddress)
   await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
+
+  return txData
 }
