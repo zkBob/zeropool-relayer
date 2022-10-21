@@ -84,8 +84,8 @@ class Pool {
     const txVK = require(config.txVKPath)
     this.txVK = txVK
 
-    this.state = new PoolState('pool')
-    this.optimisticState = new PoolState('optimistic')
+    this.state = new PoolState('pool', config.stateDirPath)
+    this.optimisticState = new PoolState('optimistic', config.stateDirPath)
   }
 
   private static getHash(path: string) {

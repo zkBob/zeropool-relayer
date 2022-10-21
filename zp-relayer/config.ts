@@ -19,6 +19,7 @@ const config = {
   treeUpdateParamsPath: process.env.TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
   transferParamsPath: process.env.TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
   txVKPath: process.env.TX_VK_PATH || './params/transfer_verification_key.json',
+  stateDirPath: process.env.STATE_DIR_PATH || './state',
   gasPriceFallback: process.env.GAS_PRICE_FALLBACK as string,
   gasPriceEstimationType: (process.env.GAS_PRICE_ESTIMATION_TYPE as EstimationType) || 'web3',
   gasPriceSpeedType: (process.env.GAS_PRICE_SPEED_TYPE as GasPriceKey) || 'fast',

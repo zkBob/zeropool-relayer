@@ -16,7 +16,4 @@ prover.js
 # Log file
 zp.log
 yarn-error.log
-zp-relayer/optimisticTree.db
-zp-relayer/optimisticTxs.db
-zp-relayer/poolTree.db
-zp-relayer/poolTxs.db
+zp-relayer/state/
