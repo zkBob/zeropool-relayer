@@ -8,9 +8,9 @@ export class PoolState {
   private txs: TxStorage
   public nullifiers: NullifierSet
 
-  constructor(private name: string) {
-    this.tree = new MerkleTree(`./${name}Tree.db`)
-    this.txs = new TxStorage(`./${name}Txs.db`)
+  constructor(private name: string, path: string) {
+    this.tree = new MerkleTree(`${path}/${name}Tree.db`)
+    this.txs = new TxStorage(`${path}/${name}Txs.db`)
     this.nullifiers = new NullifierSet(`${name}-nullifiers`)
   }
 
