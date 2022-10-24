@@ -1,4 +1,4 @@
-type Field = 'selector' | 'nullifier' | 'outCommit' | 'txType' | 'memoSize' | 'memo'
+type Field = 'selector' | 'nullifier' | 'outCommit' | 'txType' | 'day' | 'memoSize' | 'memo'
 
 type FieldMapping = {
   [key in Field]: { start: number; size: number }
@@ -10,8 +10,9 @@ export class PoolCalldataParser {
     nullifier: { start: 4, size: 32 },
     outCommit: { start: 36, size: 32 },
     txType: { start: 640, size: 2 },
-    memoSize: { start: 642, size: 2 },
-    memo: { start: 644, size: 0 },
+    day: {start: 642, size: 6 },
+    memoSize: { start: 648, size: 2 },
+    memo: { start: 650, size: 0 },
   }
   constructor(private calldata: Buffer) {}
 

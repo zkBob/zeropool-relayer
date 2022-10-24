@@ -3,11 +3,12 @@ import PoolAbi from './abi/pool-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
 import { logger } from './services/appLogger'
 import { TxPayload } from './queue/poolTxQueue'
-import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE } from './utils/constants'
+import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE, DAY_SIZE } from './utils/constants'
 import { numToHex, flattenProof, truncateHexPrefix } from './utils/helpers'
 import { SnarkProof, Proof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Pool } from './pool'
+import BN from 'bn.js'
 
 import { Delta, parseDelta } from './validateTx'
 
@@ -22,6 +23,7 @@ interface TxData {
   rootAfter: string
   delta: Delta
   txType: TxType
+  day: BN
   memo: string
   depositSignature: string | null
 }
@@ -32,6 +34,7 @@ function buildTxData(txData: TxData) {
   const transferIndex = numToHex(txData.delta.transferIndex, TRANSFER_INDEX_SIZE)
   const energyAmount = numToHex(txData.delta.energyAmount, ENERGY_SIZE)
   const tokenAmount = numToHex(txData.delta.tokenAmount, TOKEN_SIZE)
+  const day = numToHex(txData.day, DAY_SIZE)
   logger.debug(`DELTA ${transferIndex} ${energyAmount} ${tokenAmount}`)
 
   const txFlatProof = flattenProof(txData.txProof)
@@ -51,6 +54,7 @@ function buildTxData(txData: TxData) {
     txData.rootAfter,
     treeFlatProof,
     txData.txType,
+    day,
     memoSize,
     memoMessage,
   ]
@@ -87,6 +91,7 @@ export async function processTx(id: string, tx: TxPayload, pool: Pool) {
     rootAfter: numToHex(toBN(treeProof.inputs[1])),
     delta,
     txType,
+    day: toBN(txProof.inputs[5]),
     memo: rawMemo,
     depositSignature,
   })
