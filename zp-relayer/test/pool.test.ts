@@ -16,12 +16,12 @@ describe('Pool', () => {
 
     expect(EIP1559GasPriceWithinLimit(fees, toBN(10))).to.deep.equal({
       maxFeePerGas: '10',
-      maxPriorityFeePerGas: '2',
+      maxPriorityFeePerGas: '7',
     })
 
     expect(EIP1559GasPriceWithinLimit(fees, toBN(6))).to.deep.equal({
       maxFeePerGas: '6',
-      maxPriorityFeePerGas: '0',
+      maxPriorityFeePerGas: '6',
     })
   })
 })

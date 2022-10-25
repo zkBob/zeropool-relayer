@@ -58,7 +58,7 @@ export function EIP1559GasPriceWithinLimit(fees: EIP1559GasPrice, maxFeeLimit: B
     return fees
   } else {
     const maxFeePerGas = maxFeeLimit.toString(10)
-    const maxPriorityFeePerGas = BN.max(toBN(fees.maxPriorityFeePerGas).sub(diff), toBN(0)).toString(10)
+    const maxPriorityFeePerGas = BN.min(toBN(fees.maxPriorityFeePerGas), maxFeeLimit).toString(10)
     return {
       maxFeePerGas,
       maxPriorityFeePerGas,
