@@ -31,6 +31,8 @@ const config = {
   redisUrl: process.env.RELAYER_REDIS_URL,
   rpcUrl: process.env.RPC_URL as string,
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
+  permitDeadlineThresholdInitial: parseInt(process.env.PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),
+  permitDeadlineThresholdResend: parseInt(process.env.PERMIT_DEADLINE_THRESHOLD_RESEND || '10'),
 }
 
 export default config

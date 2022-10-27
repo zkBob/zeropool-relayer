@@ -37,7 +37,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
-      const txData = await validateTx(tx)
+      const txData = await validateTx(tx, pool)
 
       const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
 

@@ -1,10 +1,10 @@
 import BN from 'bn.js'
 import { toBN, AbiItem } from 'web3-utils'
 import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
-import { Helpers, Proof } from 'libzkbob-rs-node'
+import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
 import config from './config'
-import { Limits, pool } from './pool'
+import type { Limits, Pool } from './pool'
 import { NullifierSet } from './state/nullifierSet'
 import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
@@ -45,10 +45,10 @@ export function checkCommitment(treeProof: Proof, txProof: Proof) {
   return treeProof.inputs[2] === txProof.inputs[2]
 }
 
-export function checkTxProof(txProof: Proof) {
-  const res = pool.verifyProof(txProof.proof, txProof.inputs)
+export function checkProof(txProof: Proof, verify: (p: SnarkProof, i: Array<string>) => boolean) {
+  const res = verify(txProof.proof, txProof.inputs)
   if (!res) {
-    return new Error('Incorrect transfer proof')
+    return new Error('Incorrect snark proof')
   }
   return null
 }
@@ -64,23 +64,20 @@ export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
   return new Error(`Incorrect transfer index`)
 }
 
-export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN, txData: TxData, msgValue: BN) {
+export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN, txData: TxData) {
   logger.debug(
-    'TOKENS %s, ENERGY %s, TX DATA %s, MSG VALUE %s',
+    'TOKENS %s, ENERGY %s, TX DATA %s',
     tokenAmount.toString(),
     energyAmount.toString(),
-    JSON.stringify(txData),
-    msgValue.toString()
+    JSON.stringify(txData)
   )
   let isValid = false
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
-    isValid = tokenAmount.gte(ZERO) && energyAmount.eq(ZERO) && msgValue.eq(ZERO)
+    isValid = tokenAmount.gte(ZERO) && energyAmount.eq(ZERO)
   } else if (txType === TxType.TRANSFER) {
-    isValid = tokenAmount.eq(ZERO) && energyAmount.eq(ZERO) && msgValue.eq(ZERO)
+    isValid = tokenAmount.eq(ZERO) && energyAmount.eq(ZERO)
   } else if (txType === TxType.WITHDRAWAL) {
-    const nativeAmount = (txData as WithdrawTxData).nativeAmount
     isValid = tokenAmount.lte(ZERO) && energyAmount.lte(ZERO)
-    isValid = isValid && msgValue.eq(nativeAmount.mul(pool.denominator))
   }
   if (!isValid) {
     return new Error('Tx specific fields are incorrect')
@@ -105,11 +102,15 @@ export function checkFee(fee: BN) {
   return null
 }
 
-export function checkDeadline(deadline: BN) {
-  logger.debug(`Deadline: ${deadline}`)
+/**
+ * @param signedDeadline deadline signed by user, in seconds
+ * @param threshold "window" added to curent relayer time, in seconds
+ */
+export function checkDeadline(signedDeadline: BN, threshold: number) {
+  logger.debug(`Deadline: ${signedDeadline}`)
   // Check native amount (relayer faucet)
   const currentTimestamp = new BN(Math.floor(Date.now() / 1000))
-  if (deadline <= currentTimestamp) {
+  if (signedDeadline <= currentTimestamp.addn(threshold)) {
     return new Error(`Deadline is expired`)
   }
   return null
@@ -200,7 +201,7 @@ async function checkRoot(index: BN, proofRoot: string, poolSet: RootSet, optimis
   return null
 }
 
-export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload) {
+export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool) {
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
@@ -220,10 +221,10 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
     await checkAssertion(() => checkNativeAmount(nativeAmount))
   }
 
-  await checkAssertion(() => checkTxProof(txProof))
+  await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
   const tokenAmountWithFee = delta.tokenAmount.add(txData.fee)
-  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData, toBN('0')))
+  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData))
 
   const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
   let userAddress = ZERO_ADDRESS
@@ -233,7 +234,7 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   }
   if (txType === TxType.PERMITTABLE_DEPOSIT) {
     const deadline = (txData as PermittableDepositTxData).deadline
-    await checkAssertion(() => checkDeadline(deadline))
+    await checkAssertion(() => checkDeadline(deadline, config.permitDeadlineThresholdInitial))
   }
 
   const limits = await pool.getLimitsFor(userAddress)

@@ -136,7 +136,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       // Resend with updated gas price
       if (txType === TxType.PERMITTABLE_DEPOSIT) {
         const deadline = (txData as PermittableDepositTxData).deadline
-        await checkAssertion(() => checkDeadline(deadline))
+        await checkAssertion(() => checkDeadline(deadline, config.permitDeadlineThresholdResend))
       }
 
       const txConfig = job.data.txConfig

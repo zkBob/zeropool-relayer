@@ -24,4 +24,6 @@
 | RELAYER_LOG_LEVEL | Log level | Winston log level |
 | RELAYER_REDIS_URL | Url to redis instance | URL |
 | RPC_URL | Url to RPC node | URL |
-| SENT_TX_DELAY | Delay in milliseconds for sentTxWorker to verify submitted transactions | integer
+| SENT_TX_DELAY | Delay in milliseconds for sentTxWorker to verify submitted transactions | integer |
+| PERMIT_DEADLINE_THRESHOLD_INITIAL | Minimum time threshold in seconds for permit signature deadline to be valid (before initial transaction submition) | integer |
+| PERMIT_DEADLINE_THRESHOLD_RESEND | Minimum time threshold in seconds for permit signature deadline to be valid (for re-send attempts) | integer |
