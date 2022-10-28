@@ -175,7 +175,7 @@ async function getRecoveredAddress(
       spender,
       value: tokenAmount.toString(10),
       nonce,
-      deadline: deadline.toString(10),
+      deadline,
       salt: nullifier,
     }
     recoveredAddress = recoverSaltedPermit(message, sig)
@@ -208,22 +208,23 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   const root = getTxProofField(txProof, 'root')
   const nullifier = getTxProofField(txProof, 'nullifier')
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
+  const fee = toBN(txData.fee)
 
   await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.state.roots, pool.optimisticState.roots))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
 
-  await checkAssertion(() => checkFee(txData.fee))
+  await checkAssertion(() => checkFee(fee))
 
   if (txType === TxType.WITHDRAWAL) {
     const nativeAmount = (txData as WithdrawTxData).nativeAmount
-    await checkAssertion(() => checkNativeAmount(nativeAmount))
+    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
   }
 
   await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
-  const tokenAmountWithFee = delta.tokenAmount.add(txData.fee)
+  const tokenAmountWithFee = delta.tokenAmount.add(fee)
   await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData))
 
   const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
@@ -234,7 +235,7 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   }
   if (txType === TxType.PERMITTABLE_DEPOSIT) {
     const deadline = (txData as PermittableDepositTxData).deadline
-    await checkAssertion(() => checkDeadline(deadline, config.permitDeadlineThresholdInitial))
+    await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdInitial))
   }
 
   const limits = await pool.getLimitsFor(userAddress)

@@ -1,4 +1,5 @@
 import type { Mutex } from 'async-mutex'
+import { toBN } from 'web3-utils'
 import { Job, Queue, Worker } from 'bullmq'
 import { PermittableDepositTxData, TxType } from 'zp-memo-parser'
 import config from '@/config'
@@ -134,11 +135,6 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
     } else {
       // Resend with updated gas price
-      if (txType === TxType.PERMITTABLE_DEPOSIT) {
-        const deadline = (txData as PermittableDepositTxData).deadline
-        await checkAssertion(() => checkDeadline(deadline, config.permitDeadlineThresholdResend))
-      }
-
       const txConfig = job.data.txConfig
 
       const oldGasPrice = job.data.gasPriceOptions
@@ -154,6 +150,11 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
 
       try {
+        if (txType === TxType.PERMITTABLE_DEPOSIT) {
+          const deadline = (txData as PermittableDepositTxData).deadline
+          await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdResend))
+        }
+
         const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
 
         // Add updated job
