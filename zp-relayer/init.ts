@@ -15,6 +15,7 @@ export async function init() {
   const gasPriceService = new GasPrice(web3, config.gasPriceUpdateInterval, config.gasPriceEstimationType, {
     speedType: config.gasPriceSpeedType,
     factor: config.gasPriceFactor,
+    maxFeeLimit: config.maxFeeLimit,
   })
   await gasPriceService.start()
   const workerMutex = new Mutex()

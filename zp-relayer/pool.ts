@@ -8,6 +8,7 @@ import { Contract } from 'web3-eth-contract'
 import config from './config'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
+import { redis } from './services/redisClient'
 import { poolTxQueue } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
@@ -84,8 +85,8 @@ class Pool {
     const txVK = require(config.txVKPath)
     this.txVK = txVK
 
-    this.state = new PoolState('pool')
-    this.optimisticState = new PoolState('optimistic')
+    this.state = new PoolState('pool', redis)
+    this.optimisticState = new PoolState('optimistic', redis)
   }
 
   private static getHash(path: string) {

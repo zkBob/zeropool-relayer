@@ -1,3 +1,4 @@
+import type { Redis } from 'ioredis'
 import { logger } from '@/services/appLogger'
 import { OUTPLUSONE } from '@/utils/constants'
 import { MerkleTree, TxStorage, MerkleProof, Constants, Helpers } from 'libzkbob-rs-node'
@@ -10,11 +11,11 @@ export class PoolState {
   public nullifiers: NullifierSet
   public roots: RootSet
 
-  constructor(private name: string) {
+  constructor(private name: string, redis: Redis) {
     this.tree = new MerkleTree(`./${name}Tree.db`)
     this.txs = new TxStorage(`./${name}Txs.db`)
-    this.nullifiers = new NullifierSet(`${name}-nullifiers`)
-    this.roots = new RootSet(`${name}-roots`)
+    this.nullifiers = new NullifierSet(`${name}-nullifiers`, redis)
+    this.roots = new RootSet(`${name}-roots`, redis)
   }
 
   getVirtualTreeProofInputs(outCommit: string, transferNum?: number) {

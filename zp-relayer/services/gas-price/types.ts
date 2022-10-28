@@ -1,8 +1,10 @@
+import type BN from 'bn.js'
+
 // GasPrice fields
-interface LegacyGasPrice {
+export interface LegacyGasPrice {
   gasPrice: string
 }
-interface EIP1559GasPrice {
+export interface EIP1559GasPrice {
   maxFeePerGas: string
   maxPriorityFeePerGas: string
 }
@@ -38,7 +40,7 @@ export type EstimationPolygonGSV2 = 'polygon-gasstation-v2'
 export type EstimationType = EstimationEIP1559 | EstimationOracle | EstimationWeb3 | EstimationPolygonGSV2
 
 export type EstimationOracleOptions = { speedType: GasPriceKey; factor: number }
-export type EstimationPolygonGSV2Options = { speedType: GasPriceKey }
+export type EstimationPolygonGSV2Options = { speedType: GasPriceKey; maxFeeLimit: BN | null }
 export type EstimationOptions<ET extends EstimationType> = ET extends EstimationOracle
   ? EstimationOracleOptions
   : ET extends EstimationPolygonGSV2

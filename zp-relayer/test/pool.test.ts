@@ -1,30 +1,35 @@
 import { expect } from 'chai'
-import { decodeMemo } from 'zp-memo-parser/memo'
-import { MerkleTree, Constants, Helpers } from 'libzkbob-rs-node'
-import depositMemo from './depositMemo.json'
-import fs from 'fs'
-import { TxType } from 'zp-memo-parser'
-
-const DB_PATH = './test-tree.db'
+import { toBN } from 'web3-utils'
+import { EIP1559GasPriceWithinLimit } from '../services/gas-price/GasPrice'
+import { checkDeadline } from '../validateTx'
 
 describe('Pool', () => {
-  it('calculates out commit', () => {
-    const tree = new MerkleTree(DB_PATH)
+  it('correctly calculates fee limit', () => {
+    const fees = {
+      maxFeePerGas: '15',
+      maxPriorityFeePerGas: '7',
+    }
 
-    const buf = Buffer.from(depositMemo, 'hex')
-    const memo = decodeMemo(buf, TxType.DEPOSIT)
+    expect(EIP1559GasPriceWithinLimit(fees, toBN(100))).to.eql({
+      maxFeePerGas: '15',
+      maxPriorityFeePerGas: '7',
+    })
 
-    tree.appendHash(Buffer.from(memo.accHash))
-    memo.noteHashes.forEach(n => tree.appendHash(Buffer.from(n)))
+    expect(EIP1559GasPriceWithinLimit(fees, toBN(10))).to.eql({
+      maxFeePerGas: '10',
+      maxPriorityFeePerGas: '7',
+    })
 
-    // Commit calculated from raw hashes
-    const hashes = [memo.accHash].concat(memo.noteHashes).map(Buffer.from)
-    const out_commit_calc = Helpers.outCommitmentHash(hashes)
-    // Commit as a root of subtree with inserted hashes
-    const out_commit_node = tree.getNode(Constants.OUTLOG, 0)
+    expect(EIP1559GasPriceWithinLimit(fees, toBN(6))).to.eql({
+      maxFeePerGas: '6',
+      maxPriorityFeePerGas: '6',
+    })
+  })
+  it('correctly checks deadline', () => {
+    // curent time + 10 sec
+    const signedDeadline = toBN(Math.floor(Date.now() / 1000) + 10)
 
-    expect(out_commit_calc).eq(out_commit_node)
-
-    fs.rmdirSync(DB_PATH, { recursive: true })
+    expect(checkDeadline(signedDeadline, 7)).to.be.null
+    expect(checkDeadline(signedDeadline, 11)).to.be.instanceOf(Error)
   })
 })

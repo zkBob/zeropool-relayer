@@ -1,23 +1,23 @@
-import { redis } from '@/services/redisClient'
+import type { Redis } from 'ioredis'
 
 export class RootSet {
-  constructor(public name: string) {}
+  constructor(public name: string, private redis: Redis) {}
 
   async add(roots: Record<number, string>) {
     if (Object.keys(roots).length === 0) return
-    await redis.hset(this.name, roots)
+    await this.redis.hset(this.name, roots)
   }
 
   async remove(indices: string[]) {
     if (indices.length === 0) return
-    await redis.hdel(this.name, indices)
+    await this.redis.hdel(this.name, indices)
   }
 
   async get(index: string) {
-    return redis.hget(this.name, index)
+    return this.redis.hget(this.name, index)
   }
 
   async clear() {
-    await redis.del(this.name)
+    await this.redis.del(this.name)
   }
 }

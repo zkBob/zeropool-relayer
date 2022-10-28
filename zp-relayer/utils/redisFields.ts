@@ -41,6 +41,10 @@ export function updateField(key: RelayerKeys, val: any) {
   return redis.set(key, val)
 }
 
+export function updateNonce(nonce: number) {
+  return updateField(RelayerKeys.NONCE, nonce)
+}
+
 export async function incrNonce() {
   const nonce = await redis.incr(RelayerKeys.NONCE)
   logger.info(`Incremented nonce to ${nonce}`)
