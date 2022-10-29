@@ -16,4 +16,4 @@ prover.js
 # Log file
 zp.log
 yarn-error.log
-zp-relayer/state/
+zp-relayer/POOL_STATE

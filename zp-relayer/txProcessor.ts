@@ -2,14 +2,13 @@ import Contract from 'web3-eth-contract'
 import PoolAbi from './abi/pool-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
 import { logger } from './services/appLogger'
-import { TxPayload } from './queue/poolTxQueue'
 import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE } from './utils/constants'
 import { numToHex, flattenProof, truncateHexPrefix } from './utils/helpers'
+import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
 import { SnarkProof, Proof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
-import type { Pool } from './pool'
-
-import { Delta, parseDelta } from './validateTx'
+import { pool } from './pool'
+import { TxPayload } from './queue/poolTxQueue'
 
 // @ts-ignore
 const PoolInstance = new Contract(PoolAbi as AbiItem[])
@@ -63,32 +62,32 @@ function buildTxData(txData: TxData) {
   return data.join('')
 }
 
-export async function processTx(id: string, tx: TxPayload, pool: Pool) {
-  const { amount, txProof, txType, rawMemo, depositSignature } = tx
+export async function processTx(id: string, tx: TxPayload) {
+  const { txType, txProof, rawMemo: memo, depositSignature } = tx
+
+  const nullifier = getTxProofField(txProof, 'nullifier')
+  const outCommit = getTxProofField(txProof, 'out_commit')
+  const delta = parseDelta(getTxProofField(txProof, 'delta'))
 
   const logPrefix = `Job ${id}:`
 
-  logger.info(`${logPrefix} Recieved ${txType} tx with ${amount} native amount`)
-
-  const delta = parseDelta(txProof.inputs[3])
-
-  const outCommit = txProof.inputs[2]
   const { pub, sec, commitIndex } = pool.optimisticState.getVirtualTreeProofInputs(outCommit)
 
   logger.debug(`${logPrefix} Proving tree...`)
   const treeProof = await Proof.treeAsync(pool.treeParams, pub, sec)
   logger.debug(`${logPrefix} Tree proved`)
 
+  const rootAfter = treeProof.inputs[1]
   const data = buildTxData({
     txProof: txProof.proof,
     treeProof: treeProof.proof,
-    nullifier: numToHex(toBN(txProof.inputs[1])),
-    outCommit: numToHex(toBN(treeProof.inputs[2])),
-    rootAfter: numToHex(toBN(treeProof.inputs[1])),
+    nullifier: numToHex(toBN(nullifier)),
+    outCommit: numToHex(toBN(outCommit)),
+    rootAfter: numToHex(toBN(rootAfter)),
     delta,
     txType,
-    memo: rawMemo,
+    memo,
     depositSignature,
   })
-  return { data, commitIndex }
+  return { data, commitIndex, rootAfter }
 }

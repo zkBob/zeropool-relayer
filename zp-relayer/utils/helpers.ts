@@ -97,14 +97,22 @@ export async function setIntervalAndRun(f: () => Promise<void> | void, interval:
   return handler
 }
 
-export async function withMutex<R>(mutex: Mutex, f: () => Promise<R>): Promise<R> {
-  const release = await mutex.acquire()
+export function withMutex<R>(mutex: Mutex, f: () => Promise<R>): () => Promise<R> {
+  return async () => {
+    const release = await mutex.acquire()
+    try {
+      return await f()
+    } finally {
+      release()
+    }
+  }
+}
+
+export async function withErrorLog<R>(f: () => Promise<R>): Promise<R> {
   try {
-    const res = await f()
-    return res
+    return await f()
   } catch (e) {
+    logger.error('Found error: %o', e)
     throw e
-  } finally {
-    release()
   }
 }

@@ -1,28 +1,23 @@
 import BN from 'bn.js'
 import { toBN, AbiItem } from 'web3-utils'
 import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
-import { Helpers, Proof } from 'libzkbob-rs-node'
+import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
 import config from './config'
-import { Limits, pool, PoolTx } from './pool'
-import { NullifierSet } from './nullifierSet'
+import type { Limits, Pool } from './pool'
+import { NullifierSet } from './state/nullifierSet'
 import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
 import { numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
+import { getTxProofField, parseDelta } from './utils/proofInputs'
+import { RootSet } from './state/rootSet'
 
 const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
 const ZERO = toBN(0)
-
-export interface Delta {
-  transferIndex: BN
-  energyAmount: BN
-  tokenAmount: BN
-  poolId: BN
-}
 
 type OptionError = Error | null
 export async function checkAssertion(f: () => Promise<OptionError> | OptionError) {
@@ -50,10 +45,10 @@ export function checkCommitment(treeProof: Proof, txProof: Proof) {
   return treeProof.inputs[2] === txProof.inputs[2]
 }
 
-export function checkTxProof(txProof: Proof) {
-  const res = pool.verifyProof(txProof.proof, txProof.inputs)
+export function checkProof(txProof: Proof, verify: (p: SnarkProof, i: Array<string>) => boolean) {
+  const res = verify(txProof.proof, txProof.inputs)
   if (!res) {
-    return new Error('Incorrect transfer proof')
+    return new Error('Incorrect snark proof')
   }
   return null
 }
@@ -69,38 +64,25 @@ export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
   return new Error(`Incorrect transfer index`)
 }
 
-export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN, txData: TxData, msgValue: BN) {
+export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN, txData: TxData) {
   logger.debug(
-    'TOKENS %s, ENERGY %s, TX DATA %s, MSG VALUE %s',
+    'TOKENS %s, ENERGY %s, TX DATA %s',
     tokenAmount.toString(),
     energyAmount.toString(),
-    JSON.stringify(txData),
-    msgValue.toString()
+    JSON.stringify(txData)
   )
   let isValid = false
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
-    isValid = tokenAmount.gte(ZERO) && energyAmount.eq(ZERO) && msgValue.eq(ZERO)
+    isValid = tokenAmount.gte(ZERO) && energyAmount.eq(ZERO)
   } else if (txType === TxType.TRANSFER) {
-    isValid = tokenAmount.eq(ZERO) && energyAmount.eq(ZERO) && msgValue.eq(ZERO)
+    isValid = tokenAmount.eq(ZERO) && energyAmount.eq(ZERO)
   } else if (txType === TxType.WITHDRAWAL) {
-    const nativeAmount = (txData as WithdrawTxData).nativeAmount
     isValid = tokenAmount.lte(ZERO) && energyAmount.lte(ZERO)
-    isValid = isValid && msgValue.eq(nativeAmount.mul(pool.denominator))
   }
   if (!isValid) {
     return new Error('Tx specific fields are incorrect')
   }
   return null
-}
-
-export function parseDelta(delta: string): Delta {
-  const { poolId, index, e, v } = Helpers.parseDelta(delta)
-  return {
-    transferIndex: toBN(index),
-    energyAmount: toBN(e),
-    tokenAmount: toBN(v),
-    poolId: toBN(poolId),
-  }
 }
 
 export function checkNativeAmount(nativeAmount: BN | null) {
@@ -120,11 +102,15 @@ export function checkFee(fee: BN) {
   return null
 }
 
-export function checkDeadline(deadline: BN) {
-  logger.debug(`Deadline: ${deadline}`)
+/**
+ * @param signedDeadline deadline signed by user, in seconds
+ * @param threshold "window" added to curent relayer time, in seconds
+ */
+export function checkDeadline(signedDeadline: BN, threshold: number) {
+  logger.debug(`Deadline: ${signedDeadline}`)
   // Check native amount (relayer faucet)
   const currentTimestamp = new BN(Math.floor(Date.now() / 1000))
-  if (deadline <= currentTimestamp) {
+  if (signedDeadline <= currentTimestamp.addn(threshold)) {
     return new Error(`Deadline is expired`)
   }
   return null
@@ -189,12 +175,10 @@ async function getRecoveredAddress(
       spender,
       value: tokenAmount.toString(10),
       nonce,
-      deadline: deadline.toString(10),
+      deadline,
       salt: nullifier,
     }
     recoveredAddress = recoverSaltedPermit(message, sig)
-
-    await checkAssertion(() => checkDeadline(deadline))
   } else {
     throw new Error('Unsupported txtype')
   }
@@ -202,29 +186,46 @@ async function getRecoveredAddress(
   return recoveredAddress
 }
 
-export async function validateTx(
-  { txType, rawMemo, txProof, depositSignature }: TxPayload,
-  delta: Delta,
-  nullifier: string
-) {
+async function checkRoot(index: BN, proofRoot: string, poolSet: RootSet, optimisticSet: RootSet) {
+  const indexStr = index.toString(10)
+
+  const root = (await poolSet.get(indexStr)) || (await optimisticSet.get(indexStr))
+
+  if (root === null) {
+    return new Error(`Root ${proofRoot} at ${indexStr} not found`)
+  }
+  if (root !== proofRoot) {
+    return new Error(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
+  }
+
+  return null
+}
+
+export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool) {
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
+  const root = getTxProofField(txProof, 'root')
+  const nullifier = getTxProofField(txProof, 'nullifier')
+  const delta = parseDelta(getTxProofField(txProof, 'delta'))
+  const fee = toBN(txData.fee)
+
+  await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.state.roots, pool.optimisticState.roots))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
 
-  await checkAssertion(() => checkFee(txData.fee))
+  await checkAssertion(() => checkFee(fee))
 
   if (txType === TxType.WITHDRAWAL) {
     const nativeAmount = (txData as WithdrawTxData).nativeAmount
-    await checkAssertion(() => checkNativeAmount(nativeAmount))
+    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
   }
 
-  await checkAssertion(() => checkTxProof(txProof))
+  await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
-  const tokenAmountWithFee = delta.tokenAmount.add(txData.fee)
-  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData, toBN('0')))
+  const tokenAmountWithFee = delta.tokenAmount.add(fee)
+  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData))
 
   const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
   let userAddress = ZERO_ADDRESS
@@ -232,7 +233,13 @@ export async function validateTx(
     userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
     await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
   }
+  if (txType === TxType.PERMITTABLE_DEPOSIT) {
+    const deadline = (txData as PermittableDepositTxData).deadline
+    await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdInitial))
+  }
 
   const limits = await pool.getLimitsFor(userAddress)
   await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
+
+  return txData
 }

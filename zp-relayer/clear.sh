@@ -1,1 +1,1 @@
-rm -rf ./state
+rm -rf ./POOL_STATE

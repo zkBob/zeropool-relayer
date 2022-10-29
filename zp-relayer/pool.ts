@@ -8,15 +8,16 @@ import { Contract } from 'web3-eth-contract'
 import config from './config'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
+import { redis } from './services/redisClient'
 import { poolTxQueue } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
-import { PoolState } from './state'
+import { PoolState } from './state/PoolState'
 
 import { TxType } from 'zp-memo-parser'
 import { numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
-import { OUTPLUSONE } from './utils/constants'
+import { INIT_ROOT, OUTPLUSONE } from './utils/constants'
 
 export interface PoolTx {
   proof: Proof
@@ -84,8 +85,8 @@ class Pool {
     const txVK = require(config.txVKPath)
     this.txVK = txVK
 
-    this.state = new PoolState('pool', config.stateDirPath)
-    this.optimisticState = new PoolState('optimistic', config.stateDirPath)
+    this.state = new PoolState('pool', redis, config.stateDirPath)
+    this.optimisticState = new PoolState('optimistic', redis, config.stateDirPath)
   }
 
   private static getHash(path: string) {
@@ -136,10 +137,18 @@ class Pool {
     logger.debug(`LOCAL ROOT: ${localRoot}; LOCAL INDEX: ${localIndex}`)
     logger.debug(`CONTRACT ROOT: ${contractRoot}; CONTRACT INDEX: ${contractIndex}`)
 
-    if (contractRoot === localRoot && contractIndex === localIndex) {
+    const rootSetRoot = await this.state.roots.get(localIndex.toString(10))
+    logger.debug(`ROOT FROM ROOTSET: ${rootSetRoot}`)
+
+    if (contractRoot === localRoot && rootSetRoot === localRoot && contractIndex === localIndex) {
       logger.info('State is ok, no need to resync')
       return
     }
+
+    // Set initial root
+    await this.state.roots.add({
+      0: INIT_ROOT,
+    })
 
     const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
     const missedIndices = Array(numTxs)
@@ -171,9 +180,6 @@ class Pool {
 
         const parser = new PoolCalldataParser(calldata)
 
-        const nullifier = parser.getField('nullifier')
-        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
-
         const outCommitRaw = parser.getField('outCommit')
         const outCommit = web3.utils.hexToNumberString(outCommitRaw)
 
@@ -186,16 +192,29 @@ class Pool {
         const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
         const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
 
-        const index = Number(returnValues.index) - OUTPLUSONE
+        const newPoolIndex = Number(returnValues.index)
+        const prevPoolIndex = newPoolIndex - OUTPLUSONE
+        const prevCommitIndex = Math.floor(Number(prevPoolIndex) / OUTPLUSONE)
+
         for (let state of [this.state, this.optimisticState]) {
-          state.addCommitment(Math.floor(index / OUTPLUSONE), Helpers.strToNum(outCommit))
-          state.addTx(index, Buffer.from(commitAndMemo, 'hex'))
+          state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
+          state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
         }
+
+        // Save nullifier in confirmed state
+        const nullifier = parser.getField('nullifier')
+        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+
+        // Save root in confirmed state
+        const root = this.state.getMerkleRoot()
+        await this.state.roots.add({
+          [newPoolIndex]: root,
+        })
       }
     }
 
     const newLocalRoot = this.state.getMerkleRoot()
-    logger.debug(`LOCAL ROOT AFTER UPDATE ${localRoot}`)
+    logger.debug(`LOCAL ROOT AFTER UPDATE ${newLocalRoot}`)
     if (newLocalRoot !== contractRoot) {
       logger.error('State is corrupted, roots mismatch')
     }

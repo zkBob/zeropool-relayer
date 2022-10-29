@@ -1,7 +1,5 @@
-import BN from 'bn.js'
 import { Buffer } from 'buffer'
 import { deserialize, BinaryReader } from 'borsh'
-import { toBN } from 'web3-utils'
 
 type Option<T> = T | null
 
@@ -13,16 +11,16 @@ export enum TxType {
 }
 
 interface DefaultTxData {
-  fee: BN
+  fee: string
 }
 
 export interface WithdrawTxData extends DefaultTxData {
-  nativeAmount: BN
+  nativeAmount: string
   reciever: Uint8Array
 }
 
 export interface PermittableDepositTxData extends DefaultTxData {
-  deadline: BN
+  deadline: string
   holder: Uint8Array
 }
 
@@ -97,7 +95,7 @@ function getNoteHashes(rawHashes: Buffer, num: number, maxNotes: number): Uint8A
 export function getTxData(data: Buffer, txType: Option<TxType>): TxData {
   function readU64(offset: number) {
     let uint = data.readBigUInt64BE(offset)
-    return toBN(uint.toString())
+    return uint.toString(10)
   }
   let offset = 0
   const fee = readU64(offset)
