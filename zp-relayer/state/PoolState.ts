@@ -11,9 +11,9 @@ export class PoolState {
   public nullifiers: NullifierSet
   public roots: RootSet
 
-  constructor(private name: string, redis: Redis) {
-    this.tree = new MerkleTree(`./${name}Tree.db`)
-    this.txs = new TxStorage(`./${name}Txs.db`)
+  constructor(private name: string, redis: Redis, path: string) {
+    this.tree = new MerkleTree(`${path}/${name}Tree.db`)
+    this.txs = new TxStorage(`${path}/${name}Txs.db`)
     this.nullifiers = new NullifierSet(`${name}-nullifiers`, redis)
     this.roots = new RootSet(`${name}-roots`, redis)
   }
