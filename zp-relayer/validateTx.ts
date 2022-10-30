@@ -186,16 +186,33 @@ async function getRecoveredAddress(
   return recoveredAddress
 }
 
-async function checkRoot(index: BN, proofRoot: string, poolSet: RootSet, optimisticSet: RootSet) {
-  const indexStr = index.toString(10)
+async function checkRoot(
+  proofIndex: BN,
+  proofRoot: string,
+  poolSet: RootSet,
+  optimisticSet: RootSet,
+  contractFallback: (i: string) => Promise<string>
+) {
+  const indexStr = proofIndex.toString(10)
 
-  const root = (await poolSet.get(indexStr)) || (await optimisticSet.get(indexStr))
+  // Lookup root in cache
+  let isPresent = true
+  let root = (await poolSet.get(indexStr)) || (await optimisticSet.get(indexStr))
 
+  // Get root from contract if not found in cache
   if (root === null) {
-    return new Error(`Root ${proofRoot} at ${indexStr} not found`)
+    logger.info('Getting root from contract...')
+    root = await contractFallback(indexStr)
+    isPresent = false
   }
+
   if (root !== proofRoot) {
     return new Error(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
+  }
+
+  // If recieved correct root from contract update cache (only confirmed state)
+  if (!isPresent) {
+    await poolSet.add({ [proofIndex.toNumber()]: root })
   }
 
   return null
@@ -210,7 +227,14 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
   const fee = toBN(txData.fee)
 
-  await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.state.roots, pool.optimisticState.roots))
+  // prettier-ignore
+  await checkAssertion(() => checkRoot(
+    delta.transferIndex,
+    root,
+    pool.state.roots,
+    pool.optimisticState.roots,
+    i => pool.getContractMerkleRoot(i)
+  ))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
