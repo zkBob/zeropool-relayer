@@ -137,10 +137,7 @@ class Pool {
     logger.debug(`LOCAL ROOT: ${localRoot}; LOCAL INDEX: ${localIndex}`)
     logger.debug(`CONTRACT ROOT: ${contractRoot}; CONTRACT INDEX: ${contractIndex}`)
 
-    const rootSetRoot = await this.state.roots.get(localIndex.toString(10))
-    logger.debug(`ROOT FROM ROOTSET: ${rootSetRoot}`)
-
-    if (contractRoot === localRoot && rootSetRoot === localRoot && contractIndex === localIndex) {
+    if (contractRoot === localRoot && contractIndex === localIndex) {
       logger.info('State is ok, no need to resync')
       return
     }
