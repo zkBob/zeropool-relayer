@@ -10,7 +10,11 @@
     "dev:worker": "ts-node poolTxWorker.ts",
     "start:dev": "ts-node index.ts",
     "start:prod": "node index.js",
-    "test": "ts-mocha --paths --timeout 1000000 test/**/*.test.ts"
+    "deploy:local": "ts-node test/deploy.ts",
+    "deploy:local:rm": "rm -rf test/STATE_DIR && ts-node test/clear.ts",
+    "test:unit": "ts-mocha -r dotenv/config --paths --timeout 1000000 test/unit-tests/*.test.ts",
+    "test:worker": "yarn deploy:local && DOTENV_CONFIG_PATH=test.env ts-mocha -r dotenv/config --paths --timeout 1000000 test/worker-tests/*.test.ts && yarn deploy:local:rm"
+
   },
   "dependencies": {
     "@metamask/eth-sig-util": "^4.0.1",
@@ -49,6 +53,6 @@
     "npm-run-all": "^4.1.5",
     "ts-mocha": "^8.0.0",
     "webpack": "^5.48.0",
-    "webpack-cli": "^4.7.2"
+    "docker-compose": "0.23.17"
   }
 }

@@ -11,20 +11,25 @@ import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
 import config from '@/config'
-import { redis } from '@/services/redisClient'
 import { validateTx } from '@/validateTx'
 import type { EstimationType, GasPrice } from '@/services/gas-price'
 import type { Mutex } from 'async-mutex'
 import { getChainId } from '@/utils/web3'
 import { getTxProofField } from '@/utils/proofInputs'
+import type { Redis } from 'ioredis'
 
-const WORKER_OPTIONS = {
-  autorun: false,
-  connection: redis,
-  concurrency: 1,
-}
 
-export async function createPoolTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex) {
+export async function createPoolTxWorker<T extends EstimationType>(
+  gasPrice: GasPrice<T>,
+  mutex: Mutex,
+  redis: Redis,
+) {
+  const WORKER_OPTIONS = {
+    autorun: false,
+    connection: redis,
+    concurrency: 1,
+  }
+  
   const CHAIN_ID = await getChainId(web3)
   const poolTxWorkerProcessor = async (job: Job<TxPayload[]>) => {
     const txs = job.data

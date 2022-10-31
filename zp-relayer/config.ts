@@ -1,4 +1,3 @@
-import './env'
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
 import type { EstimationType, GasPriceKey } from './services/gas-price'
@@ -29,7 +28,7 @@ const config = {
   startBlock: parseInt(process.env.START_BLOCK || '0'),
   eventsProcessingBatchSize: parseInt(process.env.EVENTS_PROCESSING_BATCH_SIZE || '10000'),
   logLevel: process.env.RELAYER_LOG_LEVEL || 'debug',
-  redisUrl: process.env.RELAYER_REDIS_URL,
+  redisUrl: process.env.RELAYER_REDIS_URL as string,
   rpcUrl: process.env.RPC_URL as string,
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
   permitDeadlineThresholdInitial: parseInt(process.env.PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),

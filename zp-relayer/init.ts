@@ -7,6 +7,7 @@ import { Mutex } from 'async-mutex'
 import { createPoolTxWorker } from './workers/poolTxWorker'
 import { createSentTxWorker } from './workers/sentTxWorker'
 import { initializeDomain } from './utils/EIP712SaltedPermit'
+import { redis } from './services/redisClient'
 
 export async function init() {
   await initializeDomain(web3)
@@ -19,6 +20,6 @@ export async function init() {
   })
   await gasPriceService.start()
   const workerMutex = new Mutex()
-  ;(await createPoolTxWorker(gasPriceService, workerMutex)).run()
+  ;(await createPoolTxWorker(gasPriceService, workerMutex, redis)).run()
   ;(await createSentTxWorker(gasPriceService, workerMutex)).run()
 }

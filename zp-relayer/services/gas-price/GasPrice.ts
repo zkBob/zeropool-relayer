@@ -98,6 +98,10 @@ export class GasPrice<ET extends EstimationType> {
     }, this.updateInterval)
   }
 
+  stop() {
+    if (this.fetchGasPriceInterval) clearInterval(this.fetchGasPriceInterval)
+  }
+
   getPrice() {
     return this.cachedGasPrice
   }

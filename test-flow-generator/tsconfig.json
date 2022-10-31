@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "noImplicitAny": true,
+    "module": "es2020",
+    "target": "es2020",
+    "allowJs": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true
+  },
+  "include": ["src/*.ts", "prover.ts"],
+  "exclude": ["node_modules"]
+}
