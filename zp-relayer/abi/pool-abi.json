@@ -70,6 +70,25 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "UpdateTier",
+    "type": "event"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -170,6 +189,11 @@
             "internalType": "uint256",
             "name": "depositCap",
             "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "tier",
+            "type": "uint8"
           }
         ],
         "internalType": "struct ZkBobAccounting.Limits",
@@ -318,6 +342,11 @@
   {
     "inputs": [
       {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
         "internalType": "uint256",
         "name": "_tvlCap",
         "type": "uint256"
@@ -357,6 +386,24 @@
       }
     ],
     "name": "setOperatorManager",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address[]",
+        "name": "_users",
+        "type": "address[]"
+      }
+    ],
+    "name": "setUsersTier",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -421,7 +468,18 @@
     "type": "function"
   },
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_operator",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_to",
+        "type": "address"
+      }
+    ],
     "name": "withdrawFee",
     "outputs": [],
     "stateMutability": "nonpayable",

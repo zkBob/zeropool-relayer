@@ -1,4 +1,6 @@
 import './env'
+import fs from 'fs'
+import crypto from 'crypto'
 import BN from 'bn.js'
 import PoolAbi from './abi/pool-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
@@ -6,16 +8,16 @@ import { Contract } from 'web3-eth-contract'
 import config from './config'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
+import { redis } from './services/redisClient'
 import { poolTxQueue } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
-import { validateTx } from './validateTx'
-import { PoolState } from './state'
+import { PoolState } from './state/PoolState'
 
 import { TxType } from 'zp-memo-parser'
 import { numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
-import { OUTPLUSONE } from './utils/constants'
+import { INIT_ROOT, OUTPLUSONE } from './utils/constants'
 
 export interface PoolTx {
   proof: Proof
@@ -34,6 +36,7 @@ export interface Limits {
   dailyUserDepositCap: BN
   dailyUserDepositCapUsage: BN
   depositCap: BN
+  tier: BN
 }
 
 export interface LimitsFetch {
@@ -58,11 +61,14 @@ export interface LimitsFetch {
       available: string
     }
   }
+  tier: string
 }
 
 class Pool {
   public PoolInstance: Contract
   public treeParams: Params
+  public treeParamsHash: string
+  public transferParamsHash: string
   private txVK: VK
   public state: PoolState
   public optimisticState: PoolState
@@ -72,12 +78,22 @@ class Pool {
   constructor() {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
 
+    this.treeParamsHash = Pool.getHash(config.treeUpdateParamsPath)
+    this.transferParamsHash = Pool.getHash(config.transferParamsPath)
+
     this.treeParams = Params.fromFile(config.treeUpdateParamsPath)
     const txVK = require(config.txVKPath)
     this.txVK = txVK
 
-    this.state = new PoolState('pool')
-    this.optimisticState = new PoolState('optimistic')
+    this.state = new PoolState('pool', redis, config.stateDirPath)
+    this.optimisticState = new PoolState('optimistic', redis, config.stateDirPath)
+  }
+
+  private static getHash(path: string) {
+    const buffer = fs.readFileSync(path)
+    const hash = crypto.createHash('sha256')
+    hash.update(buffer)
+    return hash.digest('hex')
   }
 
   async init() {
@@ -89,10 +105,6 @@ class Pool {
   }
 
   async transact(txs: PoolTx[]) {
-    for (const tx of txs) {
-      await validateTx(tx)
-    }
-
     const queueTxs = txs.map(({ proof, txType, memo, depositSignature }) => {
       return {
         amount: '0',
@@ -130,6 +142,11 @@ class Pool {
       return
     }
 
+    // Set initial root
+    await this.state.roots.add({
+      0: INIT_ROOT,
+    })
+
     const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
     const missedIndices = Array(numTxs)
     for (let i = 0; i < numTxs; i++) {
@@ -160,9 +177,6 @@ class Pool {
 
         const parser = new PoolCalldataParser(calldata)
 
-        const nullifier = parser.getField('nullifier')
-        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
-
         const outCommitRaw = parser.getField('outCommit')
         const outCommit = web3.utils.hexToNumberString(outCommitRaw)
 
@@ -175,16 +189,29 @@ class Pool {
         const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
         const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
 
-        const index = Number(returnValues.index) - OUTPLUSONE
+        const newPoolIndex = Number(returnValues.index)
+        const prevPoolIndex = newPoolIndex - OUTPLUSONE
+        const prevCommitIndex = Math.floor(Number(prevPoolIndex) / OUTPLUSONE)
+
         for (let state of [this.state, this.optimisticState]) {
-          state.addCommitment(Math.floor(index / OUTPLUSONE), Helpers.strToNum(outCommit))
-          state.addTx(index, Buffer.from(commitAndMemo, 'hex'))
+          state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
+          state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
         }
+
+        // Save nullifier in confirmed state
+        const nullifier = parser.getField('nullifier')
+        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+
+        // Save root in confirmed state
+        const root = this.state.getMerkleRoot()
+        await this.state.roots.add({
+          [newPoolIndex]: root,
+        })
       }
     }
 
     const newLocalRoot = this.state.getMerkleRoot()
-    logger.debug(`LOCAL ROOT AFTER UPDATE ${localRoot}`)
+    logger.debug(`LOCAL ROOT AFTER UPDATE ${newLocalRoot}`)
     if (newLocalRoot !== contractRoot) {
       logger.error('State is corrupted, roots mismatch')
     }
@@ -220,6 +247,7 @@ class Pool {
       dailyUserDepositCap: toBN(limits.dailyUserDepositCap),
       dailyUserDepositCapUsage: toBN(limits.dailyUserDepositCapUsage),
       depositCap: toBN(limits.depositCap),
+      tier: toBN(limits.tier),
     }
   }
 
@@ -246,6 +274,7 @@ class Pool {
           available: limits.dailyWithdrawalCap.sub(limits.dailyWithdrawalCapUsage).toString(10),
         },
       },
+      tier: limits.tier.toString(10),
     }
     return limitsFetch
   }

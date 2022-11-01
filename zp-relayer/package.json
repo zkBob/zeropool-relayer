@@ -1,6 +1,6 @@
 {
   "name": "zp-relayer",
-  "version": "1.2.1",
+  "version": "2.0.0",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -10,7 +10,7 @@
     "dev:worker": "ts-node poolTxWorker.ts",
     "start:dev": "ts-node index.ts",
     "start:prod": "node index.js",
-    "test": "ts-mocha --timeout 1000000 test/**/*.test.ts"
+    "test": "ts-mocha --paths --timeout 1000000 test/**/*.test.ts"
   },
   "dependencies": {
     "@metamask/eth-sig-util": "^4.0.1",

@@ -1,40 +1,16 @@
-import fs from 'fs'
 import { Request, Response, NextFunction } from 'express'
 import { pool } from './pool'
 import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
-import { proveTx } from './prover'
 import {
   checkGetLimits,
   checkGetTransactions,
   checkGetTransactionsV2,
+  checkMerkleRootErrors,
   checkSendTransactionErrors,
   checkSendTransactionsErrors,
 } from './validation/validation'
-
-const txProof = (() => {
-  let txProofNum = 0
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      logger.debug('Proving tx...')
-      const { pub, sec } = req.body
-      if (logger.isDebugEnabled()) {
-        const TX_PROOFS_DIR = 'tx_proofs'
-        if (!fs.existsSync(TX_PROOFS_DIR)) {
-          fs.mkdirSync(TX_PROOFS_DIR, { recursive: true })
-        }
-        fs.writeFileSync(`${TX_PROOFS_DIR}/object${txProofNum}.json`, JSON.stringify([pub, sec], null, 2))
-        txProofNum += 1
-      }
-      const proof = await proveTx(pub, sec)
-      logger.debug('Tx proved')
-      res.json(proof)
-    } catch (err) {
-      next(err)
-    }
-  }
-})()
 
 async function sendTransactions(req: Request, res: Response, next: NextFunction) {
   const errors = checkSendTransactionsErrors(req.body)
@@ -73,6 +49,13 @@ async function sendTransaction(req: Request, res: Response, next: NextFunction) 
 }
 
 async function merkleRoot(req: Request, res: Response, next: NextFunction) {
+  const errors = checkMerkleRootErrors(req.params)
+  if (errors) {
+    logger.info('Request errors: %o', errors)
+    res.status(400).json({ errors })
+    return
+  }
+
   const index = req.params.index
   const root = await pool.getContractMerkleRoot(index)
   res.json(root)
@@ -180,12 +163,18 @@ async function getLimits(req: Request, res: Response) {
   res.json(limitsFetch)
 }
 
+function getParamsHash(type: 'tree' | 'transfer') {
+  const hash = type === 'tree' ? pool.treeParamsHash : pool.transferParamsHash
+  return (req: Request, res: Response) => {
+    res.json({ hash })
+  }
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
 
 export default {
-  txProof,
   sendTransaction,
   sendTransactions,
   merkleRoot,
@@ -195,5 +184,6 @@ export default {
   relayerInfo,
   getFee,
   getLimits,
+  getParamsHash,
   root,
 }

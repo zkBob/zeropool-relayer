@@ -4,18 +4,19 @@ import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE, MAX_SENT_LIMIT } from '@/utils/constants'
-import { readNonce, updateField, RelayerKeys, incrNonce } from '@/utils/redisFields'
-import { numToHex, truncateMemoTxPrefix, withMutex } from '@/utils/helpers'
+import { readNonce, updateField, RelayerKeys, incrNonce, updateNonce } from '@/utils/redisFields'
+import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
 import { signAndSend } from '@/tx/signAndSend'
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
 import config from '@/config'
 import { redis } from '@/services/redisClient'
-import { checkAssertion, checkNullifier, checkTransferIndex, parseDelta } from '@/validateTx'
+import { validateTx } from '@/validateTx'
 import type { EstimationType, GasPrice } from '@/services/gas-price'
 import type { Mutex } from 'async-mutex'
 import { getChainId } from '@/utils/web3'
+import { getTxProofField } from '@/utils/proofInputs'
 
 const WORKER_OPTIONS = {
   autorun: false,
@@ -36,15 +37,9 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
-      const nullifier = txProof.inputs[1]
-      const outCommit = txProof.inputs[2]
-      const delta = parseDelta(txProof.inputs[3])
+      const txData = await validateTx(tx, pool)
 
-      await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
-      await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
-      await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
-
-      const { data, commitIndex } = await processTx(job.id as string, tx, pool)
+      const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
 
       const nonce = await incrNonce()
       logger.info(`${logPrefix} nonce: ${nonce}`)
@@ -57,33 +52,50 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         gas,
         to: config.poolAddress,
         chainId: CHAIN_ID,
-        ...gasPriceOptions,
       }
       try {
-        const txHash = await signAndSend(txConfig, config.relayerPrivateKey, web3)
+        const txHash = await signAndSend(
+          {
+            ...txConfig,
+            ...gasPriceOptions,
+          },
+          config.relayerPrivateKey,
+          web3
+        )
         logger.debug(`${logPrefix} TX hash ${txHash}`)
 
         await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
 
-        const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
-        const txData = numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+        const nullifier = getTxProofField(txProof, 'nullifier')
+        const outCommit = getTxProofField(txProof, 'out_commit')
 
-        pool.optimisticState.updateState(commitIndex, outCommit, txData)
-        logger.info('Adding nullifier %s to OS', nullifier)
+        const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
+        const prefixedMemo = numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+
+        pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
+        logger.debug('Adding nullifier %s to OS', nullifier)
         await pool.optimisticState.nullifiers.add([nullifier])
+        const poolIndex = (commitIndex + 1) * OUTPLUSONE
+        logger.debug('Adding root %s at %s to OS', rootAfter, poolIndex)
+        await pool.optimisticState.roots.add({
+          [poolIndex]: rootAfter,
+        })
 
         txHashes.push(txHash)
 
         await sentTxQueue.add(
           txHash,
           {
-            payload: tx,
+            txType,
+            root: rootAfter,
             outCommit,
             commitIndex,
             txHash,
-            txData,
+            prefixedMemo,
             nullifier,
-            txConfig: {},
+            txConfig,
+            gasPriceOptions,
+            txData,
           },
           {
             delay: config.sentTxDelay,
@@ -104,10 +116,10 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     return txHashes
   }
 
-  await updateField(RelayerKeys.NONCE, await readNonce(true))
+  await updateNonce(await readNonce(true))
   const poolTxWorker = new Worker<TxPayload[]>(
     TX_QUEUE_NAME,
-    job => withMutex(mutex, () => poolTxWorkerProcessor(job)),
+    job => withErrorLog(withMutex(mutex, () => poolTxWorkerProcessor(job))),
     WORKER_OPTIONS
   )
 

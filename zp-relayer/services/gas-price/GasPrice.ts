@@ -1,5 +1,6 @@
+import BN from 'bn.js'
 import type Web3 from 'web3'
-import { toWei } from 'web3-utils'
+import { toWei, toBN } from 'web3-utils'
 import config from '@/config'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
@@ -17,6 +18,8 @@ import {
   PolygonGSV2Response,
   PolygonGSV2GasPriceKey,
   GasPriceKey,
+  LegacyGasPrice,
+  EIP1559GasPrice,
 } from './types'
 
 const polygonGasPriceKeyMapping: Record<GasPriceKey, PolygonGSV2GasPriceKey> = {
@@ -24,6 +27,43 @@ const polygonGasPriceKeyMapping: Record<GasPriceKey, PolygonGSV2GasPriceKey> = {
   standard: 'standard',
   fast: 'fast',
   instant: 'fast',
+}
+
+function isLegacyGasPrice(gp: GasPriceValue): gp is LegacyGasPrice {
+  return 'gasPrice' in gp
+}
+
+function isEIP1559GasPrice(gp: GasPriceValue): gp is EIP1559GasPrice {
+  return 'maxFeePerGas' in gp && 'maxPriorityFeePerGas' in gp
+}
+
+export function chooseGasPriceOptions(a: GasPriceValue, b: GasPriceValue): GasPriceValue {
+  if (isLegacyGasPrice(a) && isLegacyGasPrice(b)) {
+    return { gasPrice: BN.max(toBN(a.gasPrice), toBN(b.gasPrice)).toString(10) }
+  }
+  if (isEIP1559GasPrice(a) && isEIP1559GasPrice(b)) {
+    return {
+      maxFeePerGas: BN.max(toBN(a.maxFeePerGas), toBN(b.maxFeePerGas)).toString(10),
+      maxPriorityFeePerGas: BN.max(toBN(a.maxPriorityFeePerGas), toBN(b.maxPriorityFeePerGas)).toString(10),
+    }
+  }
+  return b
+}
+
+export function EIP1559GasPriceWithinLimit(fees: EIP1559GasPrice, maxFeeLimit: BN | null): EIP1559GasPrice {
+  if (!maxFeeLimit) return fees
+
+  const diff = toBN(fees.maxFeePerGas).sub(maxFeeLimit)
+  if (diff.isNeg()) {
+    return fees
+  } else {
+    const maxFeePerGas = maxFeeLimit.toString(10)
+    const maxPriorityFeePerGas = BN.min(toBN(fees.maxPriorityFeePerGas), maxFeeLimit).toString(10)
+    return {
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    }
+  }
 }
 
 export class GasPrice<ET extends EstimationType> {
@@ -99,10 +139,16 @@ export class GasPrice<ET extends EstimationType> {
     const json: PolygonGSV2Response = await response.json()
     const speedType = polygonGasPriceKeyMapping[options.speedType]
     const { maxFee, maxPriorityFee } = json[speedType]
-    return {
-      maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
-      maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
-    }
+
+    const gasPriceOptions = EIP1559GasPriceWithinLimit(
+      {
+        maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
+        maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
+      },
+      options.maxFeeLimit
+    )
+
+    return gasPriceOptions
   }
 
   static normalizeGasPrice(rawGasPrice: number, factor = 1) {
