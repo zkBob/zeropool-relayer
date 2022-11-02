@@ -19,8 +19,8 @@ async function generateFlow() {
   const browser = await puppeteer.launch()
   try {
     const page = await browser.newPage()
-    page.on('console', async (msg) => {
-      const msgArgs = msg.args();
+    page.on('console', async msg => {
+      const msgArgs = msg.args()
       for (let i = 0; i < msgArgs.length; ++i) {
         console.log(msgArgs[i].toString())
       }

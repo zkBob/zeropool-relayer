@@ -10,7 +10,7 @@ services:
       --host 0.0.0.0
       -m "myth like bonus scare over problem client lizard pioneer submit female collect"
   contracts:
-    image: zkbob-contracts:latest
+    image: lok52/zkbob-contracts:latest
   redis:
     container_name: redis
     command: [redis-server, --port, '6379', --appendonly, 'yes']

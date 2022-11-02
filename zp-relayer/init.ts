@@ -21,5 +21,5 @@ export async function init() {
   await gasPriceService.start()
   const workerMutex = new Mutex()
   ;(await createPoolTxWorker(gasPriceService, workerMutex, redis)).run()
-  ;(await createSentTxWorker(gasPriceService, workerMutex)).run()
+  ;(await createSentTxWorker(gasPriceService, workerMutex, redis)).run()
 }

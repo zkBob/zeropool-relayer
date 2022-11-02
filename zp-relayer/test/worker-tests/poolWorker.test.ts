@@ -28,18 +28,20 @@ describe('poolWorker', () => {
     poolWorker.run()
     await poolWorker.waitUntilReady()
 
-    queueEvents = new QueueEvents(poolWorker.name, {connection: redis})
+    queueEvents = new QueueEvents(poolWorker.name, { connection: redis })
   })
   it('executes a job', async () => {
     await mintTokens(flow[0].txTypeData.from as string, 10)
-    const job = await poolTxQueue.add('test', [{
-      amount: '0',
-      gas: '2000000',
-      txProof: flow[0].proof as Proof,
-      txType: TxType.PERMITTABLE_DEPOSIT,
-      rawMemo: flow[0].transactionData.memo,
-      depositSignature: flow[0].depositSignature
-    }])
+    const job = await poolTxQueue.add('test', [
+      {
+        amount: '0',
+        gas: '2000000',
+        txProof: flow[0].proof as Proof,
+        txType: TxType.PERMITTABLE_DEPOSIT,
+        rawMemo: flow[0].transactionData.memo,
+        depositSignature: flow[0].depositSignature,
+      },
+    ])
 
     const [txHash] = await job.waitUntilFinished(queueEvents)
     expect(txHash.length).to.eq(66)

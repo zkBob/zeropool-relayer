@@ -1,5 +1,5 @@
-import type Web3 from 'web3'
 import type { HttpProvider } from 'web3-core'
+import Redis from 'ioredis'
 import { web3 } from './web3'
 import { toBN } from 'web3-utils'
 import TokenAbi from './abi/token-abi.json'
@@ -26,7 +26,8 @@ function callRpcMethod(method: string, params: any[] = []) {
 }
 
 export async function mintTokens(to: string, amount: number) {
-  await token.methods.mint(to, denominator.muln(amount))
+  await token.methods
+    .mint(to, denominator.muln(amount))
     .send({ from: minter })
     .once('transactionHash', () => mineBlock())
 }
@@ -38,7 +39,6 @@ export async function disableMining() {
 export async function enableMining() {
   await callRpcMethod('evm_setAutomine', [true])
 }
-
 
 export function mineBlock() {
   return callRpcMethod('anvil_mine')

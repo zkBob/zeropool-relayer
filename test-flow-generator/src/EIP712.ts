@@ -43,7 +43,7 @@ interface SaltedPermitMessage {
   salt: string
 }
 
-export function createSignature(message: SaltedPermitMessage, privateKey: string) {  
+export function createSignature(message: SaltedPermitMessage, privateKey: string) {
   const data = {
     types,
     primaryType: PERMIT,

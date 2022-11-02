@@ -1,3 +1,4 @@
+import './env'
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
 import type { EstimationType, GasPriceKey } from './services/gas-price'

@@ -18,18 +18,13 @@ import { getChainId } from '@/utils/web3'
 import { getTxProofField } from '@/utils/proofInputs'
 import type { Redis } from 'ioredis'
 
-
-export async function createPoolTxWorker<T extends EstimationType>(
-  gasPrice: GasPrice<T>,
-  mutex: Mutex,
-  redis: Redis,
-) {
+export async function createPoolTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
   const WORKER_OPTIONS = {
     autorun: false,
     connection: redis,
     concurrency: 1,
   }
-  
+
   const CHAIN_ID = await getChainId(web3)
   const poolTxWorkerProcessor = async (job: Job<TxPayload[]>) => {
     const txs = job.data
