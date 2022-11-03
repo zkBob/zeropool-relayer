@@ -1,14 +1,15 @@
 const puppeteer = require('puppeteer')
 const fs = require('fs')
 const { createServer } = require('http-server')
-const FLOW = require('../flow.json')
 const { Proof, Params } = require('libzkbob-rs-node')
+const path = require('path')
 
-const FLOWS_DIR = 'flows/'
+const OUT_FLOWS_DIR = './flows/'
+const TEST_FLOWS_DIR = './test-flows/'
 const PARAMS = Params.fromFile(process.env.PARAMS_PATH || '../zp-relayer/params/transfer_params.bin')
 
-if (!fs.existsSync(FLOWS_DIR)) {
-  fs.mkdirSync(FLOWS_DIR, { recursive: true })
+if (!fs.existsSync(OUT_FLOWS_DIR)) {
+  fs.mkdirSync(OUT_FLOWS_DIR, { recursive: true })
 }
 
 function proveTx(pub, sec) {
@@ -25,20 +26,25 @@ async function generateFlow() {
         console.log(msgArgs[i].toString())
       }
     })
-    await page.goto('http://127.0.0.1:8080/')
-    const res = await page.evaluate(async flow => {
-      await init()
-      const acc = await newAccount()
-      const flowOutput = await createFlow(acc, flow)
-      return flowOutput
-    }, FLOW)
+    const flowFiles = fs.readdirSync(TEST_FLOWS_DIR)
+    console.log(flowFiles)
+    for (let file of flowFiles) {
+      const fullPath = path.join(TEST_FLOWS_DIR, file)
+      const flow = require('../' + fullPath)
+      await page.goto('http://127.0.0.1:8080/')
+      const res = await page.evaluate(async flow => {
+        await init()
+        const flowOutput = await createFlow(flow)
+        return flowOutput
+      }, flow)
 
-    for (let tx of res) {
-      const proof = proveTx(tx.transactionData.public, tx.transactionData.secret)
-      tx.proof = proof
+      for (let tx of res) {
+        const proof = proveTx(tx.transactionData.public, tx.transactionData.secret)
+        tx.proof = proof
+      }
+
+      fs.writeFileSync(`${OUT_FLOWS_DIR}/flow_${path.parse(file).name}.json`, JSON.stringify(res, null, 2))
     }
-
-    fs.writeFileSync(`${FLOWS_DIR}/test_flow.json`, JSON.stringify(res, null, 2))
   } finally {
     await browser.close()
   }

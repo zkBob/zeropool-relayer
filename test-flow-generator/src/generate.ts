@@ -4,6 +4,7 @@ import type { Flow, FlowOutput } from './types'
 import { ethAddrToBuf, packSignature, toTwosComplementHex } from './helpers'
 import { createSignature } from './EIP712'
 import { config } from './config'
+import { TxType } from 'zp-memo-parser'
 
 const TEN_YEARS = 315569520
 const denominator = 1000000000n
@@ -53,13 +54,16 @@ async function createWithdraw(acc: UserAccount, amount: string, to: string) {
   return tx
 }
 
-async function createFlow(acc: UserAccount, { accounts, flow }: Flow): Promise<FlowOutput> {
+async function createFlow({ independent, accounts, flow }: Flow): Promise<FlowOutput> {
   const flowOutput: FlowOutput = []
   const nonces: Record<string, number> = {}
+  let acc = await newAccount()
   for (let [i, item] of flow.entries()) {
     let tx
     let depositSignature = null
+    let txType: TxType
     if ('from' in item) {
+      txType = TxType.PERMITTABLE_DEPOSIT
       const [depositTx, deadline] = await createDepositPermittable(acc, item.amount, item.from)
       const nonce = nonces[item.from] || 0
       const salt = '0x' + toTwosComplementHex(BigInt(depositTx.public.nullifier), 32)
@@ -79,15 +83,23 @@ async function createFlow(acc: UserAccount, { accounts, flow }: Flow): Promise<F
       nonces[item.from] = nonce + 1
       tx = depositTx
     } else if ('to' in item) {
+      txType = TxType.WITHDRAWAL
       tx = await createWithdraw(acc, item.amount, item.to)
     } else if ('zkAddress' in item) {
+      txType = TxType.TRANSFER
       tx = await createTransfer(acc, item.amount, item.zkAddress)
     } else {
       throw Error('Unknown flow item')
     }
-    acc.addAccount(BigInt(i) * 128n, tx.out_hashes, tx.secret.tx.output[0], [])
+
+    if (independent) {
+      acc = await newAccount()
+    } else {
+      acc.addAccount(BigInt(i) * 128n, tx.out_hashes, tx.secret.tx.output[0], [])
+    }
 
     flowOutput.push({
+      txType,
       txTypeData: item,
       depositSignature,
       transactionData: tx,

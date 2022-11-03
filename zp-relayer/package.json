@@ -13,7 +13,7 @@
     "deploy:local": "ts-node test/deploy.ts",
     "deploy:local:rm": "rm -rf test/STATE_DIR && ts-node test/clear.ts",
     "test:unit": "ts-mocha -r dotenv/config --paths --timeout 1000000 test/unit-tests/*.test.ts",
-    "test:worker": "yarn deploy:local && DOTENV_CONFIG_PATH=test.env ts-mocha -r dotenv/config --paths --timeout 1000000 test/worker-tests/*.test.ts && yarn deploy:local:rm"
+    "test:worker": "yarn deploy:local && DOTENV_CONFIG_PATH=test.env ts-mocha --exit -r dotenv/config --paths --timeout 1000000 test/worker-tests/*.test.ts && yarn deploy:local:rm"
   },
   "dependencies": {
     "@metamask/eth-sig-util": "^4.0.1",

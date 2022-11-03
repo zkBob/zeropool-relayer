@@ -2,6 +2,6 @@
 
 This tool allows you to describe a test flow via json:
 1. Install dependencies. Run `yarn`
-2. Describe a `Flow` object (structure can be found in `src/types.ts`) in `flow.json`
+2. Describe a `Flow` object (structure can be found in `src/types.ts`) in a json and place it into `test-flows` folder
 3. Run `./scripts/generate.sh`
 4. Find your flow in `flows` directory

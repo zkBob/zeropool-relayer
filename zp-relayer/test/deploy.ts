@@ -23,9 +23,9 @@ async function waitForContracts() {
   let bytecode = '0x'
   do {
     try {
-    bytecode = await web3.eth.getCode('0xe982E462b094850F12AF94d21D470e21bE9D0E9C')
-    await sleep(200)
-    } catch(e) {}
+      bytecode = await web3.eth.getCode('0xe982E462b094850F12AF94d21D470e21bE9D0E9C')
+      await sleep(200)
+    } catch (e) {}
   } while (bytecode === '0x')
 }
 

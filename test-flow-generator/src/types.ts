@@ -1,4 +1,5 @@
-import type { TransactionData } from 'libzkbob-rs-wasm-web'
+import type { Proof, TransactionData } from 'libzkbob-rs-wasm-web'
+import type { TxType } from 'zp-memo-parser'
 
 interface PermitDepositFlowItem {
   from: string
@@ -18,13 +19,16 @@ interface WithdrawFlowItem {
 type FlowItem = PermitDepositFlowItem | TransferFlowItem | WithdrawFlowItem
 
 export type Flow = {
+  independent?: boolean
   accounts: Record<string, string>
   flow: FlowItem[]
 }
 
-type FlowOutputItem = {
+export type FlowOutputItem = {
+  txType: TxType
   txTypeData?: FlowItem
   depositSignature: string | null
   transactionData: TransactionData
+  proof?: Proof
 }
 export type FlowOutput = FlowOutputItem[]

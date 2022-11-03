@@ -43,3 +43,13 @@ export async function enableMining() {
 export function mineBlock() {
   return callRpcMethod('anvil_mine')
 }
+
+export function dropTransaction(hash: string) {
+  return callRpcMethod('anvil_dropTransaction', [hash])
+}
+
+export function newConnection() {
+  return new Redis('127.0.0.1:6379', {
+    maxRetriesPerRequest: null,
+  })
+}

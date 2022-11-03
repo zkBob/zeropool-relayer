@@ -112,7 +112,7 @@ export async function withErrorLog<R>(f: () => Promise<R>): Promise<R> {
   try {
     return await f()
   } catch (e) {
-    logger.error('Found error: %o', e)
+    logger.error('Found error: %s', (e as Error).message)
     throw e
   }
 }
