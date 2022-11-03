@@ -2,7 +2,7 @@ import { toBN, toWei } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { TxPayload } from '@/queue/poolTxQueue'
+import { PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE, MAX_SENT_LIMIT } from '@/utils/constants'
 import { readNonce, updateField, RelayerKeys, incrNonce, updateNonce } from '@/utils/redisFields'
 import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
@@ -34,7 +34,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     logger.info('%s processing...', logPrefix)
     logger.info('Recieved %s txs', txs.length)
 
-    const txHashes = []
+    const txHashes: [string, string][] = []
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
@@ -82,9 +82,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
           [poolIndex]: rootAfter,
         })
 
-        txHashes.push(txHash)
-
-        await sentTxQueue.add(
+        const sentJob = await sentTxQueue.add(
           txHash,
           {
             txType,
@@ -104,6 +102,8 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
           }
         )
 
+        txHashes.push([txHash, sentJob.id as string])
+
         const sentTxNum = await sentTxQueue.count()
         if (sentTxNum > MAX_SENT_LIMIT) {
           await poolTxWorker.pause()
@@ -118,7 +118,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
   }
 
   await updateNonce(await readNonce(true))
-  const poolTxWorker = new Worker<TxPayload[]>(
+  const poolTxWorker = new Worker<TxPayload[], PoolTxResult[]>(
     TX_QUEUE_NAME,
     job => withErrorLog(withMutex(mutex, () => poolTxWorkerProcessor(job))),
     WORKER_OPTIONS
