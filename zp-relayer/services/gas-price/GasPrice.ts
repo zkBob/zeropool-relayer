@@ -1,6 +1,7 @@
 import BN from 'bn.js'
 import type Web3 from 'web3'
 import { toWei, toBN } from 'web3-utils'
+import BigNumber from 'bignumber.js'
 import config from '@/config'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
@@ -66,6 +67,38 @@ export function EIP1559GasPriceWithinLimit(fees: EIP1559GasPrice, maxFeeLimit: B
   }
 }
 
+
+function addExtraGas(gas: BN, extraPercentage: number, maxGasLimit: string | undefined): BN {
+  const factor = BigNumber(1 + extraPercentage)
+
+  const gasWithExtra = BigNumber(gas.toString(10)).multipliedBy(factor).toFixed(0)
+
+  if (maxGasLimit) {
+    return toBN(BigNumber.min(maxGasLimit, gasWithExtra).toString(10))
+  } else {
+    return toBN(gasWithExtra)
+  }
+}
+
+export function addExtraGasPrice(gp: GasPriceValue, factor = 0.1, maxFeeLimit: BN | null = null): GasPriceValue {
+  if (factor === 0) return gp
+
+  const maxGasPrice = maxFeeLimit?.toString()
+
+  if (isLegacyGasPrice(gp)) {
+    return {
+      gasPrice: addExtraGas(toBN(gp.gasPrice), factor, maxGasPrice).toString()
+    }
+  }
+  if (isEIP1559GasPrice(gp)) {
+    return {
+        maxFeePerGas: addExtraGas(toBN(gp.maxFeePerGas), factor, maxGasPrice).toString(),
+        maxPriorityFeePerGas: addExtraGas(toBN(gp.maxPriorityFeePerGas), factor, maxGasPrice).toString()
+      }
+  }
+  return gp
+}
+
 export class GasPrice<ET extends EstimationType> {
   private fetchGasPriceInterval: NodeJS.Timeout | null = null
   private cachedGasPrice: GasPriceValue
@@ -100,6 +133,10 @@ export class GasPrice<ET extends EstimationType> {
 
   stop() {
     if (this.fetchGasPriceInterval) clearInterval(this.fetchGasPriceInterval)
+  }
+
+  setGasPrice(gp: GasPriceValue) {
+    this.cachedGasPrice = gp
   }
 
   getPrice() {
