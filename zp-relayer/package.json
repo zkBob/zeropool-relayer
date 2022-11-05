@@ -10,13 +10,14 @@
     "dev:worker": "ts-node poolTxWorker.ts",
     "start:dev": "ts-node index.ts",
     "start:prod": "node index.js",
-    "test": "ts-mocha --paths --timeout 1000000 test/**/*.test.ts"
+    "test:unit": "ts-mocha -r dotenv/config --paths --timeout 1000000 test/unit-tests/*.test.ts"
   },
   "dependencies": {
     "@metamask/eth-sig-util": "^4.0.1",
     "@mycrypto/gas-estimation": "^1.1.0",
     "ajv": "8.11.0",
     "async-mutex": "^0.3.2",
+    "bignumber.js": "9.1.0",
     "bullmq": "3.0.0",
     "cors": "^2.8.5",
     "dotenv": "^10.0.0",
