@@ -116,3 +116,21 @@ export async function withErrorLog<R>(f: () => Promise<R>): Promise<R> {
     throw e
   }
 }
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export function withLoop<R>(f: () => Promise<R>, timeout: number): () => Promise<R> {
+  // @ts-ignore
+  return async () => {
+    while (1) {
+      try {
+        return await f()
+      } catch (e) {
+        await sleep(timeout)
+        logger.warn('Found error %s', (e as Error).message)
+      }
+    }
+  }
+}

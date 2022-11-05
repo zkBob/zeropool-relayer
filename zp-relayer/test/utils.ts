@@ -44,6 +44,10 @@ export function mineBlock() {
   return callRpcMethod('anvil_mine')
 }
 
+export function setNextBlockTimestamp(timestamp: number) {
+  return callRpcMethod('evm_setNextBlockTimestamp', [timestamp])
+}
+
 export function dropTransaction(hash: string) {
   return callRpcMethod('anvil_dropTransaction', [hash])
 }

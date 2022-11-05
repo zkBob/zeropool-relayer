@@ -1,6 +1,6 @@
 import init, { TransactionData, UserAccount, UserState } from 'libzkbob-rs-wasm-web'
 import { toChecksumAddress } from 'web3-utils'
-import type { Flow, FlowOutput } from './types'
+import type { BaseOutputItem, Flow, FlowOutput } from './types'
 import { ethAddrToBuf, packSignature, toTwosComplementHex } from './helpers'
 import { createSignature } from './EIP712'
 import { config } from './config'
@@ -60,14 +60,14 @@ async function createFlow({ independent, accounts, flow }: Flow): Promise<FlowOu
   let acc = await newAccount()
   for (let [i, item] of flow.entries()) {
     let tx
-    let depositSignature = null
     let txType: TxType
+    let txSpecificOutput: any = { depositSignature: null }
     if ('from' in item) {
       txType = TxType.PERMITTABLE_DEPOSIT
       const [depositTx, deadline] = await createDepositPermittable(acc, item.amount, item.from)
       const nonce = nonces[item.from] || 0
       const salt = '0x' + toTwosComplementHex(BigInt(depositTx.public.nullifier), 32)
-      depositSignature = packSignature(
+      const depositSignature = packSignature(
         createSignature(
           {
             owner: toChecksumAddress(item.from),
@@ -82,6 +82,7 @@ async function createFlow({ independent, accounts, flow }: Flow): Promise<FlowOu
       )
       nonces[item.from] = nonce + 1
       tx = depositTx
+      txSpecificOutput = { depositSignature, deadline }
     } else if ('to' in item) {
       txType = TxType.WITHDRAWAL
       tx = await createWithdraw(acc, item.amount, item.to)
@@ -98,11 +99,12 @@ async function createFlow({ independent, accounts, flow }: Flow): Promise<FlowOu
       acc.addAccount(BigInt(i) * 128n, tx.out_hashes, tx.secret.tx.output[0], [])
     }
 
+    // @ts-ignore
     flowOutput.push({
       txType,
       txTypeData: item,
-      depositSignature,
       transactionData: tx,
+      ...txSpecificOutput,
     })
   }
   return flowOutput

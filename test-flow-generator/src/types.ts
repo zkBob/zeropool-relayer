@@ -16,19 +16,42 @@ interface WithdrawFlowItem {
   amount: string
 }
 
-type FlowItem = PermitDepositFlowItem | TransferFlowItem | WithdrawFlowItem
+type FlowItem<T extends TxType> = T extends TxType.PERMITTABLE_DEPOSIT
+  ? PermitDepositFlowItem
+  : T extends TxType.TRANSFER
+  ? TransferFlowItem
+  : T extends TxType.WITHDRAWAL
+  ? WithdrawFlowItem
+  : never
 
 export type Flow = {
   independent?: boolean
   accounts: Record<string, string>
-  flow: FlowItem[]
+  flow: FlowItem<TxType>[]
 }
 
-export type FlowOutputItem = {
-  txType: TxType
-  txTypeData?: FlowItem
-  depositSignature: string | null
+export interface BaseOutputItem<T extends TxType> {
+  txType: T
+  proof: Proof
   transactionData: TransactionData
-  proof?: Proof
+  txTypeData: FlowItem<T>
+  depositSignature: string | null
 }
-export type FlowOutput = FlowOutputItem[]
+export interface PermitDepositOutputItem extends BaseOutputItem<TxType.PERMITTABLE_DEPOSIT> {
+  deadline: string
+  depositSignature: string
+}
+
+export interface TransferOutputItem extends BaseOutputItem<TxType.TRANSFER> {}
+
+export interface WithdrawOutputItem extends BaseOutputItem<TxType.WITHDRAWAL> {}
+
+export type FlowOutputItem<T extends TxType> = T extends TxType.PERMITTABLE_DEPOSIT
+  ? PermitDepositOutputItem
+  : T extends TxType.TRANSFER
+  ? TransferOutputItem
+  : T extends TxType.WITHDRAWAL
+  ? WithdrawOutputItem
+  : never
+
+export type FlowOutput = FlowOutputItem<TxType>[]
