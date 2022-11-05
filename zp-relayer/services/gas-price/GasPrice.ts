@@ -67,7 +67,6 @@ export function EIP1559GasPriceWithinLimit(fees: EIP1559GasPrice, maxFeeLimit: B
   }
 }
 
-
 function addExtraGas(gas: BN, extraPercentage: number, maxGasLimit: string | undefined): BN {
   const factor = BigNumber(1 + extraPercentage)
 
@@ -80,21 +79,25 @@ function addExtraGas(gas: BN, extraPercentage: number, maxGasLimit: string | und
   }
 }
 
-export function addExtraGasPrice(gp: GasPriceValue, factor = 0.1, maxFeeLimit: BN | null = null): GasPriceValue {
+export function addExtraGasPrice(
+  gp: GasPriceValue,
+  factor = 0.1,
+  maxFeeLimit: BN | null = config.maxFeeLimit
+): GasPriceValue {
   if (factor === 0) return gp
 
   const maxGasPrice = maxFeeLimit?.toString()
 
   if (isLegacyGasPrice(gp)) {
     return {
-      gasPrice: addExtraGas(toBN(gp.gasPrice), factor, maxGasPrice).toString()
+      gasPrice: addExtraGas(toBN(gp.gasPrice), factor, maxGasPrice).toString(),
     }
   }
   if (isEIP1559GasPrice(gp)) {
     return {
-        maxFeePerGas: addExtraGas(toBN(gp.maxFeePerGas), factor, maxGasPrice).toString(),
-        maxPriorityFeePerGas: addExtraGas(toBN(gp.maxPriorityFeePerGas), factor, maxGasPrice).toString()
-      }
+      maxFeePerGas: addExtraGas(toBN(gp.maxFeePerGas), factor, maxGasPrice).toString(),
+      maxPriorityFeePerGas: addExtraGas(toBN(gp.maxPriorityFeePerGas), factor, maxGasPrice).toString(),
+    }
   }
   return gp
 }
@@ -121,14 +124,20 @@ export class GasPrice<ET extends EstimationType> {
     if (this.fetchGasPriceInterval) clearInterval(this.fetchGasPriceInterval)
 
     this.fetchGasPriceInterval = await setIntervalAndRun(async () => {
-      try {
-        this.cachedGasPrice = await this.fetchGasPrice(this.options)
-        logger.info('Updated gasPrice: %o', this.cachedGasPrice)
-      } catch (e) {
-        logger.warn('Failed to fetch gasPrice %o; using default value', e)
-        this.cachedGasPrice = GasPrice.defaultGasPrice
-      }
+      this.cachedGasPrice = await this.fetchOnce()
     }, this.updateInterval)
+  }
+
+  async fetchOnce() {
+    let gasPrice
+    try {
+      gasPrice = await this.fetchGasPrice(this.options)
+    } catch (e) {
+      logger.warn('Failed to fetch gasPrice %s; using previous value', (e as Error).message)
+      gasPrice = chooseGasPriceOptions(GasPrice.defaultGasPrice, this.cachedGasPrice)
+    }
+    logger.info('Updated gasPrice: %o', gasPrice)
+    return gasPrice
   }
 
   stop() {

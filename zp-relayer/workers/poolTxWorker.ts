@@ -12,7 +12,7 @@ import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
 import config from '@/config'
 import { validateTx } from '@/validateTx'
-import type { EstimationType, GasPrice } from '@/services/gas-price'
+import { addExtraGasPrice, EstimationType, GasPrice } from '@/services/gas-price'
 import type { Mutex } from 'async-mutex'
 import { getChainId } from '@/utils/web3'
 import { getTxProofField } from '@/utils/proofInputs'
@@ -45,7 +45,6 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
       const nonce = await incrNonce()
       logger.info(`${logPrefix} nonce: ${nonce}`)
 
-      const gasPriceOptions = gasPrice.getPrice()
       const txConfig = {
         data,
         nonce,
@@ -55,10 +54,12 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         chainId: CHAIN_ID,
       }
       try {
+        const gasPriceValue = await gasPrice.fetchOnce()
+        const gasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceInitialSurplus)
         const txHash = await signAndSend(
           {
             ...txConfig,
-            ...gasPriceOptions,
+            ...gasPriceWithExtra,
           },
           config.relayerPrivateKey,
           web3
@@ -93,7 +94,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
             prefixedMemo,
             nullifier,
             txConfig,
-            gasPriceOptions,
+            gasPriceOptions: gasPriceWithExtra,
             txData,
           },
           {
