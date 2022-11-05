@@ -3,15 +3,14 @@ import { Job, Worker } from 'bullmq'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
-import { TX_QUEUE_NAME, OUTPLUSONE, MAX_SENT_LIMIT } from '@/utils/constants'
+import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
 import { readNonce, updateField, RelayerKeys, incrNonce, updateNonce } from '@/utils/redisFields'
 import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
 import { signAndSend } from '@/tx/signAndSend'
-import { pool } from '@/pool'
+import { Pool, pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
 import config from '@/config'
-import { validateTx } from '@/validateTx'
 import { addExtraGasPrice, EstimationType, GasPrice } from '@/services/gas-price'
 import type { Mutex } from 'async-mutex'
 import { getChainId } from '@/utils/web3'
@@ -19,7 +18,12 @@ import { getTxProofField } from '@/utils/proofInputs'
 import type Redis from 'ioredis'
 
 
-export async function createPoolTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
+export async function createPoolTxWorker<T extends EstimationType>(
+  gasPrice: GasPrice<T>,
+  validateTx: (tx: TxPayload, pool: Pool) => Promise<void>,
+  mutex: Mutex,
+  redis: Redis
+) {
   const WORKER_OPTIONS = {
     autorun: false,
     connection: redis,
@@ -28,6 +32,11 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
 
   const CHAIN_ID = await getChainId(web3)
   const poolTxWorkerProcessor = async (job: Job<TxPayload[]>) => {
+    const sentTxNum = await sentTxQueue.count()
+    if (sentTxNum >= config.maxSentQueueSize) {
+      throw new Error('Optimistic state overflow')
+    }
+
     const txs = job.data
 
     const logPrefix = `POOL WORKER: Job ${job.id}:`
@@ -38,7 +47,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
-      const txData = await validateTx(tx, pool)
+      await validateTx(tx, pool)
 
       const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
 
@@ -55,7 +64,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
       }
       try {
         const gasPriceValue = await gasPrice.fetchOnce()
-        const gasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceInitialSurplus)
+        const gasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceSurplus)
         const txHash = await signAndSend(
           {
             ...txConfig,
@@ -86,7 +95,6 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         const sentJob = await sentTxQueue.add(
           txHash,
           {
-            txType,
             root: rootAfter,
             outCommit,
             commitIndex,
@@ -95,7 +103,7 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
             nullifier,
             txConfig,
             gasPriceOptions: gasPriceWithExtra,
-            txData,
+            txPayload: tx,
           },
           {
             delay: config.sentTxDelay,
@@ -104,11 +112,6 @@ export async function createPoolTxWorker<T extends EstimationType>(gasPrice: Gas
         )
 
         txHashes.push([txHash, sentJob.id as string])
-
-        const sentTxNum = await sentTxQueue.count()
-        if (sentTxNum > MAX_SENT_LIMIT) {
-          await poolTxWorker.pause()
-        }
       } catch (e) {
         logger.error(`${logPrefix} Send TX failed: ${e}`)
         throw e

@@ -264,6 +264,4 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
 
   const limits = await pool.getLimitsFor(userAddress)
   await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
-
-  return txData
 }
