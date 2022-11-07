@@ -4,9 +4,9 @@ import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
-import { readNonce, updateField, RelayerKeys, incrNonce, updateNonce, decrNonce } from '@/utils/redisFields'
+import { readNonce, updateField, RelayerKeys, updateNonce } from '@/utils/redisFields'
 import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
-import { signAndSend } from '@/tx/signAndSend'
+import { signTransaction, sendTransaction } from '@/tx/signAndSend'
 import { Pool, pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
@@ -29,6 +29,9 @@ export async function createPoolTxWorker<T extends EstimationType>(
     concurrency: 1,
   }
 
+  let nonce = await readNonce(true)
+  await updateNonce(nonce)
+
   const CHAIN_ID = await getChainId(web3)
   const poolTxWorkerProcessor = async (job: Job<TxPayload[]>) => {
     const sentTxNum = await sentTxQueue.count()
@@ -50,7 +53,6 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
       const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
 
-      const nonce = await incrNonce()
       logger.info(`${logPrefix} nonce: ${nonce}`)
 
       const txConfig = {
@@ -64,22 +66,20 @@ export async function createPoolTxWorker<T extends EstimationType>(
       try {
         const gasPriceValue = await gasPrice.fetchOnce()
         const gasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceSurplus)
-        let txHash
-        try {
-          txHash = await signAndSend(
-            {
-              ...txConfig,
-              ...gasPriceWithExtra,
-            },
-            config.relayerPrivateKey,
-            web3
-          )
-        } catch (e) {
-          // We need to restore nonce to previous value
-          // if transaction wasn't sent
-          await decrNonce()
-          throw e
-        }
+        const [txHash, rawTransaction] = await signTransaction(
+          web3,
+          {
+            ...txConfig,
+            ...gasPriceWithExtra,
+          },
+          config.relayerPrivateKey
+        )
+        await sendTransaction(web3, rawTransaction)
+
+        const newNonce = nonce + 1
+        nonce = newNonce
+        await updateNonce(newNonce)
+
         logger.debug(`${logPrefix} TX hash ${txHash}`)
 
         await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)

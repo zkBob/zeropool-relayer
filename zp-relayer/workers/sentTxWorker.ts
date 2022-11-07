@@ -11,7 +11,7 @@ import { withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
-import { signAndSend } from '@/tx/signAndSend'
+import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
 
@@ -165,16 +165,16 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         ...newGasPrice,
       }
 
-      let newTxHash
+      const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
+      job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
-        newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
+        await sendTransaction(web3, rawTransaction)
       } catch (e) {
         const err = e as Error
         logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
         if (isGasPriceError(err) || isSameTransactionError(err)) {
           // Tx wasn't sent successfully, but still update last attempt's
           // gasPrice to be acccounted in the next iteration
-          job.data.prevAttempts[job.data.prevAttempts.length - 1][1] = newGasPrice
           await job.update({
             ...job.data,
           })
@@ -184,7 +184,6 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
 
       // Update job
-      job.data.prevAttempts.push([newTxHash, newGasPrice])
       await job.update({
         ...job.data,
         txConfig: newTxConfig,
