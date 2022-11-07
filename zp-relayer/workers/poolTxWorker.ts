@@ -15,8 +15,7 @@ import { addExtraGasPrice, EstimationType, GasPrice } from '@/services/gas-price
 import type { Mutex } from 'async-mutex'
 import { getChainId } from '@/utils/web3'
 import { getTxProofField } from '@/utils/proofInputs'
-import type Redis from 'ioredis'
-
+import type { Redis } from 'ioredis'
 
 export async function createPoolTxWorker<T extends EstimationType>(
   gasPrice: GasPrice<T>,
@@ -77,9 +76,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
         )
         await sendTransaction(web3, rawTransaction)
 
-        const newNonce = nonce + 1
-        nonce = newNonce
-        await updateNonce(newNonce)
+        await updateNonce(++nonce)
 
         logger.debug(`${logPrefix} TX hash ${txHash}`)
 
