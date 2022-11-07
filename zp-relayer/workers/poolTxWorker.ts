@@ -98,12 +98,11 @@ export async function createPoolTxWorker<T extends EstimationType>(
             root: rootAfter,
             outCommit,
             commitIndex,
-            txHash,
             prefixedMemo,
             nullifier,
             txConfig,
-            gasPriceOptions: gasPriceWithExtra,
             txPayload: tx,
+            prevAttempts: [[txHash, gasPriceWithExtra]],
           },
           {
             delay: config.sentTxDelay,
