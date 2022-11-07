@@ -1,6 +1,7 @@
 import BN from 'bn.js'
 import type Web3 from 'web3'
 import { toWei, toBN } from 'web3-utils'
+import BigNumber from 'bignumber.js'
 import config from '@/config'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
@@ -50,20 +51,74 @@ export function chooseGasPriceOptions(a: GasPriceValue, b: GasPriceValue): GasPr
   return b
 }
 
-export function EIP1559GasPriceWithinLimit(fees: EIP1559GasPrice, maxFeeLimit: BN | null): EIP1559GasPrice {
-  if (!maxFeeLimit) return fees
+export function EIP1559GasPriceWithinLimit(gp: EIP1559GasPrice, maxFeeLimit: BN): EIP1559GasPrice {
+  if (!maxFeeLimit) return gp
 
-  const diff = toBN(fees.maxFeePerGas).sub(maxFeeLimit)
+  const diff = toBN(gp.maxFeePerGas).sub(maxFeeLimit)
   if (diff.isNeg()) {
-    return fees
+    return gp
   } else {
     const maxFeePerGas = maxFeeLimit.toString(10)
-    const maxPriorityFeePerGas = BN.min(toBN(fees.maxPriorityFeePerGas), maxFeeLimit).toString(10)
+    const maxPriorityFeePerGas = BN.min(toBN(gp.maxPriorityFeePerGas), maxFeeLimit).toString(10)
     return {
       maxFeePerGas,
       maxPriorityFeePerGas,
     }
   }
+}
+
+export function LegacyGasPriceWithinLimit(gp: LegacyGasPrice, maxFeeLimit: BN): LegacyGasPrice {
+  if (!maxFeeLimit) return gp
+
+  return {
+    gasPrice: BN.min(toBN(gp.gasPrice), maxFeeLimit).toString(10),
+  }
+}
+
+export function gasPriceWithinLimit(gp: GasPriceValue, maxFeeLimit: BN | null): GasPriceValue {
+  if (!maxFeeLimit) return gp
+  if (isEIP1559GasPrice(gp)) {
+    return EIP1559GasPriceWithinLimit(gp, maxFeeLimit)
+  }
+  if (isLegacyGasPrice(gp)) {
+    return LegacyGasPriceWithinLimit(gp, maxFeeLimit)
+  }
+  return gp
+}
+
+function addExtraGas(gas: BN, extraPercentage: number, maxGasLimit: string | undefined): BN {
+  const factor = BigNumber(1 + extraPercentage)
+
+  const gasWithExtra = BigNumber(gas.toString(10)).multipliedBy(factor).toFixed(0)
+
+  if (maxGasLimit) {
+    return toBN(BigNumber.min(maxGasLimit, gasWithExtra).toString(10))
+  } else {
+    return toBN(gasWithExtra)
+  }
+}
+
+export function addExtraGasPrice(
+  gp: GasPriceValue,
+  factor = config.minGasPriceBumpFactor,
+  maxFeeLimit: BN | null = config.maxFeeLimit
+): GasPriceValue {
+  if (factor === 0) return gp
+
+  const maxGasPrice = maxFeeLimit?.toString()
+
+  if (isLegacyGasPrice(gp)) {
+    return {
+      gasPrice: addExtraGas(toBN(gp.gasPrice), factor, maxGasPrice).toString(),
+    }
+  }
+  if (isEIP1559GasPrice(gp)) {
+    return {
+      maxFeePerGas: addExtraGas(toBN(gp.maxFeePerGas), factor, maxGasPrice).toString(),
+      maxPriorityFeePerGas: addExtraGas(toBN(gp.maxPriorityFeePerGas), factor, maxGasPrice).toString(),
+    }
+  }
+  return gp
 }
 
 export class GasPrice<ET extends EstimationType> {
@@ -88,14 +143,28 @@ export class GasPrice<ET extends EstimationType> {
     if (this.fetchGasPriceInterval) clearInterval(this.fetchGasPriceInterval)
 
     this.fetchGasPriceInterval = await setIntervalAndRun(async () => {
-      try {
-        this.cachedGasPrice = await this.fetchGasPrice(this.options)
-        logger.info('Updated gasPrice: %o', this.cachedGasPrice)
-      } catch (e) {
-        logger.warn('Failed to fetch gasPrice %o; using default value', e)
-        this.cachedGasPrice = GasPrice.defaultGasPrice
-      }
+      this.cachedGasPrice = await this.fetchOnce()
     }, this.updateInterval)
+  }
+
+  async fetchOnce() {
+    let gasPrice
+    try {
+      gasPrice = await this.fetchGasPrice(this.options)
+    } catch (e) {
+      logger.warn('Failed to fetch gasPrice %s; using previous value', (e as Error).message)
+      gasPrice = chooseGasPriceOptions(GasPrice.defaultGasPrice, this.cachedGasPrice)
+    }
+    logger.info('Updated gasPrice: %o', gasPrice)
+    return gasPrice
+  }
+
+  stop() {
+    if (this.fetchGasPriceInterval) clearInterval(this.fetchGasPriceInterval)
+  }
+
+  setGasPrice(gp: GasPriceValue) {
+    this.cachedGasPrice = gp
   }
 
   getPrice() {
@@ -140,13 +209,20 @@ export class GasPrice<ET extends EstimationType> {
     const speedType = polygonGasPriceKeyMapping[options.speedType]
     const { maxFee, maxPriorityFee } = json[speedType]
 
-    const gasPriceOptions = EIP1559GasPriceWithinLimit(
-      {
-        maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
-        maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
-      },
-      options.maxFeeLimit
-    )
+    let gasPriceOptions = {
+      maxFeePerGas: GasPrice.normalizeGasPrice(maxFee),
+      maxPriorityFeePerGas: GasPrice.normalizeGasPrice(maxPriorityFee),
+    }
+
+    // Check for possible gas-station invalid response
+    gasPriceOptions.maxPriorityFeePerGas = BN.min(
+      toBN(gasPriceOptions.maxFeePerGas),
+      toBN(gasPriceOptions.maxPriorityFeePerGas)
+    ).toString(10)
+
+    if (options.maxFeeLimit) {
+      gasPriceOptions = EIP1559GasPriceWithinLimit(gasPriceOptions, options.maxFeeLimit)
+    }
 
     return gasPriceOptions
   }

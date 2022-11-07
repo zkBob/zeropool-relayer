@@ -1,75 +1,34 @@
+import type Redis from 'ioredis'
 import type { Mutex } from 'async-mutex'
-import { toBN } from 'web3-utils'
-import { Job, Queue, Worker } from 'bullmq'
-import { PermittableDepositTxData, TxType } from 'zp-memo-parser'
+import type { TransactionReceipt } from 'web3-core'
+import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { redis } from '@/services/redisClient'
-import { GasPrice, EstimationType, chooseGasPriceOptions } from '@/services/gas-price'
-import { withErrorLog, withMutex } from '@/utils/helpers'
-import { readNonce, updateNonce } from '@/utils/redisFields'
+import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
+import { withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { isGasPriceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
-import { SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
-import { signAndSend } from '@/tx/signAndSend'
-import { checkAssertion, checkDeadline } from '@/validateTx'
-
-const token = 'RELAYER'
-
-const WORKER_OPTIONS = {
-  autorun: false,
-  connection: redis,
-  concurrency: 1,
-}
+import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
+import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
+import { sendTransaction, signTransaction } from '@/tx/signAndSend'
+import { poolTxQueue } from '@/queue/poolTxQueue'
+import { getNonce } from '@/utils/web3'
 
 const REVERTED_SET = 'reverted'
+const RECHECK_ERROR = 'Waiting for next check'
 
-async function markFailed(ids: string[]) {
+async function markFailed(redis: Redis, ids: string[]) {
   if (ids.length === 0) return
   await redis.sadd(REVERTED_SET, ids)
 }
 
-async function checkMarked(id: string) {
+async function checkMarked(redis: Redis, id: string) {
   const inSet = await redis.sismember(REVERTED_SET, id)
   return Boolean(inSet)
 }
 
-async function collectBatch<T>(queue: Queue<T>) {
-  const jobs = await queue.getJobs(['delayed', 'waiting'])
-
-  await Promise.all(
-    jobs.map(async j => {
-      // TODO fix "Missing lock for job" error
-      await j.moveToFailed(
-        {
-          message: 'rescheduled',
-          name: 'RescheduledError',
-        },
-        token
-      )
-    })
-  )
-
-  return jobs
-}
-
 async function clearOptimisticState() {
-  // TODO: a more efficient strategy would be to collect all other jobs
-  // and move them to 'failed' state as we know they will be reverted
-  // To do this we need to acquire a lock for each job. Did not find
-  // an easy way to do that yet. See 'collectBatch'
-
-  // XXX: txs marked as failed potentially could mine
-  // We should either try to resend them until we are sure
-  // they have mined or try to make new replacement txs
-  // with higher gasPrice
-  const jobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
-  const ids = jobs.map(j => j.id as string)
-  logger.info('Marking ids %j as failed', ids)
-  await markFailed(ids)
-
   logger.info('Rollback optimistic state...')
   pool.optimisticState.rollbackTo(pool.state)
   logger.info('Clearing optimistic nullifiers...')
@@ -82,22 +41,61 @@ async function clearOptimisticState() {
   logger.info(`Assert roots are equal: ${root1}, ${root2}, ${root1 === root2}`)
 }
 
-export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex) {
+export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
+  const WORKER_OPTIONS = {
+    autorun: false,
+    connection: redis,
+    concurrency: 1,
+  }
+
+  async function checkMined(
+    prevAttempts: SendAttempt[],
+    txNonce: number
+  ): Promise<[TransactionReceipt | null, boolean]> {
+    // Transaction was not mined
+    const actualNonce = await getNonce(web3, config.relayerAddress)
+    logger.info('Nonce value from RPC: %d; tx nonce: %d', actualNonce, txNonce)
+    if (actualNonce <= txNonce) {
+      return [null, false]
+    }
+
+    let tx = null
+    // Iterate in reverse order to check the latest hash first
+    for (let i = prevAttempts.length - 1; i >= 0; i--) {
+      const txHash = prevAttempts[i][0]
+      logger.info('Verifying %s ...', txHash)
+      tx = await web3.eth.getTransactionReceipt(txHash)
+      if (tx) break
+    }
+
+    // Transaction was not mined, but nonce was increased
+    // Should send for re-processing
+    if (tx === null) {
+      logger.warn('Transaction was not mined, but nonce increased; tx should be re-processed')
+      return [null, true]
+    }
+
+    return [tx, false]
+  }
+
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
-    const { txType, txHash, prefixedMemo, commitIndex, outCommit, nullifier, root, txData } = job.data
+    const { prefixedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
 
-    // TODO: it is possible that a tx marked as failed could be stuck
-    // in the mempool. Worker should either assure that it is mined
-    // or try to substitute such transaction with another one
-    if (await checkMarked(job.id as string)) {
-      logger.info('%s marked as failed, skipping', logPrefix)
-      return [SentTxState.REVERT, txHash] as SentTxResult
+    // Any thrown web3 error will re-trigger re-send loop iteration
+    const [tx, shouldReprocess] = await checkMined(prevAttempts, txConfig.nonce as number)
+    // Should always be defined
+    const [lastHash, lastGasPrice] = prevAttempts.at(-1) as SendAttempt
+
+    if (shouldReprocess) {
+      logger.info('%s sending this job for re-processing...', logPrefix)
+      await poolTxQueue.add('reprocess', [job.data.txPayload])
+      return [SentTxState.SKIPPED, lastHash, []] as SentTxResult
     }
 
-    const tx = await web3.eth.getTransactionReceipt(txHash)
     if (tx) {
+      const txHash = tx.transactionHash
       // Tx mined
       if (tx.status) {
         // Successful
@@ -125,81 +123,94 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           logger.error('Commitments are not equal')
         }
 
-        return [SentTxState.MINED, txHash] as SentTxResult
+        return [SentTxState.MINED, txHash, []] as SentTxResult
       } else {
         // Revert
         logger.error('%s Transaction %s reverted at block %s', logPrefix, txHash, tx.blockNumber)
 
+        // Means that rollback was done previously, no need to do it now
+        if (await checkMarked(redis, job.id as string)) {
+          logger.info('%s Job %s marked as failed, skipping', logPrefix, job.id)
+          return [SentTxState.REVERT, txHash, []] as SentTxResult
+        }
+
         await clearOptimisticState()
-        return [SentTxState.REVERT, txHash] as SentTxResult
+
+        // Send all jobs to re-process
+        // Validation of these jobs will be done in `poolTxWorker`
+        const waitingJobIds = []
+        const reschedulePromises = []
+        const waitingJobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
+        for (let wj of waitingJobs) {
+          // One of the jobs can be undefined, so we need to check it
+          // https://github.com/taskforcesh/bullmq/blob/master/src/commands/addJob-8.lua#L142-L143
+          if (!wj?.id) continue
+          waitingJobIds.push(wj.id)
+          reschedulePromises.push(poolTxQueue.add(txHash, [wj.data.txPayload]).then(j => j.id as string))
+        }
+        logger.info('Marking ids %j as failed', waitingJobIds)
+        await markFailed(redis, waitingJobIds)
+        logger.info('%s Rescheduling %d jobs to process...', logPrefix, waitingJobs.length)
+        const rescheduledIds = await Promise.all(reschedulePromises)
+
+        return [SentTxState.REVERT, txHash, rescheduledIds] as SentTxResult
       }
     } else {
       // Resend with updated gas price
-      const txConfig = job.data.txConfig
+      const fetchedGasPrice = await gasPrice.fetchOnce()
+      const oldWithExtra = addExtraGasPrice(lastGasPrice, config.minGasPriceBumpFactor, null)
+      const newWithExtra = addExtraGasPrice(fetchedGasPrice, config.gasPriceSurplus, null)
 
-      const oldGasPrice = job.data.gasPriceOptions
-      const fetchedGasPrice = gasPrice.getPrice()
+      const newGasPrice = chooseGasPriceOptions(oldWithExtra, newWithExtra)
 
-      const newGasPrice = chooseGasPriceOptions(oldGasPrice, fetchedGasPrice)
-
-      logger.warn('Tx %s is not mined; updating gasPrice: %o -> %o', txHash, oldGasPrice, newGasPrice)
+      logger.warn('%s Tx %s is not mined; updating gasPrice: %o -> %o', logPrefix, lastHash, lastGasPrice, newGasPrice)
 
       const newTxConfig = {
         ...txConfig,
         ...newGasPrice,
       }
 
+      const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
+      job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
-        if (txType === TxType.PERMITTABLE_DEPOSIT) {
-          const deadline = (txData as PermittableDepositTxData).deadline
-          await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdResend))
-        }
-
-        const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
-
-        // Add updated job
-        await sentTxQueue.add(
-          newTxHash,
-          {
-            ...job.data,
-            txHash: newTxHash,
-            txConfig: newTxConfig,
-            gasPriceOptions: newGasPrice,
-          },
-          {
-            priority: txConfig.nonce,
-            delay: config.sentTxDelay,
-          }
-        )
-        return [SentTxState.RESEND, newTxHash] as SentTxResult
+        await sendTransaction(web3, rawTransaction)
       } catch (e) {
         const err = e as Error
-        logger.warn('%s: Tx resend failed for %s: %s', logPrefix, txHash, err.message)
-        if (isSameTransactionError(err) || isGasPriceError(err)) {
-          // Force update gas price
-          gasPrice.start()
-        } else if (isNonceError(err)) {
-          await updateNonce(await readNonce(true))
-        } else {
-          // Error can't be handled
-          logger.error('%s: Error cannot be handled: %o', logPrefix, err)
-          // Rollback the tree
-          await clearOptimisticState()
-          return [SentTxState.FAILED, txHash] as SentTxResult
+        logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
+        if (isGasPriceError(err) || isSameTransactionError(err)) {
+          // Tx wasn't sent successfully, but still update last attempt's
+          // gasPrice to be acccounted in the next iteration
+          await job.update({
+            ...job.data,
+          })
         }
-
-        // Add same job
-        await sentTxQueue.add(txHash, job.data, {
-          priority: txConfig.nonce,
-          delay: config.sentTxDelay,
-        })
-        return [SentTxState.RESEND, txHash] as SentTxResult
+        // Error should be caught by `withLoop` to re-run job
+        throw e
       }
+
+      // Update job
+      await job.update({
+        ...job.data,
+        txConfig: newTxConfig,
+      })
+      await job.updateProgress({ txHash: newTxHash, gasPrice: newGasPrice })
+
+      // Tx re-send successful
+      // Throw error to re-run job after delay and
+      // check if tx was mined
+      throw new Error(RECHECK_ERROR)
     }
   }
   const sentTxWorker = new Worker<SentTxPayload, SentTxResult>(
     SENT_TX_QUEUE_NAME,
-    job => withErrorLog(withMutex(mutex, () => sentTxWorkerProcessor(job))),
+    job =>
+      withErrorLog(
+        withLoop(
+          withMutex(mutex, () => sentTxWorkerProcessor(job)),
+          config.sentTxDelay,
+          [RECHECK_ERROR]
+        )
+      ),
     WORKER_OPTIONS
   )
 
