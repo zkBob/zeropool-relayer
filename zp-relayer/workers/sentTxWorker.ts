@@ -54,6 +54,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   ): Promise<[TransactionReceipt | null, boolean]> {
     // Transaction was not mined
     const actualNonce = await getNonce(web3, config.relayerAddress)
+    logger.info('Nonce value from RPC: %d; tx nonce: %d', actualNonce, txNonce)
     if (actualNonce <= txNonce) {
       return [null, false]
     }
@@ -61,13 +62,16 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     let tx = null
     // Iterate in reverse order to check the latest hash first
     for (let i = prevAttempts.length - 1; i >= 0; i--) {
-      tx = await web3.eth.getTransactionReceipt(prevAttempts[i][0])
+      const txHash = prevAttempts[i][0]
+      logger.info('Verifying %s ...', txHash)
+      tx = await web3.eth.getTransactionReceipt(txHash)
       if (tx) break
     }
 
     // Transaction was not mined, but nonce was increased
     // Should send for re-processing
     if (tx === null) {
+      logger.warn('Transaction was not mined, but nonce increased; tx should be re-processed')
       return [null, true]
     }
 
@@ -85,6 +89,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     const [lastHash, lastGasPrice] = prevAttempts.at(-1) as SendAttempt
 
     if (shouldReprocess) {
+      logger.info('%s sending this job for re-processing...', logPrefix)
       await poolTxQueue.add('reprocess', [job.data.txPayload])
       return [SentTxState.SKIPPED, lastHash, []] as SentTxResult
     }
