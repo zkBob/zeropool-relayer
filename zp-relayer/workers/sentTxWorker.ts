@@ -15,23 +15,17 @@ import { isGasPriceError, isNonceError, isSameTransactionError } from '@/utils/w
 import { SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { signAndSend } from '@/tx/signAndSend'
 import { checkAssertion, checkDeadline } from '@/validateTx'
+import Redis from 'ioredis'
 
 const token = 'RELAYER'
-
-const WORKER_OPTIONS = {
-  autorun: false,
-  connection: redis,
-  concurrency: 1,
-}
-
 const REVERTED_SET = 'reverted'
 
-async function markFailed(ids: string[]) {
+async function markFailed(redis: Redis, ids: string[]) {
   if (ids.length === 0) return
   await redis.sadd(REVERTED_SET, ids)
 }
 
-async function checkMarked(id: string) {
+async function checkMarked(redis: Redis, id: string) {
   const inSet = await redis.sismember(REVERTED_SET, id)
   return Boolean(inSet)
 }
@@ -55,7 +49,7 @@ async function collectBatch<T>(queue: Queue<T>) {
   return jobs
 }
 
-async function clearOptimisticState() {
+async function clearOptimisticState(redis: Redis) {
   // TODO: a more efficient strategy would be to collect all other jobs
   // and move them to 'failed' state as we know they will be reverted
   // To do this we need to acquire a lock for each job. Did not find
@@ -68,7 +62,7 @@ async function clearOptimisticState() {
   const jobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
   const ids = jobs.map(j => j.id as string)
   logger.info('Marking ids %j as failed', ids)
-  await markFailed(ids)
+  await markFailed(redis, ids)
 
   logger.info('Rollback optimistic state...')
   pool.optimisticState.rollbackTo(pool.state)
@@ -82,7 +76,13 @@ async function clearOptimisticState() {
   logger.info(`Assert roots are equal: ${root1}, ${root2}, ${root1 === root2}`)
 }
 
-export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex) {
+export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
+  const WORKER_OPTIONS = {
+    autorun: false,
+    connection: redis,
+    concurrency: 1,
+  }
+
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
@@ -91,7 +91,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     // TODO: it is possible that a tx marked as failed could be stuck
     // in the mempool. Worker should either assure that it is mined
     // or try to substitute such transaction with another one
-    if (await checkMarked(job.id as string)) {
+    if (await checkMarked(redis, job.id as string)) {
       logger.info('%s marked as failed, skipping', logPrefix)
       return [SentTxState.REVERT, txHash] as SentTxResult
     }
@@ -130,7 +130,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Revert
         logger.error('%s Transaction %s reverted at block %s', logPrefix, txHash, tx.blockNumber)
 
-        await clearOptimisticState()
+        await clearOptimisticState(redis)
         return [SentTxState.REVERT, txHash] as SentTxResult
       }
     } else {
@@ -184,7 +184,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           // Error can't be handled
           logger.error('%s: Error cannot be handled: %o', logPrefix, err)
           // Rollback the tree
-          await clearOptimisticState()
+          await clearOptimisticState(redis)
           return [SentTxState.FAILED, txHash] as SentTxResult
         }
 
