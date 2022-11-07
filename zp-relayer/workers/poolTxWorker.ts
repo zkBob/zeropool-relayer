@@ -128,7 +128,6 @@ export async function createPoolTxWorker<T extends EstimationType>(
     return txHashes
   }
 
-  await updateNonce(await readNonce(true))
   const poolTxWorker = new Worker<TxPayload[], PoolTxResult[]>(
     TX_QUEUE_NAME,
     job => withErrorLog(withMutex(mutex, () => poolTxWorkerProcessor(job))),
