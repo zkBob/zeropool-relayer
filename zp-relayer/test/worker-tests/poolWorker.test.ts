@@ -165,7 +165,7 @@ describe('poolWorker', () => {
   it('should reject txs when maxSentQueueSize is reached', async () => {
     const maxSentQueueSize = config.maxSentQueueSize
     config.maxSentQueueSize = 0
-    
+  
     const deposit = flow[0]
     // @ts-ignore
     const job = await submitJob(deposit)

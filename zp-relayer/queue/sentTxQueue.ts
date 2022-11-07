@@ -5,21 +5,22 @@ import type { TransactionConfig } from 'web3-core'
 import { GasPriceValue } from '@/services/gas-price'
 import { TxPayload } from './poolTxQueue'
 
+export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
   root: string
   outCommit: string
   commitIndex: number
-  txHash: string
   prefixedMemo: string
   txConfig: TransactionConfig
   nullifier: string
-  gasPriceOptions: GasPriceValue
   txPayload: TxPayload
+  prevAttempts: SendAttempt[]
 }
 
 export enum SentTxState {
   MINED = 'MINED',
   REVERT = 'REVERT',
+  SKIPPED = 'SKIPPED',
 }
 
 export type SentTxResult = [SentTxState, string, string[]]

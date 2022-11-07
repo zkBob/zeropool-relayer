@@ -1,4 +1,6 @@
+import type Redis from 'ioredis'
 import type { Mutex } from 'async-mutex'
+import type { TransactionReceipt } from 'web3-core'
 import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
@@ -9,10 +11,10 @@ import { withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { readNonce, updateNonce } from '@/utils/redisFields'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isNonceError } from '@/utils/web3Errors'
-import { SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
+import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { signAndSend } from '@/tx/signAndSend'
-import Redis from 'ioredis'
 import { poolTxQueue } from '@/queue/poolTxQueue'
+import { getNonce } from '@/utils/web3'
 
 const REVERTED_SET = 'reverted'
 
@@ -46,13 +48,50 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     concurrency: 1,
   }
 
+  async function checkMined(
+    prevAttempts: SendAttempt[],
+    txNonce: number
+  ): Promise<[TransactionReceipt | null, boolean]> {
+    // Transaction was not mined
+    const actualNonce = await getNonce(web3, config.relayerAddress)
+    if (actualNonce <= txNonce) {
+      return [null, false]
+    }
+
+    let tx = null
+    // Iterate in reverse order to check the latest hash first
+    for (let i = prevAttempts.length - 1; i >= 0; i--) {
+      tx = await web3.eth.getTransactionReceipt(prevAttempts[i][0])
+      if (tx) break
+    }
+
+    // Transaction was not mined, but nonce was increased
+    // Should send for re-processing
+    if (tx === null) {
+      return [null, true]
+    }
+
+    return [tx, false]
+  }
+
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
-    const { txHash, prefixedMemo, commitIndex, outCommit, nullifier, root } = job.data
+    const { prefixedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
 
-    const tx = await web3.eth.getTransactionReceipt(txHash)
+    // Any thrown web3 error will re-trigger re-send loop iteration
+    const [tx, shouldReprocess] = await checkMined(prevAttempts, txConfig.nonce as number)
+    // Should always be defined
+    const lastAttempt = prevAttempts.at(-1) as SendAttempt
+    const lastHash = lastAttempt[0]
+
+    if (shouldReprocess) {
+      await poolTxQueue.add('reprocess', [job.data.txPayload])
+      return [SentTxState.SKIPPED, lastHash, []] as SentTxResult
+    }
+
     if (tx) {
+      const txHash = tx.transactionHash
       // Tx mined
       if (tx.status) {
         // Successful
@@ -114,9 +153,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
     } else {
       // Resend with updated gas price
-      const txConfig = job.data.txConfig
-
-      const oldGasPrice = job.data.gasPriceOptions
+      const oldGasPrice = lastAttempt[1]
 
       const fetchedGasPrice = await gasPrice.fetchOnce()
       const oldWithExtra = addExtraGasPrice(oldGasPrice, config.minGasPriceBumpFactor, null)
@@ -124,7 +161,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
       const newGasPrice = chooseGasPriceOptions(oldWithExtra, newWithExtra)
 
-      logger.warn('%s Tx %s is not mined; updating gasPrice: %o -> %o', logPrefix, txHash, oldGasPrice, newGasPrice)
+      logger.warn('%s Tx %s is not mined; updating gasPrice: %o -> %o', logPrefix, lastHash, oldGasPrice, newGasPrice)
 
       const newTxConfig = {
         ...txConfig,
@@ -133,17 +170,16 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
       try {
         const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
+        job.data.prevAttempts.push([newTxHash, newGasPrice])
         // Update job
         await job.update({
           ...job.data,
-          txHash: newTxHash,
           txConfig: newTxConfig,
-          gasPriceOptions: newGasPrice,
         })
         await job.updateProgress({ txHash: newTxHash, gasPrice: newGasPrice })
       } catch (e) {
         const err = e as Error
-        logger.warn('%s Tx resend failed for %s: %s', logPrefix, txHash, err.message)
+        logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
         // TODO: Should we handle other tx sending errors here?
         if (isNonceError(err)) {
           await updateNonce(await readNonce(true))
