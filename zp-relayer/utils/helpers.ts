@@ -121,15 +121,29 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export function withLoop<R>(f: () => Promise<R>, timeout: number): () => Promise<R> {
+export function withLoop<R>(f: () => Promise<R>, timeout: number, supressedErrors: string[] = []): () => Promise<R> {
   // @ts-ignore
   return async () => {
     while (1) {
       try {
         return await f()
       } catch (e) {
+        const err = e as Error
+        let isSupressed = false
+        for (let supressedError of supressedErrors) {
+          if (err.message.includes(supressedError)) {
+            isSupressed = true
+            break
+          }
+        }
+
+        if (isSupressed) {
+          logger.warn('%s', err.message)
+        } else {
+          logger.error('Found error %s', err.message)
+        }
+
         await sleep(timeout)
-        logger.warn('Found error %s', (e as Error).message)
       }
     }
   }

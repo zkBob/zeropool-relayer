@@ -50,3 +50,9 @@ export async function incrNonce() {
   logger.info(`Incremented nonce to ${nonce}`)
   return nonce - 1
 }
+
+export async function decrNonce() {
+  const nonce = await redis.decr(RelayerKeys.NONCE)
+  logger.info(`Decremented nonce to ${nonce}`)
+  return nonce + 1
+}

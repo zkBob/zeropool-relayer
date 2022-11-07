@@ -8,15 +8,15 @@ import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
 import { withErrorLog, withLoop, withMutex } from '@/utils/helpers'
-import { readNonce, updateNonce } from '@/utils/redisFields'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { isNonceError } from '@/utils/web3Errors'
+import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { signAndSend } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
 
 const REVERTED_SET = 'reverted'
+const RECHECK_ERROR = 'Waiting for next check'
 
 async function markFailed(redis: Redis, ids: string[]) {
   if (ids.length === 0) return
@@ -82,8 +82,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     // Any thrown web3 error will re-trigger re-send loop iteration
     const [tx, shouldReprocess] = await checkMined(prevAttempts, txConfig.nonce as number)
     // Should always be defined
-    const lastAttempt = prevAttempts.at(-1) as SendAttempt
-    const lastHash = lastAttempt[0]
+    const [lastHash, lastGasPrice] = prevAttempts.at(-1) as SendAttempt
 
     if (shouldReprocess) {
       await poolTxQueue.add('reprocess', [job.data.txPayload])
@@ -153,44 +152,49 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
     } else {
       // Resend with updated gas price
-      const oldGasPrice = lastAttempt[1]
-
       const fetchedGasPrice = await gasPrice.fetchOnce()
-      const oldWithExtra = addExtraGasPrice(oldGasPrice, config.minGasPriceBumpFactor, null)
+      const oldWithExtra = addExtraGasPrice(lastGasPrice, config.minGasPriceBumpFactor, null)
       const newWithExtra = addExtraGasPrice(fetchedGasPrice, config.gasPriceSurplus, null)
 
       const newGasPrice = chooseGasPriceOptions(oldWithExtra, newWithExtra)
 
-      logger.warn('%s Tx %s is not mined; updating gasPrice: %o -> %o', logPrefix, lastHash, oldGasPrice, newGasPrice)
+      logger.warn('%s Tx %s is not mined; updating gasPrice: %o -> %o', logPrefix, lastHash, lastGasPrice, newGasPrice)
 
       const newTxConfig = {
         ...txConfig,
         ...newGasPrice,
       }
 
+      let newTxHash
       try {
-        const newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
-        job.data.prevAttempts.push([newTxHash, newGasPrice])
-        // Update job
-        await job.update({
-          ...job.data,
-          txConfig: newTxConfig,
-        })
-        await job.updateProgress({ txHash: newTxHash, gasPrice: newGasPrice })
+        newTxHash = await signAndSend(newTxConfig, config.relayerPrivateKey, web3)
       } catch (e) {
         const err = e as Error
         logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
-        // TODO: Should we handle other tx sending errors here?
-        if (isNonceError(err)) {
-          await updateNonce(await readNonce(true))
+        if (isGasPriceError(err) || isSameTransactionError(err)) {
+          // Tx wasn't sent successfully, but still update last attempt's
+          // gasPrice to be acccounted in the next iteration
+          job.data.prevAttempts[job.data.prevAttempts.length - 1][1] = newGasPrice
+          await job.update({
+            ...job.data,
+          })
         }
         // Error should be caught by `withLoop` to re-run job
         throw e
       }
+
+      // Update job
+      job.data.prevAttempts.push([newTxHash, newGasPrice])
+      await job.update({
+        ...job.data,
+        txConfig: newTxConfig,
+      })
+      await job.updateProgress({ txHash: newTxHash, gasPrice: newGasPrice })
+
       // Tx re-send successful
       // Throw error to re-run job after delay and
       // check if tx was mined
-      throw new Error('Waiting for next check')
+      throw new Error(RECHECK_ERROR)
     }
   }
   const sentTxWorker = new Worker<SentTxPayload, SentTxResult>(
@@ -199,7 +203,8 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       withErrorLog(
         withLoop(
           withMutex(mutex, () => sentTxWorkerProcessor(job)),
-          config.sentTxDelay
+          config.sentTxDelay,
+          [RECHECK_ERROR]
         )
       ),
     WORKER_OPTIONS
