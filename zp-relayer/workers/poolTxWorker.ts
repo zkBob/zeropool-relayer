@@ -76,9 +76,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
         )
         await sendTransaction(web3, rawTransaction)
 
-        const newNonce = nonce + 1
-        nonce = newNonce
-        await updateNonce(newNonce)
+        await updateNonce(++nonce)
 
         logger.debug(`${logPrefix} TX hash ${txHash}`)
 
