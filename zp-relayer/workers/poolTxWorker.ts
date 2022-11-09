@@ -5,7 +5,7 @@ import { logger } from '@/services/appLogger'
 import { PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
 import { readNonce, updateField, RelayerKeys, updateNonce } from '@/utils/redisFields'
-import { numToHex, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
+import { buildPrefixedMemo, truncateMemoTxPrefix, withErrorLog, withMutex } from '@/utils/helpers'
 import { signTransaction, sendTransaction } from '@/tx/signAndSend'
 import { Pool, pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
@@ -86,7 +86,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
         const outCommit = getTxProofField(txProof, 'out_commit')
 
         const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
-        const prefixedMemo = numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+        const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
 
         pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
         logger.debug('Adding nullifier %s to OS', nullifier)
@@ -104,7 +104,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
             root: rootAfter,
             outCommit,
             commitIndex,
-            prefixedMemo,
+            truncatedMemo,
             nullifier,
             txConfig,
             txPayload: tx,

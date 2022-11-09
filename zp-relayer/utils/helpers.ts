@@ -92,6 +92,10 @@ export function flattenProof(p: SnarkProof): string {
     .join('')
 }
 
+export function buildPrefixedMemo(outCommit: string, txHash: string, truncatedMemo: string) {
+  return numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+}
+
 export async function setIntervalAndRun(f: () => Promise<void> | void, interval: number) {
   const handler = setInterval(f, interval)
   await f()

@@ -7,14 +7,13 @@ import { pool } from '@/pool'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
-import { withErrorLog, withLoop, withMutex } from '@/utils/helpers'
+import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
-import { JobIdsMapping } from '@/state/jobIdsMapping'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -82,7 +81,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
-    const { prefixedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
+    const { truncatedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
 
     // Any thrown web3 error will re-trigger re-send loop iteration
     const [tx, shouldReprocess] = await checkMined(prevAttempts, txConfig.nonce as number)
@@ -102,7 +101,10 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Successful
         logger.info('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
 
+        const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
         pool.state.updateState(commitIndex, outCommit, prefixedMemo)
+        // Update tx hash in optimistic state tx db
+        pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
         // Add nullifer to confirmed state and remove from optimistic one
         logger.info('Adding nullifier %s to PS', nullifier)
@@ -197,6 +199,10 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Error should be caught by `withLoop` to re-run job
         throw e
       }
+
+      // Overwrite old tx recorded in optimistic state db with new tx hash
+      const prefixedMemo = buildPrefixedMemo(outCommit, newTxHash, truncatedMemo)
+      pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
       // Update job
       await job.update({

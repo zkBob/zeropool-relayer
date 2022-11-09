@@ -11,7 +11,7 @@ export interface SentTxPayload {
   root: string
   outCommit: string
   commitIndex: number
-  prefixedMemo: string
+  truncatedMemo: string
   txConfig: TransactionConfig
   nullifier: string
   txPayload: TxPayload
