@@ -112,7 +112,7 @@ async function getJob(req: Request, res: Response) {
   enum JobStatus {
     WAITING = 'waiting',
     FAILED = 'failed',
-    SENDED = 'sended',
+    SENT = 'sent',
     REVERTED = 'reverted',
     COMPLETED = 'completed',
   }
@@ -153,7 +153,7 @@ async function getJob(req: Request, res: Response) {
       if (sentJobState === 'waiting' || sentJobState === 'active' || sentJobState === 'delayed') {
         // Transaction is in re-send loop
         const txHash = sentJob.data.prevAttempts.at(-1)?.[0]
-        result.state = JobStatus.SENDED
+        result.state = JobStatus.SENT
         result.txHash = txHash || null
       } else if (sentJobState === 'completed') {
         const [txState, txHash] = sentJob.returnvalue
