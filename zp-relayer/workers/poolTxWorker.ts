@@ -100,6 +100,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
         const sentJob = await sentTxQueue.add(
           txHash,
           {
+            poolJobId: job.id as string,
             root: rootAfter,
             outCommit,
             commitIndex,

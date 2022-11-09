@@ -127,7 +127,8 @@ async function getJob(req: Request, res: Response) {
 
   const jobId = req.params.id
 
-  async function getPoolJobState(jobId: string): Promise<GetJobResponse | null> {
+  async function getPoolJobState(requestedJobId: string): Promise<GetJobResponse | null> {
+    const jobId = await pool.state.jobIdsMapping.get(requestedJobId)
     const job = await poolTxQueue.getJob(jobId)
     if (!job) return null
 

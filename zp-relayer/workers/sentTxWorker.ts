@@ -14,6 +14,7 @@ import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } fr
 import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
+import { JobIdsMapping } from '@/state/jobIdsMapping'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -140,18 +141,26 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Validation of these jobs will be done in `poolTxWorker`
         const waitingJobIds = []
         const reschedulePromises = []
+        const newPoolJobIdMapping: Record<string, string> = {}
         const waitingJobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
         for (let wj of waitingJobs) {
           // One of the jobs can be undefined, so we need to check it
           // https://github.com/taskforcesh/bullmq/blob/master/src/commands/addJob-8.lua#L142-L143
           if (!wj?.id) continue
           waitingJobIds.push(wj.id)
-          reschedulePromises.push(poolTxQueue.add(txHash, [wj.data.txPayload]).then(j => j.id as string))
+          const reschedulePromise = poolTxQueue.add(txHash, [wj.data.txPayload]).then(j => {
+            const newPoolJobId = j.id as string
+            newPoolJobIdMapping[wj.data.poolJobId] = newPoolJobId
+            return newPoolJobId
+          })
+          reschedulePromises.push(reschedulePromise)
         }
         logger.info('Marking ids %j as failed', waitingJobIds)
         await markFailed(redis, waitingJobIds)
         logger.info('%s Rescheduling %d jobs to process...', logPrefix, waitingJobs.length)
         const rescheduledIds = await Promise.all(reschedulePromises)
+        logger.info('%s Update pool job id mapping %j ...', logPrefix, newPoolJobIdMapping)
+        await pool.state.jobIdsMapping.add(newPoolJobIdMapping)
 
         return [SentTxState.REVERT, txHash, rescheduledIds] as SentTxResult
       }
