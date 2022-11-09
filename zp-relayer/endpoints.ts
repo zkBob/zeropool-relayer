@@ -118,6 +118,7 @@ async function getJob(req: Request, res: Response) {
   }
 
   interface GetJobResponse {
+    resolvedJobId: string
     createdOn: number
     failedReason: null | string
     finishedOn: null | number
@@ -134,6 +135,7 @@ async function getJob(req: Request, res: Response) {
 
     // Default result object
     let result: GetJobResponse = {
+      resolvedJobId: jobId,
       createdOn: job.timestamp,
       failedReason: null,
       finishedOn: null,
