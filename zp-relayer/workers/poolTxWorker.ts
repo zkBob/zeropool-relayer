@@ -78,7 +78,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
         await updateNonce(++nonce)
 
-        logger.debug(`${logPrefix} TX hash ${txHash}`)
+        logger.info(`${logPrefix} TX hash ${txHash}`)
 
         await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
 

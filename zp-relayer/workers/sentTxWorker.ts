@@ -100,7 +100,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       // Tx mined
       if (tx.status) {
         // Successful
-        logger.debug('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
+        logger.info('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
 
         pool.state.updateState(commitIndex, outCommit, prefixedMemo)
 
@@ -183,6 +183,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
         await sendTransaction(web3, rawTransaction)
+        logger.info(`${logPrefix} Re-send tx; New hash: ${newTxHash}`)
       } catch (e) {
         const err = e as Error
         logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)

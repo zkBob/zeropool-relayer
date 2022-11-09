@@ -19,11 +19,16 @@ const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenA
 
 const ZERO = toBN(0)
 
+export class TxValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
+
 type OptionError = Error | null
 export async function checkAssertion(f: () => Promise<OptionError> | OptionError) {
   const err = await f()
   if (err) {
-    logger.warn('Assertion error: %s', err.message)
     throw err
   }
 }
@@ -36,7 +41,7 @@ export async function checkBalance(address: string, minBalance: string) {
   const balance = await tokenContract.methods.balanceOf(address).call()
   const res = toBN(balance).gte(toBN(minBalance))
   if (!res) {
-    return new Error('Not enough balance for deposit')
+    return new TxValidationError('Not enough balance for deposit')
   }
   return null
 }
@@ -48,7 +53,7 @@ export function checkCommitment(treeProof: Proof, txProof: Proof) {
 export function checkProof(txProof: Proof, verify: (p: SnarkProof, i: Array<string>) => boolean) {
   const res = verify(txProof.proof, txProof.inputs)
   if (!res) {
-    return new Error('Incorrect snark proof')
+    return new TxValidationError('Incorrect snark proof')
   }
   return null
 }
@@ -56,12 +61,12 @@ export function checkProof(txProof: Proof, verify: (p: SnarkProof, i: Array<stri
 export async function checkNullifier(nullifier: string, nullifierSet: NullifierSet) {
   const inSet = await nullifierSet.isInSet(nullifier)
   if (inSet === 0) return null
-  return new Error(`Doublespend detected in ${nullifierSet.name}`)
+  return new TxValidationError(`Doublespend detected in ${nullifierSet.name}`)
 }
 
 export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
   if (transferIndex.lte(contractPoolIndex)) return null
-  return new Error(`Incorrect transfer index`)
+  return new TxValidationError(`Incorrect transfer index`)
 }
 
 export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN, txData: TxData) {
@@ -80,7 +85,7 @@ export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmo
     isValid = tokenAmount.lte(ZERO) && energyAmount.lte(ZERO)
   }
   if (!isValid) {
-    return new Error('Tx specific fields are incorrect')
+    return new TxValidationError('Tx specific fields are incorrect')
   }
   return null
 }
@@ -89,7 +94,7 @@ export function checkNativeAmount(nativeAmount: BN | null) {
   logger.debug(`Native amount: ${nativeAmount}`)
   // Check native amount (relayer faucet)
   if (nativeAmount && nativeAmount > config.maxFaucet) {
-    return new Error('Native amount too high')
+    return new TxValidationError('Native amount too high')
   }
   return null
 }
@@ -97,7 +102,7 @@ export function checkNativeAmount(nativeAmount: BN | null) {
 export function checkFee(fee: BN) {
   logger.debug(`Fee: ${fee}`)
   if (fee.lt(config.relayerFee)) {
-    return new Error('Fee too low')
+    return new TxValidationError('Fee too low')
   }
   return null
 }
@@ -111,7 +116,7 @@ export function checkDeadline(signedDeadline: BN, threshold: number) {
   // Check native amount (relayer faucet)
   const currentTimestamp = new BN(Math.floor(Date.now() / 1000))
   if (signedDeadline <= currentTimestamp.addn(threshold)) {
-    return new Error(`Deadline is expired`)
+    return new TxValidationError(`Deadline is expired`)
   }
   return null
 }
@@ -119,20 +124,20 @@ export function checkDeadline(signedDeadline: BN, threshold: number) {
 export function checkLimits(limits: Limits, amount: BN) {
   if (amount.gt(toBN(0))) {
     if (amount.gt(limits.depositCap)) {
-      return new Error('Single deposit cap exceeded')
+      return new TxValidationError('Single deposit cap exceeded')
     }
     if (limits.tvl.add(amount).gte(limits.tvlCap)) {
-      return new Error('Tvl cap exceeded')
+      return new TxValidationError('Tvl cap exceeded')
     }
     if (limits.dailyUserDepositCapUsage.add(amount).gt(limits.dailyUserDepositCap)) {
-      return new Error('Daily user deposit cap exceeded')
+      return new TxValidationError('Daily user deposit cap exceeded')
     }
     if (limits.dailyDepositCapUsage.add(amount).gt(limits.dailyDepositCap)) {
-      return new Error('Daily deposit cap exceeded')
+      return new TxValidationError('Daily deposit cap exceeded')
     }
   } else {
     if (limits.dailyWithdrawalCapUsage.sub(amount).gt(limits.dailyWithdrawalCap)) {
-      return new Error('Daily withdrawal cap exceeded')
+      return new TxValidationError('Daily withdrawal cap exceeded')
     }
   }
   return null
@@ -140,7 +145,7 @@ export function checkLimits(limits: Limits, amount: BN) {
 
 async function checkDepositEnoughBalance(address: string, requiredTokenAmount: BN) {
   if (requiredTokenAmount.lte(toBN(0))) {
-    throw new Error('Requested balance check for token amount <= 0')
+    throw new TxValidationError('Requested balance check for token amount <= 0')
   }
 
   return checkBalance(address, requiredTokenAmount.toString(10))
@@ -156,7 +161,7 @@ async function getRecoveredAddress(
   // Signature without `0x` prefix, size is 64*2=128
   await checkAssertion(() => {
     if (depositSignature !== null && checkSize(depositSignature, 128)) return null
-    return new Error('Invalid deposit signature')
+    return new TxValidationError('Invalid deposit signature')
   })
   const nullifier = '0x' + numToHex(toBN(proofNullifier))
   const sig = unpackSignature(depositSignature as string)
@@ -180,7 +185,7 @@ async function getRecoveredAddress(
     }
     recoveredAddress = recoverSaltedPermit(message, sig)
   } else {
-    throw new Error('Unsupported txtype')
+    throw new TxValidationError('Unsupported txtype')
   }
 
   return recoveredAddress
@@ -207,7 +212,7 @@ async function checkRoot(
   }
 
   if (root !== proofRoot) {
-    return new Error(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
+    return new TxValidationError(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
   }
 
   // If recieved correct root from contract update cache (only confirmed state)
