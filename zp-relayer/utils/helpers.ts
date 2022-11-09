@@ -4,6 +4,7 @@ import { logger } from '@/services/appLogger'
 import { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'
+import { TxValidationError } from '@/validateTx'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 const S_MAX = toBN('0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0')
@@ -91,6 +92,10 @@ export function flattenProof(p: SnarkProof): string {
     .join('')
 }
 
+export function buildPrefixedMemo(outCommit: string, txHash: string, truncatedMemo: string) {
+  return numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+}
+
 export async function setIntervalAndRun(f: () => Promise<void> | void, interval: number) {
   const handler = setInterval(f, interval)
   await f()
@@ -112,7 +117,11 @@ export async function withErrorLog<R>(f: () => Promise<R>): Promise<R> {
   try {
     return await f()
   } catch (e) {
-    logger.error('Found error: %s', (e as Error).message)
+    if (e instanceof TxValidationError) {
+      logger.warn('Validation error: %s', (e as Error).message)
+    } else {
+      logger.error('Found error: %s', (e as Error).message)
+    }
     throw e
   }
 }

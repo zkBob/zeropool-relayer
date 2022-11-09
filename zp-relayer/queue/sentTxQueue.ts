@@ -7,10 +7,11 @@ import { TxPayload } from './poolTxQueue'
 
 export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
+  poolJobId: string
   root: string
   outCommit: string
   commitIndex: number
-  prefixedMemo: string
+  truncatedMemo: string
   txConfig: TransactionConfig
   nullifier: string
   txPayload: TxPayload

@@ -7,7 +7,7 @@ import { pool } from '@/pool'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
-import { withErrorLog, withLoop, withMutex } from '@/utils/helpers'
+import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
@@ -81,7 +81,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
     const logPrefix = `SENT WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
-    const { prefixedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
+    const { truncatedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
 
     // Any thrown web3 error will re-trigger re-send loop iteration
     const [tx, shouldReprocess] = await checkMined(prevAttempts, txConfig.nonce as number)
@@ -99,9 +99,12 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       // Tx mined
       if (tx.status) {
         // Successful
-        logger.debug('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
+        logger.info('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
 
+        const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
         pool.state.updateState(commitIndex, outCommit, prefixedMemo)
+        // Update tx hash in optimistic state tx db
+        pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
         // Add nullifer to confirmed state and remove from optimistic one
         logger.info('Adding nullifier %s to PS', nullifier)
@@ -140,18 +143,26 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Validation of these jobs will be done in `poolTxWorker`
         const waitingJobIds = []
         const reschedulePromises = []
+        const newPoolJobIdMapping: Record<string, string> = {}
         const waitingJobs = await sentTxQueue.getJobs(['delayed', 'waiting'])
         for (let wj of waitingJobs) {
           // One of the jobs can be undefined, so we need to check it
           // https://github.com/taskforcesh/bullmq/blob/master/src/commands/addJob-8.lua#L142-L143
           if (!wj?.id) continue
           waitingJobIds.push(wj.id)
-          reschedulePromises.push(poolTxQueue.add(txHash, [wj.data.txPayload]).then(j => j.id as string))
+          const reschedulePromise = poolTxQueue.add(txHash, [wj.data.txPayload]).then(j => {
+            const newPoolJobId = j.id as string
+            newPoolJobIdMapping[wj.data.poolJobId] = newPoolJobId
+            return newPoolJobId
+          })
+          reschedulePromises.push(reschedulePromise)
         }
         logger.info('Marking ids %j as failed', waitingJobIds)
         await markFailed(redis, waitingJobIds)
         logger.info('%s Rescheduling %d jobs to process...', logPrefix, waitingJobs.length)
         const rescheduledIds = await Promise.all(reschedulePromises)
+        logger.info('%s Update pool job id mapping %j ...', logPrefix, newPoolJobIdMapping)
+        await pool.state.jobIdsMapping.add(newPoolJobIdMapping)
 
         return [SentTxState.REVERT, txHash, rescheduledIds] as SentTxResult
       }
@@ -174,6 +185,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
         await sendTransaction(web3, rawTransaction)
+        logger.info(`${logPrefix} Re-send tx; New hash: ${newTxHash}`)
       } catch (e) {
         const err = e as Error
         logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
@@ -187,6 +199,10 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Error should be caught by `withLoop` to re-run job
         throw e
       }
+
+      // Overwrite old tx recorded in optimistic state db with new tx hash
+      const prefixedMemo = buildPrefixedMemo(outCommit, newTxHash, truncatedMemo)
+      pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
       // Update job
       await job.update({
