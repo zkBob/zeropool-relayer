@@ -161,7 +161,7 @@ async function getRecoveredAddress(
   // Signature without `0x` prefix, size is 64*2=128
   await checkAssertion(() => {
     if (depositSignature !== null && checkSize(depositSignature, 128)) return null
-    return new TxValidationError('Invalid deposit signature')
+    return new TxValidationError('Invalid deposit signature size')
   })
   const nullifier = '0x' + numToHex(toBN(proofNullifier))
   const sig = unpackSignature(depositSignature as string)
@@ -184,6 +184,9 @@ async function getRecoveredAddress(
       salt: nullifier,
     }
     recoveredAddress = recoverSaltedPermit(message, sig)
+    if (recoveredAddress.toLowerCase() !== owner.toLowerCase()) {
+      throw new TxValidationError(`Invalid deposit signer; Restored: ${recoveredAddress}; Expected: ${owner}`)
+    }
   } else {
     throw new TxValidationError('Unsupported txtype')
   }
