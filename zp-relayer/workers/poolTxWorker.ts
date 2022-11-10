@@ -112,7 +112,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
           },
           {
             delay: config.sentTxDelay,
-            priority: txConfig.nonce,
+            priority: nonce,
           }
         )
 

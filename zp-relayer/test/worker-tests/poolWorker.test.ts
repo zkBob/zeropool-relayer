@@ -1,14 +1,17 @@
-import { Mutex } from 'async-mutex'
 import chai from 'chai'
+import { v4 } from 'uuid'
+import { Mutex } from 'async-mutex'
 import chaiAsPromised from 'chai-as-promised'
 import { Job, QueueEvents, Worker } from 'bullmq'
 import { TxType } from 'zp-memo-parser'
-import { web3 } from '../web3'
+import { web3 } from './web3'
 import { pool } from '../../pool'
+import config from '../../config'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
 import { poolTxQueue, TxPayload, PoolTxResult } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
+import { PoolState } from '../../state/PoolState'
 import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
@@ -20,12 +23,9 @@ import {
   evmSnapshot,
   mintTokens,
   newConnection,
-} from '../utils'
-import flow from '../flows/flow_independent_deposits_5.json'
+} from './utils'
 import { validateTx } from '../../validateTx'
-import config from '../../config'
-import { PoolState } from '../../state/PoolState'
-import { v4 } from 'uuid'
+import flow from '../flows/flow_independent_deposits_5.json'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect

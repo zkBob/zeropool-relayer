@@ -2,7 +2,7 @@ import type { HttpProvider } from 'web3-core'
 import Redis from 'ioredis'
 import { web3 } from './web3'
 import { toBN } from 'web3-utils'
-import TokenAbi from './abi/token-abi.json'
+import TokenAbi from '../abi/token-abi.json'
 
 export const token = new web3.eth.Contract(TokenAbi as any, '0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab')
 const denominator = toBN(1000000000)
