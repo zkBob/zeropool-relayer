@@ -1,7 +1,7 @@
 import { Mutex } from 'async-mutex'
 import chai from 'chai'
 import chaiAsPromised from 'chai-as-promised'
-import { Job, Queue, QueueEvents, Worker } from 'bullmq'
+import { Job, QueueEvents, Worker } from 'bullmq'
 import { TxType } from 'zp-memo-parser'
 import { web3 } from '../web3'
 import { pool } from '../../pool'
@@ -12,13 +12,12 @@ import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
-import { FlowOutputItem, PermitDepositOutputItem } from '../../../test-flow-generator/src/types'
+import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import {
   disableMining,
   enableMining,
   evmRevert,
   evmSnapshot,
-  getTokenBalance,
   mintTokens,
   newConnection,
 } from '../utils'
