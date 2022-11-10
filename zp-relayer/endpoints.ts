@@ -149,8 +149,8 @@ async function getJob(req: Request, res: Response) {
       if (job.returnvalue === null) {
         job = await poolTxQueue.getJob(jobId)
         // Sanity check
-        if (!job) throw new Error('Pool job not found')
-    }
+        if (!job || job.returnvalue === null) throw new Error('Internal job inconsistency')
+      }
       const sentJobId = job.returnvalue[0][1]
       let sentJob = await sentTxQueue.getJob(sentJobId)
       // Should not happen here, but need to verify to be sure
@@ -166,8 +166,8 @@ async function getJob(req: Request, res: Response) {
         if (sentJob.returnvalue === null) {
           sentJob = await sentTxQueue.getJob(sentJobId)
           // Sanity check
-          if (!sentJob) throw new Error('Sent job not found')
-      }
+          if (!sentJob || sentJob.returnvalue === null) throw new Error('Internal job inconsistency')
+        }
         const [txState, txHash] = sentJob.returnvalue
         if (txState === SentTxState.MINED) {
           // Transaction mined successfully
@@ -183,6 +183,11 @@ async function getJob(req: Request, res: Response) {
       }
     } else if (poolJobState === 'failed') {
       // Either validation or tx sendind failed
+      if (!job.finishedOn) {
+        job = await poolTxQueue.getJob(jobId)
+        // Sanity check
+        if (!job || !job.finishedOn) throw new Error('Internal job inconsistency')
+      }
       result.state = JobStatus.FAILED
       result.failedReason = job.failedReason
       result.finishedOn = job.finishedOn || null
