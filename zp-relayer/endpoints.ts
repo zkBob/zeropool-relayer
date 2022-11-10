@@ -130,7 +130,7 @@ async function getJob(req: Request, res: Response) {
 
   async function getPoolJobState(requestedJobId: string): Promise<GetJobResponse | null> {
     const jobId = await pool.state.jobIdsMapping.get(requestedJobId)
-    const job = await poolTxQueue.getJob(jobId)
+    let job = await poolTxQueue.getJob(jobId)
     if (!job) return null
 
     // Default result object
@@ -146,8 +146,13 @@ async function getJob(req: Request, res: Response) {
     const poolJobState = await job.getState()
     if (poolJobState === 'completed') {
       // Transaction was included in optimistic state, waiting to be mined
+      if (job.returnvalue === null) {
+        job = await poolTxQueue.getJob(jobId)
+        // Sanity check
+        if (!job) throw new Error('Pool job not found')
+    }
       const sentJobId = job.returnvalue[0][1]
-      const sentJob = await sentTxQueue.getJob(sentJobId)
+      let sentJob = await sentTxQueue.getJob(sentJobId)
       // Should not happen here, but need to verify to be sure
       if (!sentJob) throw new Error('Sent job not found')
 
@@ -158,6 +163,11 @@ async function getJob(req: Request, res: Response) {
         result.state = JobStatus.SENT
         result.txHash = txHash || null
       } else if (sentJobState === 'completed') {
+        if (sentJob.returnvalue === null) {
+          sentJob = await sentTxQueue.getJob(sentJobId)
+          // Sanity check
+          if (!sentJob) throw new Error('Sent job not found')
+      }
         const [txState, txHash] = sentJob.returnvalue
         if (txState === SentTxState.MINED) {
           // Transaction mined successfully
