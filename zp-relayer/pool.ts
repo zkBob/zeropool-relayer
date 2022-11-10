@@ -89,6 +89,11 @@ class Pool {
     this.optimisticState = new PoolState('optimistic', redis, config.stateDirPath)
   }
 
+  loadState(states: { poolState: PoolState; optimisticState: PoolState }) {
+    this.state = states.poolState
+    this.optimisticState = states.optimisticState
+  }
+
   private static getHash(path: string) {
     const buffer = fs.readFileSync(path)
     const hash = crypto.createHash('sha256')

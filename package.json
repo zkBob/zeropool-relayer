@@ -13,7 +13,8 @@
   "workspaces": [
     "zp-memo-parser",
     "zp-relayer",
-    "test-e2e"
+    "test-e2e",
+    "test-flow-generator"
   ],
   "scripts": {
     "initialize": "yarn install --unsafe-perm --frozen-lockfile",
