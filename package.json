@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "devDependencies": {
-    "chai": "^4.3.4",
     "prettier": "^2.7.1",
     "ts-loader": "^9.2.4",
     "tsc-alias": "^1.7.0",
@@ -17,7 +16,7 @@
     "test-flow-generator"
   ],
   "scripts": {
-    "initialize": "yarn install --unsafe-perm --frozen-lockfile",
+    "initialize": "yarn install --frozen-lockfile && yarn build:memo",
     "build:relayer": "yarn workspace zp-relayer run build",
     "build:memo": "yarn workspace zp-memo-parser run build",
     "prettier": "npx prettier --write ."
