@@ -1,24 +1,32 @@
-import { Mutex } from 'async-mutex'
 import chai from 'chai'
+import { v4 } from 'uuid'
+import { Mutex } from 'async-mutex'
 import chaiAsPromised from 'chai-as-promised'
 import { Job, QueueEvents, Worker } from 'bullmq'
 import { TxType } from 'zp-memo-parser'
 import { web3 } from './web3'
 import { pool } from '../../pool'
+import config from '../../config'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
 import { poolTxQueue, TxPayload, PoolTxResult } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
+import { PoolState } from '../../state/PoolState'
 import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
-import { FlowOutputItem, PermitDepositOutputItem } from '../../../test-flow-generator/src/types'
-import { disableMining, enableMining, mintTokens, newConnection } from './utils'
+import { FlowOutputItem } from '../../../test-flow-generator/src/types'
+import {
+  disableMining,
+  enableMining,
+  evmRevert,
+  evmSnapshot,
+  mintTokens,
+  newConnection,
+} from './utils'
+import { validateTx } from '../../validateTx'
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
-
-import { validateTx } from '../../validateTx'
-import config from '../../config'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -44,25 +52,55 @@ describe('poolWorker', () => {
   let poolQueueEvents: QueueEvents
   let sentQueueEvents: QueueEvents
   let workerMutex: Mutex
-  before(async () => {
-    web3.eth.transactionBlockTimeout = 0
+  let snapShotId: string
+  let eventsInit = false
+
+  before(async () => {})
+
+  beforeEach(async () => {
+    snapShotId = await evmSnapshot()
+
+    const id = v4()
+    const statesPath = `${config.stateDirPath}${id}`
+    const poolState = new PoolState(`pool-${id}`, redis, statesPath)
+    const optimisticState = new PoolState(`optimistic-${id}`, redis, statesPath)
+    pool.loadState({ poolState, optimisticState })
+
     await pool.init()
     await initializeDomain(web3)
+
     gasPriceService = new GasPrice(web3, 10000, 'web3', {})
     await gasPriceService.start()
 
     workerMutex = new Mutex()
     poolWorker = await createPoolTxWorker(gasPriceService, validateTx, workerMutex, redis)
     sentWorker = await createSentTxWorker(gasPriceService, workerMutex, redis)
-
     sentWorker.run()
     poolWorker.run()
 
+    if (!eventsInit) {
+      poolQueueEvents = new QueueEvents(poolWorker.name, { connection: redis })
+      sentQueueEvents = new QueueEvents(sentWorker.name, { connection: redis })
+      eventsInit = true
+    }
+
     await poolWorker.waitUntilReady()
     await sentWorker.waitUntilReady()
+    await enableMining()
+  })
 
-    poolQueueEvents = new QueueEvents(poolWorker.name, { connection: redis })
-    sentQueueEvents = new QueueEvents(sentWorker.name, { connection: redis })
+  afterEach(async () => {
+    await evmRevert(snapShotId)
+
+    await sentTxQueue.drain(true)
+    await poolTxQueue.drain(true)
+
+    await poolWorker.close()
+    await sentWorker.close()
+
+    await pool.state.jobIdsMapping.clear()
+
+    gasPriceService.stop()
   })
 
   it('executes a job', async () => {
@@ -85,7 +123,7 @@ describe('poolWorker', () => {
   })
 
   it('should re-send tx', async () => {
-    const deposit = flow[1]
+    const deposit = flow[0]
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await disableMining()
 
@@ -111,8 +149,7 @@ describe('poolWorker', () => {
   it('should re-submit optimistic txs after revert', async () => {
     await poolWorker.pause()
 
-    // @ts-ignore
-    const deposit = flow[2] as PermitDepositOutputItem
+    const deposit = flow[0]
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await sentWorker.pause()
 
@@ -128,6 +165,7 @@ describe('poolWorker', () => {
     }
     // @ts-ignore
     const poolJob1 = await submitJob(wrongDeposit)
+    // @ts-ignore
     const poolJob2 = await submitJob(deposit)
 
     const [[, sentId1]] = await poolJob1.waitUntilFinished(poolQueueEvents)
@@ -144,9 +182,10 @@ describe('poolWorker', () => {
     const [status2, , rescheduledIds2] = await sentJob2.waitUntilFinished(sentQueueEvents)
     expect(status2).eq(SentTxState.REVERT)
     expect(rescheduledIds2.length).eq(0)
-
+    
     const poolJob3 = (await poolTxQueue.getJob(rescheduledIds1[0])) as Job
     const [[, sentId3]] = await poolJob3.waitUntilFinished(poolQueueEvents)
+    expect(await pool.state.jobIdsMapping.get(poolJob2.id as string)).eq(poolJob3.id)
 
     const sentJob3 = (await sentTxQueue.getJob(sentId3)) as Job
     const [status3, sentHash] = await sentJob3.waitUntilFinished(sentQueueEvents)
@@ -184,18 +223,5 @@ describe('poolWorker', () => {
     const job = await submitJob(deposit)
 
     await expect(job.waitUntilFinished(poolQueueEvents)).rejectedWith('Incorrect root at index')
-  })
-
-  after(async () => {
-    await poolWorker.close()
-    await poolTxQueue.close()
-    await poolQueueEvents.close()
-
-    await sentWorker.close()
-    await sentTxQueue.close()
-    await sentQueueEvents.close()
-
-    gasPriceService.stop()
-    redis.disconnect()
   })
 })
