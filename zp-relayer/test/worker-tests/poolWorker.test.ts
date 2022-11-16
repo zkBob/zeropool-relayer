@@ -26,6 +26,7 @@ import {
 } from './utils'
 import { validateTx } from '../../validateTx'
 import flow from '../flows/flow_independent_deposits_5.json'
+import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -212,5 +213,15 @@ describe('poolWorker', () => {
     await expect(job.waitUntilFinished(poolQueueEvents)).to.be.rejectedWith('Optimistic state overflow')
 
     config.maxSentQueueSize = maxSentQueueSize
+  })
+
+  it('should reject if proof incorrect', async () => {
+    const deposit = flowDependentDeposits[1]
+    await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
+
+    // @ts-ignore
+    const job = await submitJob(deposit)
+
+    await expect(job.waitUntilFinished(poolQueueEvents)).rejectedWith('Incorrect root at index')
   })
 })
