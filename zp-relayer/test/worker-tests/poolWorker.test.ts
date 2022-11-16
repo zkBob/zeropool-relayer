@@ -176,7 +176,7 @@ describe('poolWorker', () => {
     config.maxSentQueueSize = maxSentQueueSize
   })
 
-  it.only('should reject if proof incorrect', async () => {
+  it('should reject if proof incorrect', async () => {
     const deposit = flowDependentDeposits[1]
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
 
