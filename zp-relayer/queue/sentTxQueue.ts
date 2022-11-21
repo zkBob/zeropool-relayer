@@ -1,36 +1,30 @@
-import { Queue, QueueScheduler } from 'bullmq'
+import { Queue } from 'bullmq'
 import { redis } from '@/services/redisClient'
 import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import type { TransactionConfig } from 'web3-core'
 import { GasPriceValue } from '@/services/gas-price'
-import { TxData, TxType } from 'zp-memo-parser'
+import { TxPayload } from './poolTxQueue'
 
+export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
-  txType: TxType
+  poolJobId: string
   root: string
   outCommit: string
   commitIndex: number
-  txHash: string
-  prefixedMemo: string
+  truncatedMemo: string
   txConfig: TransactionConfig
   nullifier: string
-  gasPriceOptions: GasPriceValue
-  txData: TxData
+  txPayload: TxPayload
+  prevAttempts: SendAttempt[]
 }
 
 export enum SentTxState {
   MINED = 'MINED',
   REVERT = 'REVERT',
-  RESEND = 'RESEND',
-  FAILED = 'FAILED',
+  SKIPPED = 'SKIPPED',
 }
 
-export type SentTxResult = [SentTxState, string]
-
-// Required for delayed jobs processing
-const sentTxQueueScheduler = new QueueScheduler(SENT_TX_QUEUE_NAME, {
-  connection: redis,
-})
+export type SentTxResult = [SentTxState, string, string[]]
 
 export const sentTxQueue = new Queue<SentTxPayload, SentTxResult>(SENT_TX_QUEUE_NAME, {
   connection: redis,

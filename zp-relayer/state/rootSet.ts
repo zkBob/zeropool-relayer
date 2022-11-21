@@ -10,7 +10,7 @@ export class RootSet {
 
   async remove(indices: string[]) {
     if (indices.length === 0) return
-    await this.redis.hdel(this.name, indices)
+    await this.redis.hdel(this.name, ...indices)
   }
 
   async get(index: string) {

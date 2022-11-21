@@ -11,6 +11,7 @@ import {
   checkSendTransactionErrors,
   checkSendTransactionsErrors,
 } from './validation/validation'
+import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 
 async function sendTransactions(req: Request, res: Response, next: NextFunction) {
   const errors = checkSendTransactionsErrors(req.body)
@@ -108,22 +109,99 @@ async function getTransactionsV2(req: Request, res: Response, next: NextFunction
 }
 
 async function getJob(req: Request, res: Response) {
-  const jobId = req.params.id
-  const job = await poolTxQueue.getJob(jobId)
-  if (job) {
-    const state = await job.getState()
-    const txHash = job.returnvalue
-    const failedReason = job.failedReason
-    const createdOn = job.timestamp
-    const finishedOn = job.finishedOn
+  enum JobStatus {
+    WAITING = 'waiting',
+    FAILED = 'failed',
+    SENT = 'sent',
+    REVERTED = 'reverted',
+    COMPLETED = 'completed',
+  }
 
-    res.json({
-      state,
-      txHash,
-      failedReason,
-      createdOn,
-      finishedOn,
-    })
+  interface GetJobResponse {
+    resolvedJobId: string
+    createdOn: number
+    failedReason: null | string
+    finishedOn: null | number
+    state: JobStatus
+    txHash: null | string
+  }
+
+  const jobId = req.params.id
+
+  async function getPoolJobState(requestedJobId: string): Promise<GetJobResponse | null> {
+    const jobId = await pool.state.jobIdsMapping.get(requestedJobId)
+    let job = await poolTxQueue.getJob(jobId)
+    if (!job) return null
+
+    // Default result object
+    let result: GetJobResponse = {
+      resolvedJobId: jobId,
+      createdOn: job.timestamp,
+      failedReason: null,
+      finishedOn: null,
+      state: JobStatus.WAITING,
+      txHash: null,
+    }
+
+    const poolJobState = await job.getState()
+    if (poolJobState === 'completed') {
+      // Transaction was included in optimistic state, waiting to be mined
+      if (job.returnvalue === null) {
+        job = await poolTxQueue.getJob(jobId)
+        // Sanity check
+        if (!job || job.returnvalue === null) throw new Error('Internal job inconsistency')
+      }
+      const sentJobId = job.returnvalue[0][1]
+      let sentJob = await sentTxQueue.getJob(sentJobId)
+      // Should not happen here, but need to verify to be sure
+      if (!sentJob) throw new Error('Sent job not found')
+
+      const sentJobState = await sentJob.getState()
+      if (sentJobState === 'waiting' || sentJobState === 'active' || sentJobState === 'delayed') {
+        // Transaction is in re-send loop
+        const txHash = sentJob.data.prevAttempts.at(-1)?.[0]
+        result.state = JobStatus.SENT
+        result.txHash = txHash || null
+      } else if (sentJobState === 'completed') {
+        if (sentJob.returnvalue === null) {
+          sentJob = await sentTxQueue.getJob(sentJobId)
+          // Sanity check
+          if (!sentJob || sentJob.returnvalue === null) throw new Error('Internal job inconsistency')
+        }
+        const [txState, txHash] = sentJob.returnvalue
+        if (txState === SentTxState.MINED) {
+          // Transaction mined successfully
+          result.state = JobStatus.COMPLETED
+          result.txHash = txHash
+          result.finishedOn = sentJob.finishedOn || null
+        } else if (txState === SentTxState.REVERT) {
+          // Transaction reverted
+          result.state = JobStatus.REVERTED
+          result.txHash = txHash
+          result.finishedOn = sentJob.finishedOn || null
+        }
+      }
+    } else if (poolJobState === 'failed') {
+      // Either validation or tx sendind failed
+      if (!job.finishedOn) {
+        job = await poolTxQueue.getJob(jobId)
+        // Sanity check
+        if (!job || !job.finishedOn) throw new Error('Internal job inconsistency')
+      }
+      result.state = JobStatus.FAILED
+      result.failedReason = job.failedReason
+      result.finishedOn = job.finishedOn || null
+    }
+    // Other states mean that transaction is either waiting in queue
+    // or being processed by worker
+    // So, no need to update `result` object
+
+    return result
+  }
+
+  const jobState = await getPoolJobState(jobId)
+  if (jobState) {
+    res.json(jobState)
   } else {
     res.json(`Job ${jobId} not found`)
   }

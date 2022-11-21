@@ -4,6 +4,7 @@ import { logger } from '@/services/appLogger'
 import { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'
+import { TxValidationError } from '@/validateTx'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 const S_MAX = toBN('0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0')
@@ -91,6 +92,10 @@ export function flattenProof(p: SnarkProof): string {
     .join('')
 }
 
+export function buildPrefixedMemo(outCommit: string, txHash: string, truncatedMemo: string) {
+  return numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+}
+
 export async function setIntervalAndRun(f: () => Promise<void> | void, interval: number) {
   const handler = setInterval(f, interval)
   await f()
@@ -112,7 +117,43 @@ export async function withErrorLog<R>(f: () => Promise<R>): Promise<R> {
   try {
     return await f()
   } catch (e) {
-    logger.error('Found error: %o', e)
+    if (e instanceof TxValidationError) {
+      logger.warn('Validation error: %s', (e as Error).message)
+    } else {
+      logger.error('Found error: %s', (e as Error).message)
+    }
     throw e
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export function withLoop<R>(f: () => Promise<R>, timeout: number, supressedErrors: string[] = []): () => Promise<R> {
+  // @ts-ignore
+  return async () => {
+    while (1) {
+      try {
+        return await f()
+      } catch (e) {
+        const err = e as Error
+        let isSupressed = false
+        for (let supressedError of supressedErrors) {
+          if (err.message.includes(supressedError)) {
+            isSupressed = true
+            break
+          }
+        }
+
+        if (isSupressed) {
+          logger.warn('%s', err.message)
+        } else {
+          logger.error('Found error %s', err.message)
+        }
+
+        await sleep(timeout)
+      }
+    }
   }
 }
