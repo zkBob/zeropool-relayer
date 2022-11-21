@@ -55,8 +55,6 @@ describe('poolWorker', () => {
   let snapShotId: string
   let eventsInit = false
 
-  before(async () => {})
-
   beforeEach(async () => {
     snapShotId = await evmSnapshot()
 
@@ -153,7 +151,7 @@ describe('poolWorker', () => {
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await sentWorker.pause()
 
-    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => {}, workerMutex, newConnection())
+    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => { }, workerMutex, newConnection())
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()
 
@@ -182,7 +180,7 @@ describe('poolWorker', () => {
     const [status2, , rescheduledIds2] = await sentJob2.waitUntilFinished(sentQueueEvents)
     expect(status2).eq(SentTxState.REVERT)
     expect(rescheduledIds2.length).eq(0)
-    
+
     const poolJob3 = (await poolTxQueue.getJob(rescheduledIds1[0])) as Job
     const [[, sentId3]] = await poolJob3.waitUntilFinished(poolQueueEvents)
     expect(await pool.state.jobIdsMapping.get(poolJob2.id as string)).eq(poolJob3.id)
@@ -223,5 +221,35 @@ describe('poolWorker', () => {
     const job = await submitJob(deposit)
 
     await expect(job.waitUntilFinished(poolQueueEvents)).rejectedWith('Incorrect root at index')
+  })
+
+  it('should increase gas price on re-send', async () => {
+    const deposit = flow[0]
+    await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
+    await disableMining()
+
+    // @ts-ignore
+    const job = await submitJob(deposit)
+
+    const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
+    expect(txHash.length).eq(66)
+
+    const txBefore = await web3.eth.getTransaction(txHash)
+    const gasPriceBefore = Number(txBefore.gasPrice)
+
+    sentWorker.on('progress', async () => {
+      await enableMining()
+    })
+
+    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
+    const [status, sentHash,] = await sentJob.waitUntilFinished(sentQueueEvents)
+    expect(status).eq(SentTxState.MINED)
+    expect(txHash).not.eq(sentHash)
+
+    const txAfter = await web3.eth.getTransaction(sentHash)
+    const gasPriceAfter = Number(txAfter.gasPrice)
+    console.log(gasPriceBefore + ' < ' + gasPriceAfter)
+
+    expect(gasPriceBefore).lt(gasPriceAfter)
   })
 })
