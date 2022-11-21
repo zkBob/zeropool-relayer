@@ -1,8 +1,8 @@
-const puppeteer = require('puppeteer')
 const fs = require('fs')
+const path = require('path')
+const puppeteer = require('puppeteer')
 const { createServer } = require('http-server')
 const { Proof, Params } = require('libzkbob-rs-node')
-const path = require('path')
 
 const OUT_FLOWS_DIR = './flows/'
 const TEST_FLOWS_DIR = './test-flows/'
@@ -43,7 +43,7 @@ async function generateFlow() {
         tx.proof = proof
       }
 
-      fs.writeFileSync(`${OUT_FLOWS_DIR}/flow_${path.parse(file).name}.json`, JSON.stringify(res, null, 2))
+      fs.writeFileSync(`${OUT_FLOWS_DIR}/flow_${path.parse(file).name}.json`, JSON.stringify(res, null))
     }
   } finally {
     await browser.close()
