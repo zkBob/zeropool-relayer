@@ -27,6 +27,8 @@ import {
 import { validateTx } from '../../validateTx'
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
+import { type } from 'os'
+import { get } from 'https'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -223,5 +225,42 @@ describe('poolWorker', () => {
     const job = await submitJob(deposit)
 
     await expect(job.waitUntilFinished(poolQueueEvents)).rejectedWith('Incorrect root at index')
+  })
+
+  it.only('should be new gas price higher than previous one', async () => {
+    const deposit = flow[0]
+    await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
+    await disableMining()
+
+    // @ts-ignore
+    const job = await submitJob(deposit)
+
+    // sentWorker.on('progress', async () => {
+    //   await enableMining()
+    // })
+
+    const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
+    expect(txHash.length).eq(66)
+
+    const getGasPriceBefore = await web3.eth.getTransaction(txHash)
+    const gasPriceBefore = Number(getGasPriceBefore['gasPrice'])
+
+    // await disableMining()
+
+    sentWorker.on('progress', async () => {
+      await enableMining()
+    })
+
+    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
+    const [status, sentHash, ] = await sentJob.waitUntilFinished(sentQueueEvents)
+    expect(status).eq(SentTxState.MINED)
+    expect(txHash).not.eq(sentHash)
+
+    const getGasPriceAfter = await web3.eth.getTransaction(sentHash)
+    const gasPriceAfter = Number(getGasPriceAfter['gasPrice'])
+    console.log(gasPriceBefore + ' < ' + gasPriceAfter)
+
+    expect(gasPriceBefore).lt(gasPriceAfter)
+    
   })
 })
