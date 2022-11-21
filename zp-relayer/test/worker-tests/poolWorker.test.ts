@@ -27,8 +27,6 @@ import {
 import { validateTx } from '../../validateTx'
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
-import { type } from 'os'
-import { get } from 'https'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -56,8 +54,6 @@ describe('poolWorker', () => {
   let workerMutex: Mutex
   let snapShotId: string
   let eventsInit = false
-
-  before(async () => {})
 
   beforeEach(async () => {
     snapShotId = await evmSnapshot()
@@ -155,7 +151,7 @@ describe('poolWorker', () => {
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await sentWorker.pause()
 
-    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => {}, workerMutex, newConnection())
+    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => { }, workerMutex, newConnection())
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()
 
@@ -184,7 +180,7 @@ describe('poolWorker', () => {
     const [status2, , rescheduledIds2] = await sentJob2.waitUntilFinished(sentQueueEvents)
     expect(status2).eq(SentTxState.REVERT)
     expect(rescheduledIds2.length).eq(0)
-    
+
     const poolJob3 = (await poolTxQueue.getJob(rescheduledIds1[0])) as Job
     const [[, sentId3]] = await poolJob3.waitUntilFinished(poolQueueEvents)
     expect(await pool.state.jobIdsMapping.get(poolJob2.id as string)).eq(poolJob3.id)
@@ -227,7 +223,7 @@ describe('poolWorker', () => {
     await expect(job.waitUntilFinished(poolQueueEvents)).rejectedWith('Incorrect root at index')
   })
 
-  it.only('should be new gas price higher than previous one', async () => {
+  it('should increase gas price on re-send', async () => {
     const deposit = flow[0]
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await disableMining()
@@ -235,27 +231,25 @@ describe('poolWorker', () => {
     // @ts-ignore
     const job = await submitJob(deposit)
 
-
     const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
     expect(txHash.length).eq(66)
 
-    const getGasPriceBefore = await web3.eth.getTransaction(txHash)
-    const gasPriceBefore = Number(getGasPriceBefore['gasPrice'])
+    const txBefore = await web3.eth.getTransaction(txHash)
+    const gasPriceBefore = Number(txBefore.gasPrice)
 
     sentWorker.on('progress', async () => {
       await enableMining()
     })
 
     const sentJob = (await sentTxQueue.getJob(sentId)) as Job
-    const [status, sentHash, ] = await sentJob.waitUntilFinished(sentQueueEvents)
+    const [status, sentHash,] = await sentJob.waitUntilFinished(sentQueueEvents)
     expect(status).eq(SentTxState.MINED)
     expect(txHash).not.eq(sentHash)
 
-    const getGasPriceAfter = await web3.eth.getTransaction(sentHash)
-    const gasPriceAfter = Number(getGasPriceAfter['gasPrice'])
+    const txAfter = await web3.eth.getTransaction(sentHash)
+    const gasPriceAfter = Number(txAfter.gasPrice)
     console.log(gasPriceBefore + ' < ' + gasPriceAfter)
 
     expect(gasPriceBefore).lt(gasPriceAfter)
-    
   })
 })
