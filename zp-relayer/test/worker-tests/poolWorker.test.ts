@@ -235,17 +235,12 @@ describe('poolWorker', () => {
     // @ts-ignore
     const job = await submitJob(deposit)
 
-    // sentWorker.on('progress', async () => {
-    //   await enableMining()
-    // })
 
     const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
     expect(txHash.length).eq(66)
 
     const getGasPriceBefore = await web3.eth.getTransaction(txHash)
     const gasPriceBefore = Number(getGasPriceBefore['gasPrice'])
-
-    // await disableMining()
 
     sentWorker.on('progress', async () => {
       await enableMining()
