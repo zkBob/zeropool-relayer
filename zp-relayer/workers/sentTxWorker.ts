@@ -87,7 +87,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     const [lastHash, lastGasPrice] = prevAttempts.at(-1) as SendAttempt
 
     if (shouldReprocess) {
-      logger.info('%s sending this job for re-processing...', logPrefix)
+      // TODO: handle this case later
       // Error should be caught by `withLoop` to re-run job
       throw new Error('Ambiguity detected: nonce increased but no respond that transaction was mined')
     }
