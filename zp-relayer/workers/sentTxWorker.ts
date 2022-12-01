@@ -89,7 +89,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     if (shouldReprocess) {
       logger.info('%s sending this job for re-processing...', logPrefix)
       // Error should be caught by `withLoop` to re-run job
-      throw new Error('Transaction was not mined, but nonce increased')
+      throw new Error('Ambiguity detected: nonce increased but no respond that transaction was mined')
     }
 
     if (tx) {
@@ -129,7 +129,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         if (rootConfirmed !== root) {
           // TODO: Should be impossible but in such case
           // we should recover from some checkpoint
-          logger.error('Roots are not equal')
+          logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
         }
 
         return [SentTxState.MINED, txHash, []] as SentTxResult
