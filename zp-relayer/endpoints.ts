@@ -1,26 +1,10 @@
 import { Request, Response, NextFunction } from 'express'
 import { pool } from './pool'
-import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
-import {
-  checkGetLimits,
-  checkGetTransactions,
-  checkGetTransactionsV2,
-  checkMerkleRootErrors,
-  checkSendTransactionErrors,
-  checkSendTransactionsErrors,
-} from './validation/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 
 async function sendTransactions(req: Request, res: Response, next: NextFunction) {
-  const errors = checkSendTransactionsErrors(req.body)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
   const rawTxs = req.body
   const txs = rawTxs.map((tx: any) => {
     const { proof, memo, txType, depositSignature } = tx
@@ -36,13 +20,6 @@ async function sendTransactions(req: Request, res: Response, next: NextFunction)
 }
 
 async function sendTransaction(req: Request, res: Response, next: NextFunction) {
-  const errors = checkSendTransactionErrors(req.body)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
   const { proof, memo, txType, depositSignature } = req.body
   const tx = [{ proof, memo, txType, depositSignature }]
   const jobId = await pool.transact(tx)
@@ -50,26 +27,12 @@ async function sendTransaction(req: Request, res: Response, next: NextFunction) 
 }
 
 async function merkleRoot(req: Request, res: Response, next: NextFunction) {
-  const errors = checkMerkleRootErrors(req.params)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
   const index = req.params.index
   const root = await pool.getContractMerkleRoot(index)
   res.json(root)
 }
 
 async function getTransactions(req: Request, res: Response, next: NextFunction) {
-  const errors = checkGetTransactions(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
   const state = req.query.optimistic ? pool.optimisticState : pool.state
   // Types checked in validation stage
   // @ts-ignore
@@ -78,13 +41,6 @@ async function getTransactions(req: Request, res: Response, next: NextFunction) 
 }
 
 async function getTransactionsV2(req: Request, res: Response, next: NextFunction) {
-  const errors = checkGetTransactionsV2(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
   const toV2Format = (prefix: string) => (tx: string) => {
     const outCommit = tx.slice(0, 64)
     const txHash = tx.slice(64, 128)
@@ -130,7 +86,7 @@ async function getJob(req: Request, res: Response) {
 
   async function getPoolJobState(requestedJobId: string): Promise<GetJobResponse | null> {
     const jobId = await pool.state.jobIdsMapping.get(requestedJobId)
-    const job = await poolTxQueue.getJob(jobId)
+    let job = await poolTxQueue.getJob(jobId)
     if (!job) return null
 
     // Default result object
@@ -146,8 +102,13 @@ async function getJob(req: Request, res: Response) {
     const poolJobState = await job.getState()
     if (poolJobState === 'completed') {
       // Transaction was included in optimistic state, waiting to be mined
+      if (job.returnvalue === null) {
+        job = await poolTxQueue.getJob(jobId)
+        // Sanity check
+        if (!job || job.returnvalue === null) throw new Error('Internal job inconsistency')
+      }
       const sentJobId = job.returnvalue[0][1]
-      const sentJob = await sentTxQueue.getJob(sentJobId)
+      let sentJob = await sentTxQueue.getJob(sentJobId)
       // Should not happen here, but need to verify to be sure
       if (!sentJob) throw new Error('Sent job not found')
 
@@ -158,6 +119,11 @@ async function getJob(req: Request, res: Response) {
         result.state = JobStatus.SENT
         result.txHash = txHash || null
       } else if (sentJobState === 'completed') {
+        if (sentJob.returnvalue === null) {
+          sentJob = await sentTxQueue.getJob(sentJobId)
+          // Sanity check
+          if (!sentJob || sentJob.returnvalue === null) throw new Error('Internal job inconsistency')
+        }
         const [txState, txHash] = sentJob.returnvalue
         if (txState === SentTxState.MINED) {
           // Transaction mined successfully
@@ -173,6 +139,11 @@ async function getJob(req: Request, res: Response) {
       }
     } else if (poolJobState === 'failed') {
       // Either validation or tx sendind failed
+      if (!job.finishedOn) {
+        job = await poolTxQueue.getJob(jobId)
+        // Sanity check
+        if (!job || !job.finishedOn) throw new Error('Internal job inconsistency')
+      }
       result.state = JobStatus.FAILED
       result.failedReason = job.failedReason
       result.finishedOn = job.finishedOn || null
@@ -213,13 +184,6 @@ function getFee(req: Request, res: Response) {
 }
 
 async function getLimits(req: Request, res: Response) {
-  const errors = checkGetLimits(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
   const address = req.query.address as unknown as string
   const limits = await pool.getLimitsFor(address)
   const limitsFetch = pool.processLimits(limits)

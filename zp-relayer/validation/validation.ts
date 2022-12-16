@@ -1,13 +1,14 @@
-import Ajv, { JSONSchemaType } from 'ajv'
+import { Validator } from 'express-json-validator-middleware'
 import { isAddress } from 'web3-utils'
-import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
-import type { PoolTx } from '@/pool'
 import { ZERO_ADDRESS } from '@/utils/constants'
+import type { JSONSchema7 } from 'json-schema'
 
-const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
+type SchemaType = JSONSchema7
 
-ajv.addKeyword({
+export const validator = new Validator({ allErrors: true, coerceTypes: true, useDefaults: true })
+
+validator.ajv.addKeyword({
   keyword: 'isAddress',
   validate: (schema: any, address: string) => {
     return isAddress(address)
@@ -15,30 +16,31 @@ ajv.addKeyword({
   errors: true,
 })
 
-const AjvString: JSONSchemaType<string> = { type: 'string' }
+const AjvString: SchemaType = { type: 'string' }
 
-const AjvNullableAddress: JSONSchemaType<string> = {
+const AjvNullableAddress: SchemaType = {
   type: 'string',
   pattern: '^0x[a-fA-F0-9]{40}$',
   default: ZERO_ADDRESS,
+  // @ts-ignore
   isAddress: true,
 }
 
-const AjvG1Point: JSONSchemaType<[string, string]> = {
+const AjvG1Point: SchemaType = {
   type: 'array',
   minItems: 2,
   maxItems: 2,
   items: [AjvString, AjvString],
 }
 
-const AjvG2Point: JSONSchemaType<[[string, string], [string, string]]> = {
+const AjvG2Point: SchemaType = {
   type: 'array',
   minItems: 2,
   maxItems: 2,
   items: [AjvG1Point, AjvG1Point],
 }
 
-const AjvSnarkProofSchema: JSONSchemaType<SnarkProof> = {
+const AjvSnarkProofSchema: SchemaType = {
   type: 'object',
   properties: {
     a: AjvG1Point,
@@ -48,7 +50,7 @@ const AjvSnarkProofSchema: JSONSchemaType<SnarkProof> = {
   required: ['a', 'b', 'c'],
 }
 
-const AjvProofSchema: JSONSchemaType<Proof> = {
+const AjvProofSchema: SchemaType = {
   type: 'object',
   properties: {
     inputs: {
@@ -60,7 +62,7 @@ const AjvProofSchema: JSONSchemaType<Proof> = {
   required: ['inputs', 'proof'],
 }
 
-const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
+export const AjvSendTransactionSchema: SchemaType = {
   type: 'object',
   properties: {
     proof: AjvProofSchema,
@@ -69,21 +71,21 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
       type: 'string',
       enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
     },
-    depositSignature: { type: 'string', nullable: true },
+    depositSignature: {
+      type: 'string',
+      // @ts-ignore
+      nullable: true,
+    },
   },
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
+export const AjvSendTransactionsSchema: SchemaType = {
   type: 'array',
   items: AjvSendTransactionSchema,
 }
 
-const AjvGetTransactionsSchema: JSONSchemaType<{
-  limit: number
-  offset: number
-  optimistic: boolean
-}> = {
+export const AjvGetTransactionsSchema: SchemaType = {
   type: 'object',
   properties: {
     limit: {
@@ -104,10 +106,7 @@ const AjvGetTransactionsSchema: JSONSchemaType<{
   required: [],
 }
 
-const AjvGetTransactionsV2Schema: JSONSchemaType<{
-  limit: number
-  offset: number
-}> = {
+export const AjvGetTransactionsV2Schema: SchemaType = {
   type: 'object',
   properties: {
     limit: {
@@ -124,9 +123,7 @@ const AjvGetTransactionsV2Schema: JSONSchemaType<{
   required: [],
 }
 
-const AjvGetLimitsSchema: JSONSchemaType<{
-  address: string
-}> = {
+export const AjvGetLimitsSchema: SchemaType = {
   type: 'object',
   properties: {
     address: AjvNullableAddress,
@@ -134,9 +131,7 @@ const AjvGetLimitsSchema: JSONSchemaType<{
   required: [],
 }
 
-const AjvMerkleRootSchema: JSONSchemaType<{
-  index: string | number
-}> = {
+export const AjvMerkleRootSchema: SchemaType = {
   type: 'object',
   properties: {
     index: {
@@ -145,23 +140,3 @@ const AjvMerkleRootSchema: JSONSchemaType<{
   },
   required: ['index'],
 }
-
-function checkErrors<T>(schema: JSONSchemaType<T>) {
-  const validate = ajv.compile(schema)
-  return (data: any) => {
-    validate(data)
-    if (validate.errors) {
-      return validate.errors.map(e => {
-        return { path: e.instancePath, message: e.message }
-      })
-    }
-    return null
-  }
-}
-
-export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
-export const checkSendTransactionErrors = checkErrors(AjvSendTransactionSchema)
-export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
-export const checkGetTransactions = checkErrors(AjvGetTransactionsSchema)
-export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
-export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
