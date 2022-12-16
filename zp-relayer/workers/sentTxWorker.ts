@@ -65,17 +65,13 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       const txHash = prevAttempts[i][0]
       logger.info('Verifying %s ...', txHash)
       tx = await web3.eth.getTransactionReceipt(txHash)
-      if (tx) break
+      if (tx) return [tx, false]
     }
 
     // Transaction was not mined, but nonce was increased
     // Should send for re-processing
-    if (tx === null) {
-      logger.warn('Transaction was not mined, but nonce increased; tx should be re-processed')
-      return [null, true]
-    }
-
-    return [tx, false]
+    logger.warn('Transaction was not mined, but nonce increased; tx should be re-processed')
+    return [null, true]
   }
 
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
