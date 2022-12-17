@@ -1,10 +1,11 @@
 # Relayer for ZkBob application
 
-Relayers primary role is to deliver user-prepared ZkBob transactions to the private pool contract. Also, it can be used as cache service to conveniently retrieve information about previous transactions, current Merkle Tree state, transaction fees, etc.
+Relayer's primary role is to deliver user-prepared ZkBob transactions to the private pool contract. Also, it can be used as cache service to conveniently retrieve information about previous transactions, current Merkle Tree state, transaction fees, etc.
 
 ## How to start locally
 
 **Docker:**
+
 You can use a pre-built [image](https://github.com/zkBob/zeropool-relayer/releases) from registry. List of env configuration parameters can be found in `zp-relayer/.env.example`.
 ## Tests
 
