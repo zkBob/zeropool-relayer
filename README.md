@@ -61,11 +61,17 @@ sequenceDiagram
 For a detailed description of each method's payload you can refer to `/validation/validation.ts` file with JSON validation schemas.
 
 `/sendTransaction` - submit a transaction to relayer (deprecated).
+
 `/sendTransactions` - submit batch of transaction to relayer.
-`/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated)
+
+`/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated).
+
 `/transactions/v2?limit=${limit}&offset=${offset}` - list of encoded transactions data in the following format `"${stateBit}${txHash}${outCommit}${memo}"`. `stateBit` is `1` if transaction is in confirmed state and `0` otherwise.
+
 `/merkle/root/:index?` - get Merkle Tree root at specified index.
-`/job/:id` - information about user's job state
+
+`/job/:id` - information about user's job state.
+
 **Response**
 ```
 {
@@ -78,6 +84,7 @@ For a detailed description of each method's payload you can refer to `/validatio
 }
 ```
 `/info` - information about current pool state.
+
 **Response**
 ```
 {
@@ -88,6 +95,7 @@ For a detailed description of each method's payload you can refer to `/validatio
 }
 ```
 `/fee` - current relayer fee.
+
 **Response**
 ```
 {
@@ -95,6 +103,7 @@ For a detailed description of each method's payload you can refer to `/validatio
 }
 ```
 `/limits?address=${ethAddress}` - current pool limits.
+
 **Response**
 ```
 {
@@ -123,4 +132,5 @@ For a detailed description of each method's payload you can refer to `/validatio
 }
 ```
 `/params/hash/tree` - hash of pool tree proving parameters.
+
 `/params/hash/tx` - hash of pool transaction proving parameters.
