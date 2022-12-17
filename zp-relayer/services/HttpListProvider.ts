@@ -1,16 +1,26 @@
-import fetch, { RequestInfo } from 'node-fetch'
+// Reference implementation:
+// https://github.com/omni/tokenbridge/blob/master/oracle/src/services/HttpListProvider.js
+import fetch from 'node-fetch'
 import promiseRetry from 'promise-retry'
-import { FALLBACK_RPC_URL_SWITCH_TIMEOUT } from '../utils/constants'
+import type { OperationOptions } from 'retry'
+import { HttpProvider } from 'web3-core'
+import { FALLBACK_RPC_URL_SWITCH_TIMEOUT } from '@/utils/constants'
+import config from '@/config'
 
-// From EIP-1474 and Infura documentation
-const JSONRPC_ERROR_CODES = [-32603, -32002, -32005]
+const JSONRPC_ERROR_CODES = config.relayerJsonRpcErrorCodes
+
+class HttpListProviderError extends Error {
+  errors: Error[]
+  constructor(message: string, errors: Error[]) {
+    super(message)
+    this.errors = errors
+  }
+}
 
 interface ProviderOptions {
   name: string
   requestTimeout: number
-  retry: {
-    retries: number
-  }
+  retry: OperationOptions
 }
 
 const defaultOptions: ProviderOptions = {
@@ -21,21 +31,15 @@ const defaultOptions: ProviderOptions = {
   },
 }
 
-class HttpListProviderError extends Error {
-  errors: Error[]
-  constructor(message: string, errors: Error[]) {
-    super(message)
-    this.errors = errors
-  }
-}
-
-export default class HttpListProvider {
+export default class HttpListProvider implements HttpProvider {
+  host: string
   urls: string[]
   options: ProviderOptions
   currentIndex: number
   lastTimeUsedPrimary: number
+  connected = false
 
-  constructor(urls: string[], options = {}) {
+  constructor(urls: string[], options: Partial<ProviderOptions> = {}) {
     if (!urls || !urls.length) {
       throw new TypeError(`Invalid URLs: '${urls}'`)
     }
@@ -44,6 +48,12 @@ export default class HttpListProvider {
     this.options = { ...defaultOptions, ...options }
     this.currentIndex = 0
     this.lastTimeUsedPrimary = 0
+    this.host = this.urls[this.currentIndex]
+  }
+
+  private updateUrlIndex(index: number) {
+    this.currentIndex = index
+    this.host = this.urls[this.currentIndex]
   }
 
   async send(payload: any, callback: any) {
@@ -53,7 +63,7 @@ export default class HttpListProvider {
         { oldURL: this.urls[this.currentIndex], newURL: this.urls[0] },
         'Switching back to the primary JSON-RPC URL'
       )
-      this.currentIndex = 0
+      this.updateUrlIndex(0)
     }
 
     // save the currentIndex to avoid race condition
@@ -71,7 +81,7 @@ export default class HttpListProvider {
           { index, oldURL: this.urls[currentIndex], newURL: this.urls[index] },
           'Switching to fallback JSON-RPC URL'
         )
-        this.currentIndex = index
+        this.updateUrlIndex(index)
       }
       callback(null, result)
     } catch (e) {
@@ -79,7 +89,7 @@ export default class HttpListProvider {
     }
   }
 
-  async trySend(payload: any, initialIndex: number) {
+  private async trySend(payload: any, initialIndex: number) {
     const errors: any = []
 
     for (let count = 0; count < this.urls.length; count++) {
@@ -102,14 +112,16 @@ export default class HttpListProvider {
     throw new HttpListProviderError('Request failed for all urls', errors)
   }
 
-  async _send(url: RequestInfo, payload: any, options: ProviderOptions) {
+  private async _send(url: string, payload: any, options: ProviderOptions) {
+    console.log(options.requestTimeout)
+
     const rawResponse = await fetch(url, {
       headers: {
-        'Content-type': 'application/json',
+        'Content-type': 'application/json'
       },
       method: 'POST',
       body: JSON.stringify(payload),
-      timeout: options.requestTimeout,
+      timeout: options.requestTimeout
     })
 
     if (!rawResponse.ok) {
@@ -120,10 +132,18 @@ export default class HttpListProvider {
 
     if (
       response.error &&
-      (JSONRPC_ERROR_CODES.includes(response.error.code) || response.error.message.includes('ancient block'))
+      (JSONRPC_ERROR_CODES.includes(response.error.code) || response.error.message?.includes('ancient block'))
     ) {
-      throw new Error(response.error.message)
+      throw new Error(response?.error.message)
     }
     return response
+  }
+
+  disconnect(): boolean {
+    return true
+  }
+
+  supportsSubscriptions(): boolean {
+    return false
   }
 }

@@ -64,7 +64,11 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     for (let i = prevAttempts.length - 1; i >= 0; i--) {
       const txHash = prevAttempts[i][0]
       logger.info('Verifying %s ...', txHash)
-      tx = await web3.eth.getTransactionReceipt(txHash)
+      try {
+        tx = await web3.eth.getTransactionReceipt(txHash)
+      } catch (e) {
+        logger.warn('Cannot get tx receipt for %s; Error: %s', txHash, (e as Error).message)
+      }
       if (tx) break
     }
 
