@@ -12,7 +12,7 @@
 | MAX_NATIVE_AMOUNT_FAUCET | Maximal amount of faucet value (in ETH) | integer |
 | TREE_UPDATE_PARAMS_PATH | Local path to tree update circuit parameters | string |
 | TRANSFER_PARAMS_PATH | Local path to transfer circuit parameters | string |
-| TX_VK_PATH | Local path to transaction curcuit verification key | string |
+| TX_VK_PATH | Local path to transaction circuit verification key | string |
 | STATE_DIR_PATH | Path to persistent state files related to tree and transactions storage. Default: `./POOL_STATE` | string |
 | GAS_PRICE_FALLBACK | Default fallback gas price | integer |
 | GAS_PRICE_ESTIMATION_TYPE | Gas price estimation type | `web3` / `gas-price-oracle` / `eip1559-gas-estimation` / `polygon-gasstation-v2` |
@@ -27,7 +27,8 @@
 | EVENTS_PROCESSING_BATCH_SIZE | Batch size for one `eth_getLogs` request when reprocessing old logs. Defaults to `10000` | integer
 | RELAYER_LOG_LEVEL | Log level | Winston log level |
 | RELAYER_REDIS_URL | Url to redis instance | URL |
-| RPC_URL | Url to RPC node | URL |
+| RPC_URL | The HTTPS URL(s) used to communicate to the RPC nodes. Several URLs can be specified, delimited by spaces. If the connection to one of these nodes is lost the next URL is used for connection. | URL |
+| RELAYER_TX_REDUNDANCY | If set to `true`, instructs relayer to send `eth_sendRawTransaction` requests through all available RPC urls defined in `RPC_URL` variables instead of using first available one. Defaults to `false` | boolean |
 | SENT_TX_DELAY | Delay in milliseconds for sentTxWorker to verify submitted transactions | integer |
-| PERMIT_DEADLINE_THRESHOLD_INITIAL | Minimum time threshold in seconds for permit signature deadline to be valid (before initial transaction submition) | integer |
+| PERMIT_DEADLINE_THRESHOLD_INITIAL | Minimum time threshold in seconds for permit signature deadline to be valid (before initial transaction submission) | integer |
 | PERMIT_DEADLINE_THRESHOLD_RESEND | Minimum time threshold in seconds for permit signature deadline to be valid (for re-send attempts) | integer |

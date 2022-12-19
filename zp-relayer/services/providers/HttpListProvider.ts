@@ -1,14 +1,9 @@
 // Reference implementation:
 // https://github.com/omni/tokenbridge/blob/master/oracle/src/services/HttpListProvider.js
-import fetch from 'node-fetch'
 import promiseRetry from 'promise-retry'
-import type { OperationOptions } from 'retry'
-import { HttpProvider } from 'web3-core'
 import { FALLBACK_RPC_URL_SWITCH_TIMEOUT } from '@/utils/constants'
-import config from '@/config'
-import { logger } from './appLogger'
-
-const JSONRPC_ERROR_CODES = config.relayerJsonRpcErrorCodes
+import { logger } from '../appLogger'
+import BaseHttpProvider, { ProviderOptions } from './BaseHttpProvider'
 
 export class HttpListProviderError extends Error {
   errors: Error[]
@@ -18,38 +13,21 @@ export class HttpListProviderError extends Error {
   }
 }
 
-interface ProviderOptions {
-  name: string
-  requestTimeout: number
-  retry: OperationOptions
-}
-
-const defaultOptions: ProviderOptions = {
-  name: 'main',
-  requestTimeout: 0,
-  retry: {
-    retries: 0,
-  },
-}
-
-export default class HttpListProvider implements HttpProvider {
-  host: string
+export default class HttpListProvider extends BaseHttpProvider {
   urls: string[]
-  options: ProviderOptions
   currentIndex: number
   lastTimeUsedPrimary: number
-  connected = false
 
   constructor(urls: string[], options: Partial<ProviderOptions> = {}) {
     if (!urls || !urls.length) {
       throw new TypeError(`Invalid URLs: '${urls}'`)
     }
 
-    this.urls = urls
-    this.options = { ...defaultOptions, ...options }
+    super(urls[0], options)
     this.currentIndex = 0
     this.lastTimeUsedPrimary = 0
-    this.host = this.urls[this.currentIndex]
+
+    this.urls = urls
   }
 
   private updateUrlIndex(index: number) {
@@ -102,7 +80,7 @@ export default class HttpListProvider implements HttpProvider {
 
       const url = this.urls[index]
       try {
-        const result = await HttpListProvider._send(url, payload, this.options)
+        const result = await this._send(url, payload, this.options)
         return [result, index]
       } catch (e) {
         errors.push(e)
@@ -110,38 +88,5 @@ export default class HttpListProvider implements HttpProvider {
     }
 
     throw new HttpListProviderError('Request failed for all urls', errors)
-  }
-
-  static async _send(url: string, payload: any, options: ProviderOptions) {
-    const rawResponse = await fetch(url, {
-      headers: {
-        'Content-type': 'application/json',
-      },
-      method: 'POST',
-      body: JSON.stringify(payload),
-      timeout: options.requestTimeout,
-    })
-
-    if (!rawResponse.ok) {
-      throw new Error(rawResponse.statusText)
-    }
-
-    const response = await rawResponse.json()
-
-    if (
-      response.error &&
-      (JSONRPC_ERROR_CODES.includes(response.error.code) || response.error.message?.includes('ancient block'))
-    ) {
-      throw new Error(response?.error.message)
-    }
-    return response
-  }
-
-  disconnect(): boolean {
-    return true
-  }
-
-  supportsSubscriptions(): boolean {
-    return false
   }
 }
