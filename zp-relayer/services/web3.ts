@@ -14,7 +14,7 @@ const provider = new HttpListProvider(config.rpcUrls, providerOptions)
 const web3 = new Web3(provider as HttpProvider)
 
 let web3Redundant = web3
-if (config.rpcUrls.length > 1) {
+if (config.relayerTxRedundancy && config.rpcUrls.length > 1) {
   const redundantProvider = new RedundantHttpListProvider(config.rpcUrls, {
     ...providerOptions,
     name: 'redundant',

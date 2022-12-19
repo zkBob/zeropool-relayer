@@ -4,7 +4,7 @@ import type { TransactionReceipt } from 'web3-core'
 import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
-import { web3 } from '@/services/web3'
+import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
 import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
@@ -194,7 +194,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
       job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
-        await sendTransaction(web3, rawTransaction)
+        await sendTransaction(web3Redundant, rawTransaction)
         logger.info(`${logPrefix} Re-send tx; New hash: ${newTxHash}`)
       } catch (e) {
         const err = e as Error
