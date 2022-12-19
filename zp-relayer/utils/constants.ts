@@ -15,7 +15,7 @@ const constants = {
     retries: 2,
     factor: 1.4,
     maxTimeout: 360000,
-    randomize: true
+    randomize: true,
   },
 }
 

@@ -6,10 +6,11 @@ import type { OperationOptions } from 'retry'
 import { HttpProvider } from 'web3-core'
 import { FALLBACK_RPC_URL_SWITCH_TIMEOUT } from '@/utils/constants'
 import config from '@/config'
+import { logger } from './appLogger'
 
 const JSONRPC_ERROR_CODES = config.relayerJsonRpcErrorCodes
 
-class HttpListProviderError extends Error {
+export class HttpListProviderError extends Error {
   errors: Error[]
   constructor(message: string, errors: Error[]) {
     super(message)
@@ -59,10 +60,7 @@ export default class HttpListProvider implements HttpProvider {
   async send(payload: any, callback: any) {
     // if fallback URL is being used for too long, switch back to the primary URL
     if (this.currentIndex > 0 && Date.now() - this.lastTimeUsedPrimary > FALLBACK_RPC_URL_SWITCH_TIMEOUT) {
-      console.log(
-        { oldURL: this.urls[this.currentIndex], newURL: this.urls[0] },
-        'Switching back to the primary JSON-RPC URL'
-      )
+      logger.info('Switching back to the primary JSON-RPC URL: %s -> %s', this.urls[this.currentIndex], this.urls[0])
       this.updateUrlIndex(0)
     }
 
@@ -77,9 +75,11 @@ export default class HttpListProvider implements HttpProvider {
 
       // if some of URLs failed to respond, current URL index is updated to the first URL that responded
       if (currentIndex !== index) {
-        console.log(
-          { index, oldURL: this.urls[currentIndex], newURL: this.urls[index] },
-          'Switching to fallback JSON-RPC URL'
+        logger.info(
+          'Switching to fallback JSON-RPC URL: %s -> %s; Index: %d',
+          this.urls[this.currentIndex],
+          this.urls[index],
+          index
         )
         this.updateUrlIndex(index)
       }
@@ -102,7 +102,7 @@ export default class HttpListProvider implements HttpProvider {
 
       const url = this.urls[index]
       try {
-        const result = await this._send(url, payload, this.options)
+        const result = await HttpListProvider._send(url, payload, this.options)
         return [result, index]
       } catch (e) {
         errors.push(e)
@@ -112,16 +112,14 @@ export default class HttpListProvider implements HttpProvider {
     throw new HttpListProviderError('Request failed for all urls', errors)
   }
 
-  private async _send(url: string, payload: any, options: ProviderOptions) {
-    console.log(options.requestTimeout)
-
+  static async _send(url: string, payload: any, options: ProviderOptions) {
     const rawResponse = await fetch(url, {
       headers: {
-        'Content-type': 'application/json'
+        'Content-type': 'application/json',
       },
       method: 'POST',
       body: JSON.stringify(payload),
-      timeout: options.requestTimeout
+      timeout: options.requestTimeout,
     })
 
     if (!rawResponse.ok) {

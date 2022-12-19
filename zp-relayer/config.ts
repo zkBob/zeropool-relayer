@@ -37,7 +37,9 @@ const config = {
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
   rpcRequestTimeout: parseInt(process.env.RPC_REQUEST_TIMEOUT || '1000'),
   permitDeadlineThresholdInitial: parseInt(process.env.PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),
-  relayerJsonRpcErrorCodes: (process.env.RELAYER_JSONRPC_ERROR_CODES || '-32603,-32002,-32005').split(',').map(s => parseInt(s, 10))
+  relayerJsonRpcErrorCodes: (process.env.RELAYER_JSONRPC_ERROR_CODES || '-32603,-32002,-32005')
+    .split(',')
+    .map(s => parseInt(s, 10)),
 }
 
 export default config
