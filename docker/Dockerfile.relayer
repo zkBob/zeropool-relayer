@@ -4,7 +4,7 @@ WORKDIR /app
 
 RUN apt-get update && \
     apt-get -y install curl && \
-    curl -sL https://deb.nodesource.com/setup_16.x | bash && \
+    curl -sL https://deb.nodesource.com/setup_18.x | bash && \
     apt-get -y install nodejs libclang-dev clang && \
     npm install -g yarn cargo-cp-artifact
 
@@ -25,6 +25,8 @@ FROM base as build
 
 COPY zp-relayer ./zp-relayer
 RUN yarn build:relayer
+# Prune devDependencies
+RUN yarn install --frozen-lockfile --production
 
 
 FROM node:18
