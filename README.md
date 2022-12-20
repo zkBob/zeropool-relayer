@@ -6,7 +6,8 @@ Relayer's primary role is to deliver user-prepared ZkBob transactions to the pri
 
 **Docker:**
 
-You can use a pre-built [image](https://github.com/zkBob/zeropool-relayer/releases) from registry. List of env configuration parameters can be found in `zp-relayer/.env.example`.
+You can use a pre-built [image](https://github.com/zkBob/zeropool-relayer/releases) from registry. List of env configuration parameters can be found in `zp-relayer/.env.example`. The repository [zkBob/relayer-launch](https://github.com/zkBob/relayer-launch) can be used to run the relayer with the docker-compose facility.
+
 ## Tests
 
 **Unit tests:**
