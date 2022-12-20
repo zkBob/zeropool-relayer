@@ -16,14 +16,7 @@ import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
-import {
-  disableMining,
-  enableMining,
-  evmRevert,
-  evmSnapshot,
-  mintTokens,
-  newConnection,
-} from './utils'
+import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection } from './utils'
 import { validateTx } from '../../validateTx'
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
@@ -151,7 +144,7 @@ describe('poolWorker', () => {
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await sentWorker.pause()
 
-    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => { }, workerMutex, newConnection())
+    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => {}, workerMutex, newConnection())
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()
 
@@ -242,7 +235,7 @@ describe('poolWorker', () => {
     })
 
     const sentJob = (await sentTxQueue.getJob(sentId)) as Job
-    const [status, sentHash,] = await sentJob.waitUntilFinished(sentQueueEvents)
+    const [status, sentHash] = await sentJob.waitUntilFinished(sentQueueEvents)
     expect(status).eq(SentTxState.MINED)
     expect(txHash).not.eq(sentHash)
 
