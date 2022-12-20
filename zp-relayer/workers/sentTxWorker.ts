@@ -68,16 +68,13 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         tx = await web3.eth.getTransactionReceipt(txHash)
       } catch (e) {
         logger.warn('Cannot get tx receipt for %s; Error: %s', txHash, (e as Error).message)
+        throw e
       }
-      if (tx) break
+      if (tx && tx.blockNumber) return [tx, false]
     }
 
     // Transaction was not mined, but nonce was increased
-    if (tx === null) {
-      return [null, true]
-    }
-
-    return [tx, false]
+    return [null, true]
   }
 
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
@@ -108,7 +105,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Update tx hash in optimistic state tx db
         pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
-        // Add nullifer to confirmed state and remove from optimistic one
+        // Add nullifier to confirmed state and remove from optimistic one
         logger.info('Adding nullifier %s to PS', nullifier)
         await pool.state.nullifiers.add([nullifier])
         logger.info('Removing nullifier %s from OS', nullifier)
@@ -201,7 +198,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
         if (isGasPriceError(err) || isSameTransactionError(err)) {
           // Tx wasn't sent successfully, but still update last attempt's
-          // gasPrice to be acccounted in the next iteration
+          // gasPrice to be accounted in the next iteration
           await job.update({
             ...job.data,
           })
