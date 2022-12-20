@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:nightly-70f4fb55fa87e0e980f7f9fcccc5429bb1a48dbe
+    ports:
+      - 8545:8545
+    entrypoint: >
+      anvil
+      --host 0.0.0.0
+      -m "myth like bonus scare over problem client lizard pioneer submit female collect"
+  contracts:
+    image: lok52/zkbob-contracts:latest
+  redis:
+    container_name: redis
+    command: [redis-server, --port, '6379', --appendonly, 'yes']
+    image: redis:6.2.6
+    ports:
+      - 6379:6379
