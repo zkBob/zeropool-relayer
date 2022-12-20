@@ -6,7 +6,7 @@ Relayer's primary role is to deliver user-prepared ZkBob transactions to the pri
 
 **Docker:**
 
-You can use a pre-built [image](https://github.com/zkBob/zeropool-relayer/releases) from registry. List of env configuration parameters can be found in `zp-relayer/.env.example`. The repository [zkBob/relayer-launch](https://github.com/zkBob/relayer-launch) can be used to run the relayer with the docker-compose facility.
+You can use a pre-built [image](https://github.com/zkBob/zeropool-relayer/pkgs/container/zkbob-relayer) from registry. List of env configuration parameters can be found in [`zp-relayer/.env.example`](zp-relayer/.env.example). The repository [zkBob/relayer-launch](https://github.com/zkBob/relayer-launch) can be used to run the relayer with the docker-compose facility.
 
 ## Tests
 
@@ -59,79 +59,83 @@ sequenceDiagram
 
 ## API
 
-For a detailed description of each method's payload you can refer to `/validation/validation.ts` file with JSON validation schemas.
+For a detailed description of each method's payload you can refer to [`zp-relayer/validation/validation.ts`](zp-relayer/validation/validation.ts) file with JSON validation schemas.
 
-`/sendTransaction` - submit a transaction to relayer (deprecated).
+- `/sendTransaction` - submit a transaction to relayer (deprecated).
 
-`/sendTransactions` - submit batch of transaction to relayer.
+- `/sendTransactions` - submit batch of transaction to relayer.
 
-`/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated).
+- `/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated).
 
-`/transactions/v2?limit=${limit}&offset=${offset}` - list of encoded transactions data in the following format `"${stateBit}${txHash}${outCommit}${memo}"`. `stateBit` is `1` if transaction is in confirmed state and `0` otherwise.
+- `/transactions/v2?limit=${limit}&offset=${offset}` - list of encoded transactions data in the following format `"${stateBit}${txHash}${outCommit}${memo}"`. `stateBit` is `1` if transaction is in confirmed state and `0` otherwise.
 
-`/merkle/root/:index?` - get Merkle Tree root at specified index.
+- `/merkle/root/:index?` - get Merkle Tree root at specified index.
 
-`/job/:id` - information about user's job state.
+- `/job/:id` - information about user's job state.
+    
+    **Response**
+    ```
+    {
+        resolvedJobId // Resolved job id as job can be re-tried several times
+        createdOn
+        failedReason
+        finishedOn
+        state
+        txHash
+    }
+    ```
 
-**Response**
-```
-{
-    resolvedJobId // Resolved job id as job can be re-tried several times
-    createdOn
-    failedReason
-    finishedOn
-    state
-    txHash
-}
-```
-`/info` - information about current pool state.
+- `/info` - information about current pool state.
+    
+    **Response**
+    ```
+    {
+        root // Confirmed tree root
+        optimisticRoot // Optimistic tree root
+        deltaIndex // Confirmed tree root index
+        optimisticDeltaIndex // Optimistic tree root index
+    }
+    ```
 
-**Response**
-```
-{
-    root // Confirmed tree root
-    optimisticRoot // Optimistic tree root
-    deltaIndex // Confirmed tree root index
-    optimisticDeltaIndex // Optimistic tree root index
-}
-```
-`/fee` - current relayer fee.
+- `/fee` - current relayer fee.
 
-**Response**
-```
-{
-    fee // Fee in pool tokens
-}
-```
-`/limits?address=${ethAddress}` - current pool limits.
+    **Response**
+    ```
+    {
+        fee // Fee in pool tokens
+    }
+    ```
 
-**Response**
-```
-{
-    deposit: {
-        singleOperation // Limit for single pool operation
-        daylyForAddress: { // Daily deposit limits for address
-          total
-          available
+- `/limits?address=${ethAddress}` - current pool limits.
+
+    **Response**
+    ```
+    {
+        deposit: {
+            singleOperation // Limit for single pool operation
+            daylyForAddress: { // Daily deposit limits for address
+              total
+              available
+            },
+            daylyForAll: { // Daily deposit limits  for all users
+              total
+              available
+            },
+            poolLimit: { // Daily pool limit
+              total 
+              available
+            },
         },
-        daylyForAll: { // Daily deposit limits  for all users
-          total
-          available
+        withdraw: {
+            daylyForAll: { // Daily withdraw limit for all users
+              total
+              available
+            },
         },
-        poolLimit: { // Daily pool limit
-          total 
-          available
-        },
-    },
-    withdraw: {
-        daylyForAll: { // Daily withdraw limit for all users
-          total
-          available
-        },
-    },
-    tier // Address tier
-}
-```
-`/params/hash/tree` - hash of pool tree proving parameters.
+        tier // Address tier
+    }
+    ```
 
-`/params/hash/tx` - hash of pool transaction proving parameters.
+- `/params/hash/tree` - hash of pool tree proving parameters.
+
+- `/params/hash/tx` - hash of pool transaction proving parameters.
