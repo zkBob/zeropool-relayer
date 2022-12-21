@@ -1,6 +1,6 @@
 import { toBN, toWei } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
-import { web3 } from '@/services/web3'
+import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
@@ -43,7 +43,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
     const logPrefix = `POOL WORKER: Job ${job.id}:`
     logger.info('%s processing...', logPrefix)
-    logger.info('Recieved %s txs', txs.length)
+    logger.info('Received %s txs', txs.length)
 
     const txHashes: [string, string][] = []
     for (const tx of txs) {
@@ -74,7 +74,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
           },
           config.relayerPrivateKey
         )
-        await sendTransaction(web3, rawTransaction)
+        await sendTransaction(web3Redundant, rawTransaction)
 
         await updateNonce(++nonce)
 
