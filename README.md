@@ -71,6 +71,13 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
 
 - `/merkle/root/:index?` - get Merkle Tree root at specified index.
 
+- `/siblings?index=${index}` - get left siblings starting from a leaf node at `index` up to the tree root.
+
+    **Response**
+    ```
+    "${height}${sibling_index}${sibling_value}"[]
+    ```
+
 - `/job/:id` - information about user's job state.
     
     **Response**
