@@ -67,7 +67,8 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       try {
         tx = await web3.eth.getTransactionReceipt(txHash)
       } catch (e) {
-        logger.warn('Cannot get tx receipt for %s; Error: %s', txHash, (e as Error).message)
+        logger.warn('Cannot get tx receipt for %s; RPC response: %s', txHash, (e as Error).message)
+        // Exception should be caught by `withLoop` to re-run job
         throw e
       }
       if (tx && tx.blockNumber) return [tx, false]
