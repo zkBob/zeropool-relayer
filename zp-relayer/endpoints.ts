@@ -132,7 +132,7 @@ async function getJob(req: Request, res: Response) {
   async function getPoolJobState(requestedJobId: string): Promise<GetJobResponse | null> {
     const INCONSISTENCY_ERR = 'Internal job inconsistency'
 
-    // Show be used in places where job is expected to exist
+    // Should be used in places where job is expected to exist
     const safeGetJob = async (queue: Queue, id: string) => {
       const job = await queue.getJob(id)
       if (!job) {
