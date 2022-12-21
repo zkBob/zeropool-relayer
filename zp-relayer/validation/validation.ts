@@ -15,6 +15,14 @@ ajv.addKeyword({
   errors: true,
 })
 
+ajv.addKeyword({
+  keyword: 'isDivBy128',
+  validate: (schema: any, n: number) => {
+    return n % 128 === 0
+  },
+  errors: true,
+})
+
 const AjvString: JSONSchemaType<string> = { type: 'string' }
 
 const AjvNullableAddress: JSONSchemaType<string> = {
@@ -146,6 +154,20 @@ const AjvMerkleRootSchema: JSONSchemaType<{
   required: ['index'],
 }
 
+const AjvGetSiblingsSchema: JSONSchemaType<{
+  index: string | number
+}> = {
+  type: 'object',
+  properties: {
+    index: {
+      type: 'integer',
+      minimum: 1,
+      isDivBy128: true,
+    },
+  },
+  required: ['index'],
+}
+
 function checkErrors<T>(schema: JSONSchemaType<T>) {
   const validate = ajv.compile(schema)
   return (data: any) => {
@@ -165,3 +187,4 @@ export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema
 export const checkGetTransactions = checkErrors(AjvGetTransactionsSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
+export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)

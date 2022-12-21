@@ -3497,6 +3497,13 @@ libzkbob-rs-node@0.1.27:
   dependencies:
     cargo-cp-artifact "^0.1"
 
+libzkbob-rs-node@0.2.1:
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/libzkbob-rs-node/-/libzkbob-rs-node-0.2.1.tgz#58340fce40c5ba06641f3b3afb131ccfe5fef634"
+  integrity sha512-Qh2EXpXTVOi1CZ6bvbKjXRw9dkoXgq7ss/YX+fxpJGYRAa6UIyt+Lrv4jZrSddNOGMrlItkDFtNOsXZVfdFSRw==
+  dependencies:
+    cargo-cp-artifact "^0.1"
+
 libzkbob-rs-wasm-web@^0.7.0:
   version "0.7.0"
   resolved "https://registry.yarnpkg.com/libzkbob-rs-wasm-web/-/libzkbob-rs-wasm-web-0.7.0.tgz#2bd54bb0687a0194ce7c3e43ceecb55a378dba06"

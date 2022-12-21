@@ -100,6 +100,10 @@ export class PoolState {
     return this.tree.getNextIndex()
   }
 
+  getSiblings(index: number) {
+    return this.tree.getLeftSiblings(index)
+  }
+
   addTx(i: number, tx: Buffer) {
     this.txs.add(i, tx)
   }

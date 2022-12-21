@@ -5,6 +5,7 @@ import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
 import {
   checkGetLimits,
+  checkGetSiblings,
   checkGetTransactions,
   checkGetTransactionsV2,
   checkMerkleRootErrors,
@@ -251,6 +252,25 @@ async function getLimits(req: Request, res: Response) {
   res.json(limitsFetch)
 }
 
+function getSiblings(req: Request, res: Response) {
+  const errors = checkGetSiblings(req.query)
+  if (errors) {
+    logger.info('Request errors: %o', errors)
+    res.status(400).json({ errors })
+    return
+  }
+
+  const index = req.query.index as unknown as number
+
+  if (index >= pool.state.getNextIndex()) {
+    res.status(400).json({ errors: ['Index out of range'] })
+    return
+  }
+
+  const siblings = pool.state.getSiblings(index)
+  res.json(siblings)
+}
+
 function getParamsHash(type: 'tree' | 'transfer') {
   const hash = type === 'tree' ? pool.treeParamsHash : pool.transferParamsHash
   return (req: Request, res: Response) => {
@@ -272,6 +292,7 @@ export default {
   relayerInfo,
   getFee,
   getLimits,
+  getSiblings,
   getParamsHash,
   root,
 }
