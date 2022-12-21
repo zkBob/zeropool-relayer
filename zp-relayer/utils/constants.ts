@@ -14,7 +14,7 @@ const constants = {
   RETRY_CONFIG: {
     retries: 2,
     factor: 1.4,
-    maxTimeout: 360000,
+    maxTimeout: 60000,
     randomize: true,
   },
 }
