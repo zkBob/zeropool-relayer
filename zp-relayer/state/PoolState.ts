@@ -3,21 +3,18 @@ import { logger } from '@/services/appLogger'
 import { OUTPLUSONE } from '@/utils/constants'
 import { MerkleTree, TxStorage, MerkleProof, Constants, Helpers } from 'libzkbob-rs-node'
 import { NullifierSet } from './nullifierSet'
-import { RootSet } from './rootSet'
 import { JobIdsMapping } from './jobIdsMapping'
 
 export class PoolState {
   private tree: MerkleTree
   private txs: TxStorage
   public nullifiers: NullifierSet
-  public roots: RootSet
   public jobIdsMapping: JobIdsMapping
 
   constructor(private name: string, redis: Redis, path: string) {
     this.tree = new MerkleTree(`${path}/${name}Tree.db`)
     this.txs = new TxStorage(`${path}/${name}Txs.db`)
     this.nullifiers = new NullifierSet(`${name}-nullifiers`, redis)
-    this.roots = new RootSet(`${name}-roots`, redis)
     // This structure can be shared among different pool states
     // So, use constant name
     this.jobIdsMapping = new JobIdsMapping('job-id-mapping', redis)
@@ -87,7 +84,10 @@ export class PoolState {
     return [outCommit, memo]
   }
 
-  getMerkleRoot(): string {
+  getMerkleRoot(index?: number): string {
+    if (index) {
+      return this.tree.getRootAt(index)
+    }
     return this.tree.getRoot()
   }
 
