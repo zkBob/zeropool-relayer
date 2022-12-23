@@ -18,8 +18,10 @@ import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection } from './utils'
 import { validateTx } from '../../validateTx'
+
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
+import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -244,5 +246,25 @@ describe('poolWorker', () => {
     console.log(gasPriceBefore + ' < ' + gasPriceAfter)
 
     expect(gasPriceBefore).lt(gasPriceAfter)
+  })
+
+  it('should reject withdrawal to zero address', async () => {
+    const [deposit, withdraw] = flowZeroAddressWithdraw
+
+    await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
+
+    // @ts-ignore
+    const job = await submitJob(deposit)
+    const [[, sentId]] = await job.waitUntilFinished(poolQueueEvents)
+
+    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
+    const [, sentHash] = await sentJob.waitUntilFinished(sentQueueEvents)
+
+    const r = await web3.eth.getTransactionReceipt(sentHash)
+    expect(r.status).eq(true)
+
+    // @ts-ignore
+    const withdrawJob = await submitJob(withdraw)
+    await expect(withdrawJob.waitUntilFinished(poolQueueEvents)).rejectedWith('Withdraw address cannot be zero')
   })
 })

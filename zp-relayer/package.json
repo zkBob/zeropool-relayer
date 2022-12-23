@@ -26,7 +26,7 @@
     "express-winston": "4.2.0",
     "gas-price-oracle": "0.5.1",
     "ioredis": "5.2.4",
-    "libzkbob-rs-node": "0.2.1",
+    "libzkbob-rs-node": "0.2.2",
     "node-fetch": "^2.6.1",
     "promise-retry": "^2.0.1",
     "web3": "1.7.4",
