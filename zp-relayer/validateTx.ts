@@ -260,7 +260,7 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   if (txType === TxType.WITHDRAWAL) {
     const { nativeAmount, receiver } = txData as WithdrawTxData
     const receiverAddress = web3.utils.bytesToHex(Array.from(receiver))
-    logger.info('Withdraw address: %s', receiver)
+    logger.info('Withdraw address: %s', receiverAddress)
     await checkAssertion(() => checkNonZeroWithdrawAddress(receiverAddress))
     await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
   }
