@@ -69,13 +69,7 @@ export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
   return new TxValidationError(`Incorrect transfer index`)
 }
 
-export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN, txData: TxData) {
-  logger.debug(
-    'TOKENS %s, ENERGY %s, TX DATA %s',
-    tokenAmount.toString(),
-    energyAmount.toString(),
-    JSON.stringify(txData)
-  )
+export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN) {
   let isValid = false
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     isValid = tokenAmount.gte(ZERO) && energyAmount.eq(ZERO)
@@ -107,9 +101,16 @@ export function checkFee(fee: BN) {
   return null
 }
 
+export function checkNonZeroWithdrawAddress(address: string) {
+  if (address === ZERO_ADDRESS) {
+    return new TxValidationError('Withdraw address cannot be zero')
+  }
+  return null
+}
+
 /**
  * @param signedDeadline deadline signed by user, in seconds
- * @param threshold "window" added to curent relayer time, in seconds
+ * @param threshold "window" added to current relayer time, in seconds
  */
 export function checkDeadline(signedDeadline: BN, threshold: number) {
   logger.debug(`Deadline: ${signedDeadline}`)
@@ -188,7 +189,7 @@ async function getRecoveredAddress(
       throw new TxValidationError(`Invalid deposit signer; Restored: ${recoveredAddress}; Expected: ${owner}`)
     }
   } else {
-    throw new TxValidationError('Unsupported txtype')
+    throw new TxValidationError('Unsupported TxType')
   }
 
   return recoveredAddress
@@ -218,7 +219,7 @@ async function checkRoot(
     return new TxValidationError(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
   }
 
-  // If recieved correct root from contract update cache (only confirmed state)
+  // If received correct root from contract update cache (only confirmed state)
   if (!isPresent) {
     await poolSet.add({ [proofIndex.toNumber()]: root })
   }
@@ -235,6 +236,13 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
   const fee = toBN(txData.fee)
 
+  logger.info(
+    'Delta tokens: %s, Energy tokens: %s, Fee: %s',
+    delta.tokenAmount.toString(10),
+    delta.energyAmount.toString(10),
+    fee.toString(10)
+  )
+
   // prettier-ignore
   await checkAssertion(() => checkRoot(
     delta.transferIndex,
@@ -250,23 +258,28 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   await checkAssertion(() => checkFee(fee))
 
   if (txType === TxType.WITHDRAWAL) {
-    const nativeAmount = (txData as WithdrawTxData).nativeAmount
+    const { nativeAmount, receiver } = txData as WithdrawTxData
+    const receiverAddress = web3.utils.bytesToHex(Array.from(receiver))
+    logger.info('Withdraw address: %s', receiver)
+    await checkAssertion(() => checkNonZeroWithdrawAddress(receiverAddress))
     await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
   }
 
   await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
   const tokenAmountWithFee = delta.tokenAmount.add(fee)
-  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount, txData))
+  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount))
 
   const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
   let userAddress = ZERO_ADDRESS
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
+    logger.info('Deposit address: %s', userAddress)
     await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
   }
   if (txType === TxType.PERMITTABLE_DEPOSIT) {
-    const deadline = (txData as PermittableDepositTxData).deadline
+    const { deadline } = txData as PermittableDepositTxData
+    logger.info('Deadline: %s', deadline)
     await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdInitial))
   }
 

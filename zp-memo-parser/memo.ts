@@ -16,7 +16,7 @@ interface DefaultTxData {
 
 export interface WithdrawTxData extends DefaultTxData {
   nativeAmount: string
-  reciever: Uint8Array
+  receiver: Uint8Array
 }
 
 export interface PermittableDepositTxData extends DefaultTxData {
@@ -103,11 +103,11 @@ export function getTxData(data: Buffer, txType: Option<TxType>): TxData {
   if (txType === TxType.WITHDRAWAL) {
     const nativeAmount = readU64(offset)
     offset += 8
-    const reciever = new Uint8Array(data.slice(offset, offset + 20))
+    const receiver = new Uint8Array(data.slice(offset, offset + 20))
     return {
       fee,
       nativeAmount,
-      reciever,
+      receiver,
     }
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
     const deadline = readU64(offset)
