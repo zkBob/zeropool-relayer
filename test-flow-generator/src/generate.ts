@@ -1,6 +1,6 @@
 import init, { TransactionData, UserAccount, UserState } from 'libzkbob-rs-wasm-web'
 import { toChecksumAddress } from 'web3-utils'
-import type { BaseOutputItem, Flow, FlowOutput } from './types'
+import type { Flow, FlowOutput } from './types'
 import { ethAddrToBuf, packSignature, toTwosComplementHex } from './helpers'
 import { createSignature } from './EIP712'
 import { config } from './config'
