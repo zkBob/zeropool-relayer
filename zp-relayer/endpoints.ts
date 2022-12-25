@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import { pool } from './pool'
+import { pool, PoolTx } from './pool'
 import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
@@ -9,7 +9,6 @@ import {
   checkGetTransactions,
   checkGetTransactionsV2,
   checkMerkleRootErrors,
-  checkSendTransactionErrors,
   checkSendTransactionsErrors,
 } from './validation/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
@@ -23,8 +22,10 @@ async function sendTransactions(req: Request, res: Response, next: NextFunction)
     return
   }
 
-  const rawTxs = req.body
-  const txs = rawTxs.map((tx: any) => {
+  const transactions = req.body.transactions as PoolTx[]
+  const traceId = req.body.traceId
+
+  const txs = transactions.map(tx => {
     const { proof, memo, txType, depositSignature } = tx
     return {
       proof,
@@ -33,21 +34,7 @@ async function sendTransactions(req: Request, res: Response, next: NextFunction)
       depositSignature,
     }
   })
-  const jobId = await pool.transact(txs)
-  res.json({ jobId })
-}
-
-async function sendTransaction(req: Request, res: Response, next: NextFunction) {
-  const errors = checkSendTransactionErrors(req.body)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
-  const { proof, memo, txType, depositSignature } = req.body
-  const tx = [{ proof, memo, txType, depositSignature }]
-  const jobId = await pool.transact(tx)
+  const jobId = await pool.transact(txs, traceId)
   res.json({ jobId })
 }
 
@@ -283,7 +270,6 @@ function root(req: Request, res: Response) {
 }
 
 export default {
-  sendTransaction,
   sendTransactions,
   merkleRoot,
   getTransactions,

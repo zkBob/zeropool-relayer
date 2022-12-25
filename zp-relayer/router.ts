@@ -29,7 +29,6 @@ router.use((err: any, req: Request, res: Response, next: NextFunction) => {
 })
 
 router.get('/', endpoints.root)
-router.post('/sendTransaction', wrapErr(endpoints.sendTransaction))
 router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
 router.get('/transactions', wrapErr(endpoints.getTransactions))
 router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))

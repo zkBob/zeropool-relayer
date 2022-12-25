@@ -82,9 +82,20 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
-  type: 'array',
-  items: AjvSendTransactionSchema,
+const AjvSendTransactionsSchema: JSONSchemaType<{
+  transactions: PoolTx[]
+  traceId: string | null
+}> = {
+  type: 'object',
+  properties: {
+    transactions: {
+      type: 'array',
+      items: AjvSendTransactionSchema,
+      minItems: 1,
+    },
+    traceId: { type: 'string', nullable: true },
+  },
+  required: ['transactions'],
 }
 
 const AjvGetTransactionsSchema: JSONSchemaType<{
@@ -182,7 +193,6 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
 }
 
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
-export const checkSendTransactionErrors = checkErrors(AjvSendTransactionSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
 export const checkGetTransactions = checkErrors(AjvGetTransactionsSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)

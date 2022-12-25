@@ -109,7 +109,7 @@ class Pool {
     this.isInitialized = true
   }
 
-  async transact(txs: PoolTx[]) {
+  async transact(txs: PoolTx[], traceId?: string) {
     const queueTxs = txs.map(({ proof, txType, memo, depositSignature }) => {
       return {
         amount: '0',
@@ -120,7 +120,7 @@ class Pool {
         depositSignature,
       }
     })
-    const job = await poolTxQueue.add('tx', queueTxs)
+    const job = await poolTxQueue.add('tx', { transactions: queueTxs, traceId })
     logger.debug(`Added job: ${job.id}`)
     return job.id
   }

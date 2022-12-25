@@ -13,8 +13,13 @@ export interface TxPayload {
   depositSignature: string | null
 }
 
+export interface BatchTx {
+  transactions: TxPayload[]
+  traceId?: string
+}
+
 export type PoolTxResult = [string, string]
 
-export const poolTxQueue = new Queue<TxPayload[], PoolTxResult[]>(TX_QUEUE_NAME, {
+export const poolTxQueue = new Queue<BatchTx, PoolTxResult[]>(TX_QUEUE_NAME, {
   connection: redis,
 })
