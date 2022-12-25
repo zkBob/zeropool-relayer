@@ -61,8 +61,6 @@ sequenceDiagram
 
 For a detailed description of each method's payload you can refer to [`zp-relayer/validation/validation.ts`](zp-relayer/validation/validation.ts) file with JSON validation schemas.
 
-- `/sendTransaction` - submit a transaction to relayer (deprecated).
-
 - `/sendTransactions` - submit batch of transaction to relayer.
 
 - `/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated).
@@ -120,11 +118,11 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
     {
         deposit: {
             singleOperation // Limit for single pool operation
-            daylyForAddress: { // Daily deposit limits for address
+            dailyForAddress: { // Daily deposit limits for address
               total
               available
             },
-            daylyForAll: { // Daily deposit limits  for all users
+            dailyForAll: { // Daily deposit limits  for all users
               total
               available
             },
@@ -134,7 +132,7 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
             },
         },
         withdraw: {
-            daylyForAll: { // Daily withdraw limit for all users
+            dailyForAll: { // Daily withdraw limit for all users
               total
               available
             },
