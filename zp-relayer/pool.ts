@@ -42,11 +42,11 @@ export interface Limits {
 export interface LimitsFetch {
   deposit: {
     singleOperation: string
-    daylyForAddress: {
+    dailyForAddress: {
       total: string
       available: string
     }
-    daylyForAll: {
+    dailyForAll: {
       total: string
       available: string
     }
@@ -56,7 +56,7 @@ export interface LimitsFetch {
     }
   }
   withdraw: {
-    daylyForAll: {
+    dailyForAll: {
       total: string
       available: string
     }
@@ -260,11 +260,11 @@ class Pool {
     const limitsFetch = {
       deposit: {
         singleOperation: limits.depositCap.toString(10),
-        daylyForAddress: {
+        dailyForAddress: {
           total: limits.dailyUserDepositCap.toString(10),
           available: limits.dailyUserDepositCap.sub(limits.dailyUserDepositCapUsage).toString(10),
         },
-        daylyForAll: {
+        dailyForAll: {
           total: limits.dailyDepositCap.toString(10),
           available: limits.dailyDepositCap.sub(limits.dailyDepositCapUsage).toString(10),
         },
@@ -274,7 +274,7 @@ class Pool {
         },
       },
       withdraw: {
-        daylyForAll: {
+        dailyForAll: {
           total: limits.dailyWithdrawalCap.toString(10),
           available: limits.dailyWithdrawalCap.sub(limits.dailyWithdrawalCapUsage).toString(10),
         },
