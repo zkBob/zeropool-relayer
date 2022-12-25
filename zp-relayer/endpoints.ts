@@ -6,7 +6,6 @@ import config from './config'
 import {
   checkGetLimits,
   checkGetSiblings,
-  checkGetTransactions,
   checkGetTransactionsV2,
   checkMerkleRootErrors,
   checkSendTransactionsErrors,
@@ -49,21 +48,6 @@ async function merkleRoot(req: Request, res: Response, next: NextFunction) {
   const index = req.params.index
   const root = await pool.getContractMerkleRoot(index)
   res.json(root)
-}
-
-async function getTransactions(req: Request, res: Response, next: NextFunction) {
-  const errors = checkGetTransactions(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
-  const state = req.query.optimistic ? pool.optimisticState : pool.state
-  // Types checked in validation stage
-  // @ts-ignore
-  const { txs } = await state.getTransactions(req.query.limit, req.query.offset)
-  res.json(txs)
 }
 
 async function getTransactionsV2(req: Request, res: Response, next: NextFunction) {
@@ -272,7 +256,6 @@ function root(req: Request, res: Response) {
 export default {
   sendTransactions,
   merkleRoot,
-  getTransactions,
   getTransactionsV2,
   getJob,
   relayerInfo,

@@ -63,8 +63,6 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
 
 - `/sendTransactions` - submit batch of transaction to relayer.
 
-- `/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated).
-
 - `/transactions/v2?limit=${limit}&offset=${offset}` - list of encoded transactions data in the following format `"${stateBit}${txHash}${outCommit}${memo}"`. `stateBit` is `1` if transaction is in confirmed state and `0` otherwise.
 
 - `/merkle/root/:index?` - get Merkle Tree root at specified index.

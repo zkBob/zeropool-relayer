@@ -98,31 +98,6 @@ const AjvSendTransactionsSchema: JSONSchemaType<{
   required: ['transactions'],
 }
 
-const AjvGetTransactionsSchema: JSONSchemaType<{
-  limit: number
-  offset: number
-  optimistic: boolean
-}> = {
-  type: 'object',
-  properties: {
-    limit: {
-      type: 'integer',
-      minimum: 1,
-      default: 100,
-    },
-    offset: {
-      type: 'integer',
-      minimum: 0,
-      default: 0,
-    },
-    optimistic: {
-      type: 'boolean',
-      default: false,
-    },
-  },
-  required: [],
-}
-
 const AjvGetTransactionsV2Schema: JSONSchemaType<{
   limit: number
   offset: number
@@ -194,7 +169,6 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
 
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
-export const checkGetTransactions = checkErrors(AjvGetTransactionsSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)
