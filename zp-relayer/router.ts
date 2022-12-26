@@ -30,7 +30,6 @@ router.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 router.get('/', endpoints.root)
 router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
-router.get('/transactions', wrapErr(endpoints.getTransactions))
 router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
 router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
 router.get('/job/:id', wrapErr(endpoints.getJob))
