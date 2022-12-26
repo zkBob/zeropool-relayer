@@ -4,6 +4,7 @@ import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { PoolTx } from '@/pool'
 import { ZERO_ADDRESS } from '@/utils/constants'
+import config from '@/config'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
@@ -24,6 +25,7 @@ ajv.addKeyword({
 })
 
 const AjvString: JSONSchemaType<string> = { type: 'string' }
+const AjvNullableString: JSONSchemaType<string> = { type: 'string', nullable: true }
 
 const AjvNullableAddress: JSONSchemaType<string> = {
   type: 'string',
@@ -77,15 +79,12 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
       type: 'string',
       enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
     },
-    depositSignature: { type: 'string', nullable: true },
+    depositSignature: AjvNullableString,
   },
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<{
-  transactions: PoolTx[]
-  traceId: string | null
-}> = {
+const AjvSendTransactionsSchema: JSONSchemaType<{ transactions: PoolTx[] }> = {
   type: 'object',
   properties: {
     transactions: {
@@ -93,7 +92,6 @@ const AjvSendTransactionsSchema: JSONSchemaType<{
       items: AjvSendTransactionSchema,
       minItems: 1,
     },
-    traceId: { type: 'string', nullable: true },
   },
   required: ['transactions'],
 }
@@ -154,6 +152,12 @@ const AjvGetSiblingsSchema: JSONSchemaType<{
   required: ['index'],
 }
 
+const AjvTraceIdSchema: JSONSchemaType<{ 'trace-id': string }> = {
+  type: 'object',
+  properties: { 'trace-id': AjvNullableString },
+  required: config.requireTraceId ? ['trace-id'] : [],
+}
+
 function checkErrors<T>(schema: JSONSchemaType<T>) {
   const validate = ajv.compile(schema)
   return (data: any) => {
@@ -167,8 +171,19 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
   }
 }
 
+export function validateBatch(validationSet: [ReturnType<typeof checkErrors>, any][]) {
+  for (const [validate, data] of validationSet) {
+    const errors = validate(data)
+    if (errors) {
+      return errors
+    }
+    return null
+  }
+}
+
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)
+export const checkTraceId = checkErrors(AjvTraceIdSchema)
