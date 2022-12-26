@@ -1,7 +1,7 @@
 import { toBN, toWei } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
 import { web3, web3Redundant } from '@/services/web3'
-import { logger, scopedLogger } from '@/services/appLogger'
+import { logger } from '@/services/appLogger'
 import type { BatchTx, PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
 import { readNonce, updateField, RelayerKeys, updateNonce } from '@/utils/redisFields'
@@ -23,6 +23,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
   mutex: Mutex,
   redis: Redis
 ) {
+  const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
     connection: redis,
@@ -42,7 +43,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
     const txs = job.data.transactions
     const traceId = job.data.traceId
 
-    const jobLogger = scopedLogger(`POOL WORKER: Job ${job.id}: `, { traceId })
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId })
     jobLogger.info('Processing...')
     jobLogger.info('Received %s txs', txs.length)
 
@@ -79,7 +80,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
         await updateNonce(++nonce)
 
-        jobLogger.info(`TX hash ${txHash}`)
+        jobLogger.info('Sent tx', { txHash })
 
         await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
 
@@ -117,6 +118,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
             priority: nonce,
           }
         )
+        jobLogger.info(`Added sentTxWorker job: ${sentJob.id}`)
 
         txHashes.push([txHash, sentJob.id as string])
       } catch (e) {
@@ -135,7 +137,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
   )
 
   poolTxWorker.on('error', e => {
-    logger.info('POOL_WORKER ERR: %o', e)
+    workerLogger.info('POOL_WORKER ERR: %o', e)
   })
 
   return poolTxWorker

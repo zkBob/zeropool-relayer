@@ -121,7 +121,7 @@ class Pool {
       }
     })
     const job = await poolTxQueue.add('tx', { transactions: queueTxs, traceId })
-    logger.debug(`Added job: ${job.id}`)
+    logger.debug(`Added poolTxWorker job: ${job.id}`)
     return job.id
   }
 

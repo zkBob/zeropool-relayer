@@ -5,7 +5,7 @@ import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
 import { web3, web3Redundant } from '@/services/web3'
-import { logger, scopedLogger } from '@/services/appLogger'
+import { logger } from '@/services/appLogger'
 import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
 import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
@@ -42,6 +42,7 @@ async function clearOptimisticState() {
 }
 
 export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
+  const workerLogger = logger.child({ worker: 'sent-tx' })
   const WORKER_OPTIONS = {
     autorun: false,
     connection: redis,
@@ -63,11 +64,11 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     // Iterate in reverse order to check the latest hash first
     for (let i = prevAttempts.length - 1; i >= 0; i--) {
       const txHash = prevAttempts[i][0]
-      logger.info('Verifying %s ...', txHash)
+      logger.info('Verifying tx', { txHash })
       try {
         tx = await web3.eth.getTransactionReceipt(txHash)
       } catch (e) {
-        logger.warn('Cannot get tx receipt for %s; RPC response: %s', txHash, (e as Error).message)
+        logger.warn('Cannot get tx receipt; RPC response: %s', (e as Error).message, { txHash })
         // Exception should be caught by `withLoop` to re-run job
         throw e
       }
@@ -79,7 +80,8 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   }
 
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
-    const jobLogger = scopedLogger(`SENT WORKER: Job ${job.id}: `, { traceId: job.data.traceId})
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId })
+
     jobLogger.info('Verifying job %s', job.data.poolJobId)
     const { truncatedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
 
@@ -99,7 +101,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       // Tx mined
       if (tx.status) {
         // Successful
-        jobLogger.info('Transaction %s was successfully mined at block %s', txHash, tx.blockNumber)
+        jobLogger.info('Transaction was successfully mined', { txHash, blockNumber: tx.blockNumber })
 
         const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
         pool.state.updateState(commitIndex, outCommit, prefixedMemo)
@@ -137,7 +139,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         return [SentTxState.MINED, txHash, []] as SentTxResult
       } else {
         // Revert
-        jobLogger.error('Transaction %s reverted at block %s', txHash, tx.blockNumber)
+        jobLogger.error('Transaction reverted', { txHash, blockNumber: tx.blockNumber })
 
         // Means that rollback was done previously, no need to do it now
         if (await checkMarked(redis, job.id as string)) {
@@ -198,10 +200,10 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
         await sendTransaction(web3Redundant, rawTransaction)
-        jobLogger.info('Re-send tx; New hash: %s', newTxHash)
+        jobLogger.info('Re-send tx', { txHash: newTxHash })
       } catch (e) {
         const err = e as Error
-        jobLogger.warn('Tx resend failed for %s: %s', lastHash, err.message)
+        jobLogger.warn('Tx resend failed: %s', err.message, { txHash: newTxHash })
         if (isGasPriceError(err) || isSameTransactionError(err)) {
           // Tx wasn't sent successfully, but still update last attempt's
           // gasPrice to be accounted in the next iteration
@@ -244,7 +246,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   )
 
   sentTxWorker.on('error', e => {
-    logger.info('SENT_WORKER ERR: %o', e)
+    workerLogger.info('SENT_WORKER ERR: %o', e)
   })
 
   return sentTxWorker
