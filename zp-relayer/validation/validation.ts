@@ -171,10 +171,18 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
   }
 }
 
-export function validateBatch(validationSet: [ReturnType<typeof checkErrors>, any][]) {
+type ValidationFunction = ReturnType<typeof checkErrors>
+
+export class ValidationError extends Error {
+  constructor(public validationErrors: ReturnType<ValidationFunction>) {
+    super()
+  }
+}
+
+export function validateBatch(validationSet: [ValidationFunction, any][]) {
   for (const [validate, data] of validationSet) {
     const errors = validate(data)
-    if (errors) return errors
+    if (errors) throw new ValidationError(errors)
   }
   return null
 }

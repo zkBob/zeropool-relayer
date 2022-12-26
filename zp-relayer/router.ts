@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from 'express'
 import cors from 'cors'
 import endpoints from './endpoints'
 import { logger } from './services/appLogger'
+import { ValidationError } from './validation/validation'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -39,5 +40,17 @@ router.get('/limits', wrapErr(endpoints.getLimits))
 router.get('/siblings', wrapErr(endpoints.getSiblings))
 router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
 router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
+
+// Error handler middleware
+router.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof ValidationError) {
+    const validationErrors = err.validationErrors
+    logger.info('Request errors: %o', validationErrors, { path: req.path })
+    res.status(400).json(validationErrors)
+    next()
+  } else {
+    next(err)
+  }
+})
 
 export default router

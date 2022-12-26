@@ -16,15 +16,10 @@ import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
 
 async function sendTransactions(req: Request, res: Response) {
-  const errors = validateBatch([
+  validateBatch([
     [checkTraceId, req.headers],
     [checkSendTransactionsErrors, req.body],
   ])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
   logger.info('TraceId %s', req.headers['trace-id'])
 
   const transactions = req.body.transactions as PoolTx[]
@@ -44,15 +39,10 @@ async function sendTransactions(req: Request, res: Response) {
 }
 
 async function merkleRoot(req: Request, res: Response) {
-  const errors = validateBatch([
+  validateBatch([
     [checkTraceId, req.headers],
     [checkMerkleRootErrors, req.params],
   ])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
   logger.info('TraceId %s', req.headers['trace-id'])
 
   const index = req.params.index
@@ -61,15 +51,10 @@ async function merkleRoot(req: Request, res: Response) {
 }
 
 async function getTransactionsV2(req: Request, res: Response) {
-  const errors = validateBatch([
+  validateBatch([
     [checkTraceId, req.headers],
     [checkGetTransactionsV2, req.query],
   ])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
   logger.info('TraceId %s', req.headers['trace-id'])
 
   const toV2Format = (prefix: string) => (tx: string) => {
@@ -113,12 +98,7 @@ async function getJob(req: Request, res: Response) {
     txHash: null | string
   }
 
-  const errors = validateBatch([[checkTraceId, req.headers]])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+  validateBatch([[checkTraceId, req.headers]])
   logger.info('TraceId %s', req.headers['trace-id'])
 
   const jobId = req.params.id
@@ -226,12 +206,7 @@ function relayerInfo(req: Request, res: Response) {
 }
 
 function getFee(req: Request, res: Response) {
-  const errors = validateBatch([[checkTraceId, req.headers]])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+  validateBatch([[checkTraceId, req.headers]])
   logger.info('TraceId %s', req.headers['trace-id'])
 
   res.json({
@@ -240,15 +215,10 @@ function getFee(req: Request, res: Response) {
 }
 
 async function getLimits(req: Request, res: Response) {
-  const errors = validateBatch([
+  validateBatch([
     [checkTraceId, req.headers],
     [checkGetLimits, req.query],
   ])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
   logger.info('TraceId %s', req.headers['trace-id'])
 
   const address = req.query.address as unknown as string
@@ -258,15 +228,10 @@ async function getLimits(req: Request, res: Response) {
 }
 
 function getSiblings(req: Request, res: Response) {
-  const errors = validateBatch([
+  validateBatch([
     [checkTraceId, req.headers],
     [checkGetSiblings, req.query],
   ])
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
   logger.info('TraceId %s', req.headers['trace-id'])
 
   const index = req.query.index as unknown as number
