@@ -13,6 +13,7 @@ import {
 } from './validation/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
+import { TRACE_ID } from './utils/constants'
 
 async function sendTransactions(req: Request, res: Response) {
   validateBatch([
@@ -20,10 +21,10 @@ async function sendTransactions(req: Request, res: Response) {
     [checkSendTransactionsErrors, req.body],
   ])
 
-  const transactions = req.body.transactions as PoolTx[]
-  const traceId = req.headers['trace-id'] as string
+  const rawTxs = req.body as PoolTx[]
+  const traceId = req.headers[TRACE_ID] as string
 
-  const txs = transactions.map(tx => {
+  const txs = rawTxs.map(tx => {
     const { proof, memo, txType, depositSignature } = tx
     return {
       proof,

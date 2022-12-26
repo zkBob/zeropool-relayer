@@ -84,16 +84,9 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<{ transactions: PoolTx[] }> = {
-  type: 'object',
-  properties: {
-    transactions: {
-      type: 'array',
-      items: AjvSendTransactionSchema,
-      minItems: 1,
-    },
-  },
-  required: ['transactions'],
+const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
+  type: 'array',
+  items: AjvSendTransactionSchema,
 }
 
 const AjvGetTransactionsV2Schema: JSONSchemaType<{
