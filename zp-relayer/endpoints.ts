@@ -1,6 +1,5 @@
-import { Request, Response, NextFunction } from 'express'
+import { Request, Response } from 'express'
 import { pool, PoolTx } from './pool'
-import { logger } from './services/appLogger'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
 import {
@@ -20,7 +19,6 @@ async function sendTransactions(req: Request, res: Response) {
     [checkTraceId, req.headers],
     [checkSendTransactionsErrors, req.body],
   ])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   const transactions = req.body.transactions as PoolTx[]
   const traceId = req.headers['trace-id'] as string
@@ -43,7 +41,6 @@ async function merkleRoot(req: Request, res: Response) {
     [checkTraceId, req.headers],
     [checkMerkleRootErrors, req.params],
   ])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   const index = req.params.index
   const root = await pool.getContractMerkleRoot(index)
@@ -55,7 +52,6 @@ async function getTransactionsV2(req: Request, res: Response) {
     [checkTraceId, req.headers],
     [checkGetTransactionsV2, req.query],
   ])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   const toV2Format = (prefix: string) => (tx: string) => {
     const outCommit = tx.slice(0, 64)
@@ -99,7 +95,6 @@ async function getJob(req: Request, res: Response) {
   }
 
   validateBatch([[checkTraceId, req.headers]])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   const jobId = req.params.id
 
@@ -207,7 +202,6 @@ function relayerInfo(req: Request, res: Response) {
 
 function getFee(req: Request, res: Response) {
   validateBatch([[checkTraceId, req.headers]])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   res.json({
     fee: config.relayerFee.toString(10),
@@ -219,7 +213,6 @@ async function getLimits(req: Request, res: Response) {
     [checkTraceId, req.headers],
     [checkGetLimits, req.query],
   ])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   const address = req.query.address as unknown as string
   const limits = await pool.getLimitsFor(address)
@@ -232,7 +225,6 @@ function getSiblings(req: Request, res: Response) {
     [checkTraceId, req.headers],
     [checkGetSiblings, req.query],
   ])
-  logger.info('TraceId %s', req.headers['trace-id'])
 
   const index = req.query.index as unknown as number
 

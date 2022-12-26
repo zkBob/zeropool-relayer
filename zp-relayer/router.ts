@@ -3,6 +3,8 @@ import cors from 'cors'
 import endpoints from './endpoints'
 import { logger } from './services/appLogger'
 import { ValidationError } from './validation/validation'
+import config from './config'
+import { TRACE_ID } from './utils/constants'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -25,6 +27,13 @@ router.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err) {
     logger.error('Request error:', err)
     return res.sendStatus(500)
+  }
+  next()
+})
+
+router.use((req: Request, res: Response, next: NextFunction) => {
+  if (config.requireTraceId && req.headers[TRACE_ID]) {
+    logger.info('TraceId %s %s', req.headers[TRACE_ID], req.path)
   }
   next()
 })

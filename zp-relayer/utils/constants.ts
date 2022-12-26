@@ -17,6 +17,7 @@ const constants = {
     maxTimeout: 60000,
     randomize: true,
   },
+  TRACE_ID: 'zkbob-support-id' as const,
 }
 
 export = constants

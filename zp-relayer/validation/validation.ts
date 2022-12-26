@@ -3,7 +3,7 @@ import { isAddress } from 'web3-utils'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { PoolTx } from '@/pool'
-import { ZERO_ADDRESS } from '@/utils/constants'
+import { TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
 import config from '@/config'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
@@ -152,10 +152,10 @@ const AjvGetSiblingsSchema: JSONSchemaType<{
   required: ['index'],
 }
 
-const AjvTraceIdSchema: JSONSchemaType<{ 'trace-id': string }> = {
+const AjvTraceIdSchema: JSONSchemaType<{ [TRACE_ID]: string }> = {
   type: 'object',
-  properties: { 'trace-id': AjvNullableString },
-  required: config.requireTraceId ? ['trace-id'] : [],
+  properties: { [TRACE_ID]: AjvNullableString },
+  required: config.requireTraceId ? [TRACE_ID] : [],
 }
 
 function checkErrors<T>(schema: JSONSchemaType<T>) {
