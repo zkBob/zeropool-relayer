@@ -174,11 +174,9 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
 export function validateBatch(validationSet: [ReturnType<typeof checkErrors>, any][]) {
   for (const [validate, data] of validationSet) {
     const errors = validate(data)
-    if (errors) {
-      return errors
-    }
-    return null
+    if (errors) return errors
   }
+  return null
 }
 
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
