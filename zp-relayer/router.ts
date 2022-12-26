@@ -33,7 +33,7 @@ router.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 router.use((req: Request, res: Response, next: NextFunction) => {
   if (config.requireTraceId && req.headers[TRACE_ID]) {
-    logger.info('TraceId %s %s', req.headers[TRACE_ID], req.path)
+    logger.info('TraceId', { traceId: req.headers[TRACE_ID], path: req.path })
   }
   next()
 })
