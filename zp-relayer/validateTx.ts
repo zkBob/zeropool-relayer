@@ -197,7 +197,7 @@ async function getRecoveredAddress(
 async function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
   const index = proofIndex.toNumber()
 
-  const stateRoot = state.getMerkleRoot(index)
+  const stateRoot = state.getMerkleRootAt(index)
   if (stateRoot !== proofRoot) {
     return new TxValidationError(`Incorrect root at index ${index}: given ${proofRoot}, expected ${stateRoot}`)
   }

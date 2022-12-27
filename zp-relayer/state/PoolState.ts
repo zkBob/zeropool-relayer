@@ -84,10 +84,16 @@ export class PoolState {
     return [outCommit, memo]
   }
 
-  getMerkleRoot(index?: number): string {
-    if (index) {
+  getMerkleRootAt(index: number): string | null {
+    try {
       return this.tree.getRootAt(index)
+    } catch (e) {
+      logger.error(`Error getting Merkle root at index ${index}`, { error: (e as Error).message })
+      return null
     }
+  }
+
+  getMerkleRoot() {
     return this.tree.getRoot()
   }
 
