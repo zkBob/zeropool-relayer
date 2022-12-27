@@ -88,7 +88,7 @@ export class PoolState {
     try {
       return this.tree.getRootAt(index)
     } catch (e) {
-      logger.error(`Error getting Merkle root at index ${index}`, { error: (e as Error).message })
+      logger.error(`Error getting Merkle root`, { index, error: (e as Error).message })
       return null
     }
   }
