@@ -29,6 +29,7 @@ async function generateFlow() {
     const flowFiles = fs.readdirSync(TEST_FLOWS_DIR)
     console.log(flowFiles)
     for (let file of flowFiles) {
+      console.log('Starting', file)
       const fullPath = path.join(TEST_FLOWS_DIR, file)
       const flow = require('../' + fullPath)
       await page.goto('http://127.0.0.1:8080/')
@@ -44,6 +45,7 @@ async function generateFlow() {
       }
 
       fs.writeFileSync(`${OUT_FLOWS_DIR}/flow_${path.parse(file).name}.json`, JSON.stringify(res, null))
+      console.log('Finished', file)
     }
   } finally {
     await browser.close()
