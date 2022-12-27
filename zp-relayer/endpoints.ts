@@ -280,7 +280,8 @@ function getParamsHash(type: 'tree' | 'transfer') {
 
 function relayerVersion(req: Request, res: Response) {
   res.json({
-    version: config.version,
+    ref: config.relayerRef,
+    commitHash: config.relayerSHA,
   })
 }
 
