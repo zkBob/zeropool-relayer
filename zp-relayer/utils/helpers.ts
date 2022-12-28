@@ -1,9 +1,11 @@
 import BN from 'bn.js'
+import type Web3 from 'web3'
 import { padLeft, toBN } from 'web3-utils'
-import { logger } from '@/services/appLogger'
-import { SnarkProof } from 'libzkbob-rs-node'
+import type { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'
+import promiseRetry from 'promise-retry'
+import { logger } from '@/services/appLogger'
 import { TxValidationError } from '@/validateTx'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
@@ -130,7 +132,7 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export function withLoop<R>(f: () => Promise<R>, timeout: number, supressedErrors: string[] = []): () => Promise<R> {
+export function withLoop<R>(f: () => Promise<R>, timeout: number, suppressedErrors: string[] = []): () => Promise<R> {
   // @ts-ignore
   return async () => {
     while (1) {
@@ -138,15 +140,15 @@ export function withLoop<R>(f: () => Promise<R>, timeout: number, supressedError
         return await f()
       } catch (e) {
         const err = e as Error
-        let isSupressed = false
-        for (let supressedError of supressedErrors) {
-          if (err.message.includes(supressedError)) {
-            isSupressed = true
+        let isSuppressed = false
+        for (let suppressedError of suppressedErrors) {
+          if (err.message.includes(suppressedError)) {
+            isSuppressed = true
             break
           }
         }
 
-        if (isSupressed) {
+        if (isSuppressed) {
           logger.warn('%s', err.message)
         } else {
           logger.error('Found error %s', err.message)
@@ -156,4 +158,22 @@ export function withLoop<R>(f: () => Promise<R>, timeout: number, supressedError
       }
     }
   }
+}
+
+export function waitForFunds(web3: Web3, address: string, cb: (balance: BN) => void, minimumBalance: BN) {
+  return promiseRetry(
+    async retry => {
+      logger.debug('Getting relayer balance')
+      const newBalance = toBN(await web3.eth.getBalance(address))
+      const balanceLog = { balance: newBalance.toString(10), minimumBalance: minimumBalance.toString(10) }
+      if (newBalance.gte(minimumBalance)) {
+        logger.debug('Relayer has minimum necessary balance', balanceLog)
+        cb(newBalance)
+      } else {
+        logger.debug('Relayer balance is still less than the minimum', balanceLog)
+        retry(new Error('Not enough balance'))
+      }
+    },
+    { forever: true, factor: 1 }
+  )
 }
