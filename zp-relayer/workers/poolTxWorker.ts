@@ -79,12 +79,14 @@ export async function createPoolTxWorker<T extends EstimationType>(
       } catch (e) {
         const err = e as Error
         if (isInsufficientBalanceError(err)) {
+          const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPriceWithExtra)))
+          logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
           await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
           waitForFunds(
             web3,
             config.relayerAddress,
             () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
-            toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPriceWithExtra)))
+            minimumBalance
           )
         }
         throw e
