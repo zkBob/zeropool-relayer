@@ -167,10 +167,10 @@ export function waitForFunds(web3: Web3, address: string, cb: (balance: BN) => v
       const newBalance = toBN(await web3.eth.getBalance(address))
       const balanceLog = { balance: newBalance.toString(10), minimumBalance: minimumBalance.toString(10) }
       if (newBalance.gte(minimumBalance)) {
-        logger.debug('Relayer has minimum necessary balance', balanceLog)
+        logger.info('Relayer has minimum necessary balance', balanceLog)
         cb(newBalance)
       } else {
-        logger.debug('Relayer balance is still less than the minimum', balanceLog)
+        logger.warn('Relayer balance is still less than the minimum', balanceLog)
         retry(new Error('Not enough balance'))
       }
     },
