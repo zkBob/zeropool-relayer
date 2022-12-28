@@ -143,6 +143,16 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
     }
     ```
 
+- `/version` - currently used relayer version
+
+    **Response**
+    ```
+    {
+        ref // Branch or tag
+        commitHash // Commit hash
+    }
+    ```
+
 - `/params/hash/tree` - hash of pool tree proving parameters.
 
 - `/params/hash/tx` - hash of pool transaction proving parameters.
