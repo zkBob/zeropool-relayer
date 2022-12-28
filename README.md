@@ -60,6 +60,7 @@ sequenceDiagram
 ## API
 
 For a detailed description of each method's payload you can refer to [`zp-relayer/validation/validation.ts`](zp-relayer/validation/validation.ts) file with JSON validation schemas.
+Note, that requests to all endpoints (except `/`, `/info`, `/params/hash/tree`, `/params/hash/tx`) also require a special `zkbob-support-id` header if `RELAYER_REQUIRE_TRACE_ID` env is set to `true`. This header should be automatically set by the client application.
 
 - `/sendTransactions` - submit batch of transaction to relayer.
 
