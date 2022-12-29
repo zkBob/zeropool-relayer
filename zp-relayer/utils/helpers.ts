@@ -160,7 +160,13 @@ export function withLoop<R>(f: () => Promise<R>, timeout: number, suppressedErro
   }
 }
 
-export function waitForFunds(web3: Web3, address: string, cb: (balance: BN) => void, minimumBalance: BN) {
+export function waitForFunds(
+  web3: Web3,
+  address: string,
+  cb: (balance: BN) => void,
+  minimumBalance: BN,
+  timeout: number,
+) {
   return promiseRetry(
     async retry => {
       logger.debug('Getting relayer balance')
@@ -177,8 +183,8 @@ export function waitForFunds(web3: Web3, address: string, cb: (balance: BN) => v
     {
       forever: true,
       factor: 1,
-      maxTimeout: 60000,
-      minTimeout: 60000,
+      maxTimeout: timeout,
+      minTimeout: timeout,
     }
   )
 }

@@ -210,13 +210,6 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
           const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(newGasPrice)))
           logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
-          await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
-          waitForFunds(
-            web3,
-            config.relayerAddress,
-            () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
-            minimumBalance
-          )
         }
         // Error should be caught by `withLoop` to re-run job
         throw e

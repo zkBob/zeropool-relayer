@@ -86,7 +86,8 @@ export async function createPoolTxWorker<T extends EstimationType>(
             web3,
             config.relayerAddress,
             () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
-            minimumBalance
+            minimumBalance,
+            config.insufficientBalanceCheckTimeout
           )
         }
         throw e
