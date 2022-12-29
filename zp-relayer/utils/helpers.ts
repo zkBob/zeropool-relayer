@@ -178,6 +178,7 @@ export function waitForFunds(web3: Web3, address: string, cb: (balance: BN) => v
       forever: true,
       factor: 1,
       maxTimeout: 60000,
+      minTimeout: 60000,
     }
   )
 }
