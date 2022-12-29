@@ -174,6 +174,10 @@ export function waitForFunds(web3: Web3, address: string, cb: (balance: BN) => v
         retry(new Error('Not enough balance'))
       }
     },
-    { forever: true, factor: 1 }
+    {
+      forever: true,
+      factor: 1,
+      maxTimeout: 60000,
+    }
   )
 }

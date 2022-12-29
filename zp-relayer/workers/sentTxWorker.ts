@@ -206,7 +206,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           })
         } else if (isInsufficientBalanceError(err)) {
           // We don't want to take into account last gasPrice increase
-          job.data.prevAttempts.pop()
+          job.data.prevAttempts.at(-1)![1] = lastGasPrice
 
           const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(newGasPrice)))
           logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
