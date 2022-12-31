@@ -11,6 +11,7 @@ const providerOptions = {
 }
 
 const provider = new HttpListProvider(config.rpcUrls, providerOptions)
+provider.startSyncStateChecker(config.rpcSyncCheckInterval)
 const web3 = new Web3(provider as HttpProvider)
 
 let web3Redundant = web3
