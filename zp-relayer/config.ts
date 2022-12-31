@@ -1,7 +1,7 @@
 import './env'
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
-import type { EstimationType, GasPriceKey } from './services/gas-price/types'
+import type { EstimationType, GasPriceKey } from './services/gas-price'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string

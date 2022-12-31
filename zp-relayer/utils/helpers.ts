@@ -164,7 +164,6 @@ export function withLoop<R>(f: () => Promise<R>, timeout: number, supressedError
 
 export function checkHTTPS(isRequired: boolean) {
   return (url: string) => {
-    console.log(url, isRequired)
     if (!/^https.*/.test(url)) {
       if (isRequired) {
         throw new Error(`http is not allowed: ${url}`)
