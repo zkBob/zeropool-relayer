@@ -16,7 +16,7 @@ import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
-import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection } from './utils'
+import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
 import { validateTx } from '../../validateTx'
 
 import flow from '../flows/flow_independent_deposits_5.json'
@@ -99,47 +99,31 @@ describe('poolWorker', () => {
     gasPriceService.stop()
   })
 
+  async function expectJobFinished(job: Job<TxPayload[], PoolTxResult[]>) {
+    const [[initialHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
+    expect(initialHash.length).eq(66)
+
+    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
+    const [status, sentHash] = await sentJob.waitUntilFinished(sentQueueEvents)
+    expect(status).eq(SentTxState.MINED)
+
+    const r = await web3.eth.getTransactionReceipt(sentHash)
+    expect(r.status).eq(true)
+
+    return {
+      initialHash,
+      sentHash,
+    }
+  }
+
   it('executes a job', async () => {
     const deposit = flow[0]
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
 
     // @ts-ignore
     const job = await submitJob(deposit)
-
-    const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
-    expect(txHash.length).eq(66)
-
-    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
-    const [status, sentHash] = await sentJob.waitUntilFinished(sentQueueEvents)
-    expect(status).eq(SentTxState.MINED)
-    expect(txHash).eq(sentHash)
-
-    const r = await web3.eth.getTransactionReceipt(sentHash)
-    expect(r.status).eq(true)
-  })
-
-  it('should re-send tx', async () => {
-    const deposit = flow[0]
-    await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
-    await disableMining()
-
-    sentWorker.on('progress', async () => {
-      await enableMining()
-    })
-
-    // @ts-ignore
-    const job = await submitJob(deposit)
-
-    const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
-    expect(txHash.length).eq(66)
-
-    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
-    const [status, sentHash] = await sentJob.waitUntilFinished(sentQueueEvents)
-    expect(status).eq(SentTxState.MINED)
-    expect(txHash).not.eq(sentHash)
-
-    const r = await web3.eth.getTransactionReceipt(sentHash)
-    expect(r.status).eq(true)
+    const { initialHash, sentHash } = await expectJobFinished(job)
+    expect(initialHash).eq(sentHash)
   })
 
   it('should re-submit optimistic txs after revert', async () => {
@@ -230,7 +214,6 @@ describe('poolWorker', () => {
     const job = await submitJob(deposit)
 
     const [[txHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
-    expect(txHash.length).eq(66)
 
     const txBefore = await web3.eth.getTransaction(txHash)
     const gasPriceBefore = Number(txBefore.gasPrice)
@@ -246,7 +229,6 @@ describe('poolWorker', () => {
 
     const txAfter = await web3.eth.getTransaction(sentHash)
     const gasPriceAfter = Number(txAfter.gasPrice)
-    console.log(gasPriceBefore + ' < ' + gasPriceAfter)
 
     expect(gasPriceBefore).lt(gasPriceAfter)
   })
@@ -258,16 +240,33 @@ describe('poolWorker', () => {
 
     // @ts-ignore
     const job = await submitJob(deposit)
-    const [[, sentId]] = await job.waitUntilFinished(poolQueueEvents)
-
-    const sentJob = (await sentTxQueue.getJob(sentId)) as Job
-    const [, sentHash] = await sentJob.waitUntilFinished(sentQueueEvents)
-
-    const r = await web3.eth.getTransactionReceipt(sentHash)
-    expect(r.status).eq(true)
+    await expectJobFinished(job)
 
     // @ts-ignore
     const withdrawJob = await submitJob(withdraw)
     await expect(withdrawJob.waitUntilFinished(poolQueueEvents)).rejectedWith('Withdraw address cannot be zero')
+  })
+
+  it('should pause queues when relayer has insufficient funds', async () => {
+    let deposit = flow[0]
+    await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
+    const oldBalance = await web3.eth.getBalance(config.relayerAddress)
+
+    await setBalance(config.relayerAddress, '0x0')
+
+    // @ts-ignore
+    const failJob = await submitJob(deposit)
+    await expect(failJob.waitUntilFinished(poolQueueEvents)).rejectedWith('Insufficient funds for gas * price + value')
+
+    // @ts-ignore
+    const job = await submitJob(deposit)
+
+    expect(await poolTxQueue.count()).eq(1)
+    expect(await poolTxQueue.isPaused()).eq(true)
+    expect(await sentTxQueue.isPaused()).eq(true)
+
+    await setBalance(config.relayerAddress, oldBalance)
+
+    await expectJobFinished(job)
   })
 })

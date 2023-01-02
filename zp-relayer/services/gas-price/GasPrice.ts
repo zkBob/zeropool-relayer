@@ -38,6 +38,12 @@ function isEIP1559GasPrice(gp: GasPriceValue): gp is EIP1559GasPrice {
   return 'maxFeePerGas' in gp && 'maxPriorityFeePerGas' in gp
 }
 
+export function getMaxRequiredGasPrice(gp: GasPriceValue): string {
+  if (isLegacyGasPrice(gp)) return gp.gasPrice
+  if (isEIP1559GasPrice(gp)) return gp.maxFeePerGas
+  throw new Error('Unknown gas price type')
+}
+
 export function chooseGasPriceOptions(a: GasPriceValue, b: GasPriceValue): GasPriceValue {
   if (isLegacyGasPrice(a) && isLegacyGasPrice(b)) {
     return { gasPrice: BN.max(toBN(a.gasPrice), toBN(b.gasPrice)).toString(10) }
