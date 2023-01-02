@@ -112,13 +112,6 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         jobLogger.info('Removing nullifier %s from OS', nullifier)
         await pool.optimisticState.nullifiers.remove([nullifier])
 
-        // Add root to confirmed state and remove from optimistic one
-        const poolIndex = ((commitIndex + 1) * OUTPLUSONE).toString(10)
-        jobLogger.info('Adding root %s %s to PS', poolIndex, root)
-        await pool.state.roots.add({ [poolIndex]: root })
-        jobLogger.info('Removing root %s %s from OS', poolIndex, root)
-        await pool.optimisticState.roots.remove([poolIndex])
-
         const node1 = pool.state.getCommitment(commitIndex)
         const node2 = pool.optimisticState.getCommitment(commitIndex)
         jobLogger.info('Assert commitments are equal: %s, %s', node1, node2)

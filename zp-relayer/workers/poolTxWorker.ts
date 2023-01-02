@@ -94,11 +94,6 @@ export async function createPoolTxWorker<T extends EstimationType>(
         pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
         jobLogger.debug('Adding nullifier %s to OS', nullifier)
         await pool.optimisticState.nullifiers.add([nullifier])
-        const poolIndex = (commitIndex + 1) * OUTPLUSONE
-        jobLogger.debug('Adding root %s at %s to OS', rootAfter, poolIndex)
-        await pool.optimisticState.roots.add({
-          [poolIndex]: rootAfter,
-        })
 
         const sentJob = await sentTxQueue.add(
           txHash,
