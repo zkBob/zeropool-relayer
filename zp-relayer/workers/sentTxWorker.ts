@@ -33,8 +33,6 @@ async function clearOptimisticState() {
   pool.optimisticState.rollbackTo(pool.state)
   logger.info('Clearing optimistic nullifiers...')
   await pool.optimisticState.nullifiers.clear()
-  logger.info('Clearing optimistic roots...')
-  await pool.optimisticState.roots.clear()
 
   const root1 = pool.state.getMerkleRoot()
   const root2 = pool.optimisticState.getMerkleRoot()

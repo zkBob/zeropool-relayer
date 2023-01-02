@@ -147,11 +147,6 @@ class Pool {
       return
     }
 
-    // Set initial root
-    await this.state.roots.add({
-      0: INIT_ROOT,
-    })
-
     const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
     const missedIndices = Array(numTxs)
     for (let i = 0; i < numTxs; i++) {
@@ -206,12 +201,6 @@ class Pool {
         // Save nullifier in confirmed state
         const nullifier = parser.getField('nullifier')
         await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
-
-        // Save root in confirmed state
-        const root = this.state.getMerkleRoot()
-        await this.state.roots.add({
-          [newPoolIndex]: root,
-        })
       }
     }
 
