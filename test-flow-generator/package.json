@@ -1,0 +1,21 @@
+{
+  "name": "test-flow-generator",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "build:dev": "webpack --mode=development"
+  },
+  "dependencies": {
+    "@metamask/eth-sig-util": "^4.0.1",
+    "http-server": "14.1.1",
+    "libzkbob-rs-node": "0.2.2",
+    "libzkbob-rs-wasm-web": "0.8.0",
+    "node-polyfill-webpack-plugin": "^1.1.4",
+    "puppeteer": "^19.2.0",
+    "web3-utils": "1.8.0",
+    "webpack": "^5.46.0",
+    "webpack-cli": "^4.10.0",
+    "zp-memo-parser": "link:../zp-memo-parser"
+  }
+}

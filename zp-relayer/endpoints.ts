@@ -5,6 +5,7 @@ import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
 import {
   checkGetLimits,
+  checkGetSiblings,
   checkGetTransactions,
   checkGetTransactionsV2,
   checkMerkleRootErrors,
@@ -12,6 +13,7 @@ import {
   checkSendTransactionsErrors,
 } from './validation/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
+import type { Queue } from 'bullmq'
 
 async function sendTransactions(req: Request, res: Response, next: NextFunction) {
   const errors = checkSendTransactionsErrors(req.body)
@@ -129,9 +131,23 @@ async function getJob(req: Request, res: Response) {
   const jobId = req.params.id
 
   async function getPoolJobState(requestedJobId: string): Promise<GetJobResponse | null> {
+    const INCONSISTENCY_ERR = 'Internal job inconsistency'
+
+    // Should be used in places where job is expected to exist
+    const safeGetJob = async (queue: Queue, id: string) => {
+      const job = await queue.getJob(id)
+      if (!job) {
+        throw new Error(INCONSISTENCY_ERR)
+      }
+      return job
+    }
+
     const jobId = await pool.state.jobIdsMapping.get(requestedJobId)
-    let job = await poolTxQueue.getJob(jobId)
-    if (!job) return null
+
+    const poolJobState = await poolTxQueue.getJobState(jobId)
+    if (poolJobState === 'unknown') return null
+
+    const job = await safeGetJob(poolTxQueue, jobId)
 
     // Default result object
     let result: GetJobResponse = {
@@ -143,31 +159,27 @@ async function getJob(req: Request, res: Response) {
       txHash: null,
     }
 
-    const poolJobState = await job.getState()
     if (poolJobState === 'completed') {
       // Transaction was included in optimistic state, waiting to be mined
-      if (job.returnvalue === null) {
-        job = await poolTxQueue.getJob(jobId)
-        // Sanity check
-        if (!job || job.returnvalue === null) throw new Error('Internal job inconsistency')
-      }
-      const sentJobId = job.returnvalue[0][1]
-      let sentJob = await sentTxQueue.getJob(sentJobId)
-      // Should not happen here, but need to verify to be sure
-      if (!sentJob) throw new Error('Sent job not found')
 
-      const sentJobState = await sentJob.getState()
+      // Sanity check
+      if (job.returnvalue === null) throw new Error(INCONSISTENCY_ERR)
+      const sentJobId = job.returnvalue[0][1]
+
+      const sentJobState = await sentTxQueue.getJobState(sentJobId)
+      // Should not happen here, but need to verify to be sure
+      if (sentJobState === 'unknown') throw new Error('Sent job not found')
+
+      const sentJob = await safeGetJob(sentTxQueue, sentJobId)
       if (sentJobState === 'waiting' || sentJobState === 'active' || sentJobState === 'delayed') {
         // Transaction is in re-send loop
         const txHash = sentJob.data.prevAttempts.at(-1)?.[0]
         result.state = JobStatus.SENT
         result.txHash = txHash || null
       } else if (sentJobState === 'completed') {
-        if (sentJob.returnvalue === null) {
-          sentJob = await sentTxQueue.getJob(sentJobId)
-          // Sanity check
-          if (!sentJob || sentJob.returnvalue === null) throw new Error('Internal job inconsistency')
-        }
+        // Sanity check
+        if (sentJob.returnvalue === null) throw new Error(INCONSISTENCY_ERR)
+
         const [txState, txHash] = sentJob.returnvalue
         if (txState === SentTxState.MINED) {
           // Transaction mined successfully
@@ -182,12 +194,11 @@ async function getJob(req: Request, res: Response) {
         }
       }
     } else if (poolJobState === 'failed') {
-      // Either validation or tx sendind failed
-      if (!job.finishedOn) {
-        job = await poolTxQueue.getJob(jobId)
-        // Sanity check
-        if (!job || !job.finishedOn) throw new Error('Internal job inconsistency')
-      }
+      // Either validation or tx sending failed
+
+      // Sanity check
+      if (!job.finishedOn) throw new Error(INCONSISTENCY_ERR)
+
       result.state = JobStatus.FAILED
       result.failedReason = job.failedReason
       result.finishedOn = job.finishedOn || null
@@ -241,6 +252,25 @@ async function getLimits(req: Request, res: Response) {
   res.json(limitsFetch)
 }
 
+function getSiblings(req: Request, res: Response) {
+  const errors = checkGetSiblings(req.query)
+  if (errors) {
+    logger.info('Request errors: %o', errors)
+    res.status(400).json({ errors })
+    return
+  }
+
+  const index = req.query.index as unknown as number
+
+  if (index >= pool.state.getNextIndex()) {
+    res.status(400).json({ errors: ['Index out of range'] })
+    return
+  }
+
+  const siblings = pool.state.getSiblings(index)
+  res.json(siblings)
+}
+
 function getParamsHash(type: 'tree' | 'transfer') {
   const hash = type === 'tree' ? pool.treeParamsHash : pool.transferParamsHash
   return (req: Request, res: Response) => {
@@ -262,6 +292,7 @@ export default {
   relayerInfo,
   getFee,
   getLimits,
+  getSiblings,
   getParamsHash,
   root,
 }

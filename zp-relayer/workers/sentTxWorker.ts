@@ -4,7 +4,7 @@ import type { TransactionReceipt } from 'web3-core'
 import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
-import { web3 } from '@/services/web3'
+import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
 import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
@@ -64,16 +64,18 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     for (let i = prevAttempts.length - 1; i >= 0; i--) {
       const txHash = prevAttempts[i][0]
       logger.info('Verifying %s ...', txHash)
-      tx = await web3.eth.getTransactionReceipt(txHash)
-      if (tx) break
+      try {
+        tx = await web3.eth.getTransactionReceipt(txHash)
+      } catch (e) {
+        logger.warn('Cannot get tx receipt for %s; RPC response: %s', txHash, (e as Error).message)
+        // Exception should be caught by `withLoop` to re-run job
+        throw e
+      }
+      if (tx && tx.blockNumber) return [tx, false]
     }
 
     // Transaction was not mined, but nonce was increased
-    if (tx === null) {
-      return [null, true]
-    }
-
-    return [tx, false]
+    return [null, true]
   }
 
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
@@ -104,7 +106,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         // Update tx hash in optimistic state tx db
         pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
-        // Add nullifer to confirmed state and remove from optimistic one
+        // Add nullifier to confirmed state and remove from optimistic one
         logger.info('Adding nullifier %s to PS', nullifier)
         await pool.state.nullifiers.add([nullifier])
         logger.info('Removing nullifier %s from OS', nullifier)
@@ -190,14 +192,14 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
       job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
-        await sendTransaction(web3, rawTransaction)
+        await sendTransaction(web3Redundant, rawTransaction)
         logger.info(`${logPrefix} Re-send tx; New hash: ${newTxHash}`)
       } catch (e) {
         const err = e as Error
         logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
         if (isGasPriceError(err) || isSameTransactionError(err)) {
           // Tx wasn't sent successfully, but still update last attempt's
-          // gasPrice to be acccounted in the next iteration
+          // gasPrice to be accounted in the next iteration
           await job.update({
             ...job.data,
           })
