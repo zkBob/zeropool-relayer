@@ -1,15 +1,16 @@
 import type Redis from 'ioredis'
 import type { Mutex } from 'async-mutex'
+import { toBN } from 'web3-utils'
 import type { TransactionReceipt } from 'web3-core'
 import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
 import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
-import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
+import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
+import { buildPrefixedMemo, waitForFunds, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
+import { isGasPriceError, isInsufficientBalanceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
@@ -194,6 +195,12 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           await job.update({
             ...job.data,
           })
+        } else if (isInsufficientBalanceError(err)) {
+          // We don't want to take into account last gasPrice increase
+          job.data.prevAttempts.at(-1)![1] = lastGasPrice
+
+          const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(newGasPrice)))
+          logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
         }
         // Error should be caught by `withLoop` to re-run job
         throw e

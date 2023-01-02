@@ -23,3 +23,8 @@ export function isNonceError(e: Error) {
     message.includes(`the tx doesn't have the correct nonce`)
   )
 }
+
+export function isInsufficientBalanceError(e: Error) {
+  const message = e.message.toLowerCase()
+  return message.includes('insufficient funds')
+}

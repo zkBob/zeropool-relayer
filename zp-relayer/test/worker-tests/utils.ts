@@ -56,6 +56,10 @@ export function dropTransaction(hash: string) {
   return callRpcMethod('anvil_dropTransaction', [hash])
 }
 
+export function setBalance(address: string, amount: string) {
+  return callRpcMethod('anvil_setBalance', [address, amount])
+}
+
 export function evmSnapshot() {
   return callRpcMethod('evm_snapshot') as Promise<string>
 }
