@@ -109,7 +109,7 @@ export default class HttpListProvider extends BaseHttpProvider {
   }
 
   private async trySend(payload: any, initialIndex: number) {
-    const errors: any = []
+    const errors: Error[] = []
 
     for (let count = 0; count < this.urls.length; count++) {
       const index = (initialIndex + count) % this.urls.length
@@ -122,9 +122,12 @@ export default class HttpListProvider extends BaseHttpProvider {
       const url = this.urls[index]
       try {
         const result = await this._send(url, payload, this.options)
+        if (errors.length > 0) {
+          logger.warn('RPCs request errors', { errors: errors.map(e => e.message) })
+        }
         return [result, index]
       } catch (e) {
-        errors.push(e)
+        errors.push(e as Error)
       }
     }
 
