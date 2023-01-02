@@ -39,6 +39,8 @@ router.use((req: Request, res: Response, next: NextFunction) => {
 })
 
 router.get('/', endpoints.root)
+router.get('/version', endpoints.relayerVersion)
+router.post('/sendTransaction', wrapErr(endpoints.sendTransaction))
 router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
 router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
 router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))

@@ -140,6 +140,16 @@ Note, that requests to all endpoints (except `/`, `/info`, `/params/hash/tree`, 
     }
     ```
 
+- `/version` - currently used relayer version
+
+    **Response**
+    ```
+    {
+        ref // Branch or tag
+        commitHash // Commit hash
+    }
+    ```
+
 - `/params/hash/tree` - hash of pool tree proving parameters.
 
 - `/params/hash/tx` - hash of pool transaction proving parameters.
