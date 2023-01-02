@@ -191,6 +191,7 @@ export function waitForFunds(
       minTimeout: timeout,
     }
   )
+}
 
 export function checkHTTPS(isRequired: boolean) {
   return (url: string) => {
