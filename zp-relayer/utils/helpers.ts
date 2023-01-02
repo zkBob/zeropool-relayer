@@ -1,12 +1,11 @@
-import BN from 'bn.js'
 import type Web3 from 'web3'
+import type BN from 'bn.js'
 import { padLeft, toBN } from 'web3-utils'
+import { logger } from '@/services/appLogger'
 import type { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'
 import promiseRetry from 'promise-retry'
-import { logger } from '@/services/appLogger'
-import { TxValidationError } from '@/validateTx'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 const S_MAX = toBN('0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0')
@@ -115,14 +114,19 @@ export function withMutex<R>(mutex: Mutex, f: () => Promise<R>): () => Promise<R
   }
 }
 
-export async function withErrorLog<R>(f: () => Promise<R>): Promise<R> {
+export async function withErrorLog<R>(
+  f: () => Promise<R>,
+  WarnErrors: (new (...args: any[]) => Error)[] = []
+): Promise<R> {
   try {
     return await f()
   } catch (e) {
-    if (e instanceof TxValidationError) {
-      logger.warn('Validation error: %s', (e as Error).message)
+    const err = e as Error
+    const isWarn = WarnErrors.some(WarnError => err instanceof WarnError)
+    if (isWarn) {
+      logger.warn('%s: %s', err.name, err.message)
     } else {
-      logger.error('Found error: %s', (e as Error).message)
+      logger.error('Found error: %s', err.message)
     }
     throw e
   }
@@ -187,4 +191,15 @@ export function waitForFunds(
       minTimeout: timeout,
     }
   )
+
+export function checkHTTPS(isRequired: boolean) {
+  return (url: string) => {
+    if (!/^https.*/.test(url)) {
+      if (isRequired) {
+        throw new Error(`http is not allowed: ${url}`)
+      } else {
+        logger.warn('HTTP RPC URL is not recommended for production usage')
+      }
+    }
+  }
 }

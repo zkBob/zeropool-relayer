@@ -17,6 +17,7 @@ import { getChainId } from '@/utils/web3'
 import { getTxProofField } from '@/utils/proofInputs'
 import type { Redis } from 'ioredis'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
+import { TxValidationError } from '@/validateTx'
 
 export async function createPoolTxWorker<T extends EstimationType>(
   gasPrice: GasPrice<T>,
@@ -136,7 +137,10 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
   const poolTxWorker = new Worker<TxPayload[], PoolTxResult[]>(
     TX_QUEUE_NAME,
-    job => withErrorLog(withMutex(mutex, () => poolTxWorkerProcessor(job))),
+    job => withErrorLog(
+      withMutex(mutex, () => poolTxWorkerProcessor(job)),
+      [TxValidationError]
+    ),
     WORKER_OPTIONS
   )
 

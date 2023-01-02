@@ -20,6 +20,7 @@ const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenA
 const ZERO = toBN(0)
 
 export class TxValidationError extends Error {
+  name = 'TxValidationError'
   constructor(message: string) {
     super(message)
   }
