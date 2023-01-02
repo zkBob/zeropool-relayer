@@ -31,6 +31,11 @@ RUN yarn install --frozen-lockfile --production
 
 FROM node:18
 
+ARG RELAYER_REF
+ARG RELAYER_SHA
+ENV RELAYER_REF=${RELAYER_REF}
+ENV RELAYER_SHA=${RELAYER_SHA}
+
 WORKDIR /app
 
 COPY --from=build /app/zp-relayer/build ./zp-relayer

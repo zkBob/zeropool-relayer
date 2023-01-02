@@ -278,6 +278,13 @@ function getParamsHash(type: 'tree' | 'transfer') {
   }
 }
 
+function relayerVersion(req: Request, res: Response) {
+  res.json({
+    ref: config.relayerRef,
+    commitHash: config.relayerSHA,
+  })
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
@@ -294,5 +301,6 @@ export default {
   getLimits,
   getSiblings,
   getParamsHash,
+  relayerVersion,
   root,
 }

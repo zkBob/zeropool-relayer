@@ -34,8 +34,6 @@ async function clearOptimisticState() {
   pool.optimisticState.rollbackTo(pool.state)
   logger.info('Clearing optimistic nullifiers...')
   await pool.optimisticState.nullifiers.clear()
-  logger.info('Clearing optimistic roots...')
-  await pool.optimisticState.roots.clear()
 
   const root1 = pool.state.getMerkleRoot()
   const root2 = pool.optimisticState.getMerkleRoot()
@@ -112,13 +110,6 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         await pool.state.nullifiers.add([nullifier])
         logger.info('Removing nullifier %s from OS', nullifier)
         await pool.optimisticState.nullifiers.remove([nullifier])
-
-        // Add root to confirmed state and remove from optimistic one
-        const poolIndex = ((commitIndex + 1) * OUTPLUSONE).toString(10)
-        logger.info('Adding root %s %s to PS', poolIndex, root)
-        await pool.state.roots.add({ [poolIndex]: root })
-        logger.info('Removing root %s %s from OS', poolIndex, root)
-        await pool.optimisticState.roots.remove([poolIndex])
 
         const node1 = pool.state.getCommitment(commitIndex)
         const node2 = pool.optimisticState.getCommitment(commitIndex)

@@ -8,6 +8,8 @@ const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
 ).address
 
 const config = {
+  relayerRef: process.env.RELAYER_REF || null,
+  relayerSHA: process.env.RELAYER_SHA || null,
   port: parseInt(process.env.PORT || '8000'),
   relayerAddress,
   relayerPrivateKey: process.env.RELAYER_ADDRESS_PRIVATE_KEY as string,
