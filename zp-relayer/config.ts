@@ -43,6 +43,7 @@ const config = {
   relayerJsonRpcErrorCodes: (process.env.RELAYER_JSONRPC_ERROR_CODES || '-32603,-32002,-32005')
     .split(',')
     .map(s => parseInt(s, 10)),
+  requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
 }
 
 export default config

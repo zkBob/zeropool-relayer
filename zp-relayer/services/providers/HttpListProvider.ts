@@ -6,6 +6,7 @@ import { logger } from '../appLogger'
 import BaseHttpProvider, { ProviderOptions } from './BaseHttpProvider'
 
 export class HttpListProviderError extends Error {
+  name = 'HttpListProviderError'
   errors: Error[]
   constructor(message: string, errors: Error[]) {
     super(message)
