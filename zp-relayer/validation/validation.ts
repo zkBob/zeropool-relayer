@@ -3,7 +3,8 @@ import { isAddress } from 'web3-utils'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { PoolTx } from '@/pool'
-import { ZERO_ADDRESS } from '@/utils/constants'
+import { TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
+import config from '@/config'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
@@ -24,6 +25,7 @@ ajv.addKeyword({
 })
 
 const AjvString: JSONSchemaType<string> = { type: 'string' }
+const AjvNullableString: JSONSchemaType<string> = { type: 'string', nullable: true }
 
 const AjvNullableAddress: JSONSchemaType<string> = {
   type: 'string',
@@ -77,7 +79,7 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
       type: 'string',
       enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
     },
-    depositSignature: { type: 'string', nullable: true },
+    depositSignature: AjvNullableString,
   },
   required: ['proof', 'memo', 'txType'],
 }
@@ -85,31 +87,6 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
 const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
   type: 'array',
   items: AjvSendTransactionSchema,
-}
-
-const AjvGetTransactionsSchema: JSONSchemaType<{
-  limit: number
-  offset: number
-  optimistic: boolean
-}> = {
-  type: 'object',
-  properties: {
-    limit: {
-      type: 'integer',
-      minimum: 1,
-      default: 100,
-    },
-    offset: {
-      type: 'integer',
-      minimum: 0,
-      default: 0,
-    },
-    optimistic: {
-      type: 'boolean',
-      default: false,
-    },
-  },
-  required: [],
 }
 
 const AjvGetTransactionsV2Schema: JSONSchemaType<{
@@ -168,6 +145,12 @@ const AjvGetSiblingsSchema: JSONSchemaType<{
   required: ['index'],
 }
 
+const AjvTraceIdSchema: JSONSchemaType<{ [TRACE_ID]: string }> = {
+  type: 'object',
+  properties: { [TRACE_ID]: AjvNullableString },
+  required: config.requireTraceId ? [TRACE_ID] : [],
+}
+
 function checkErrors<T>(schema: JSONSchemaType<T>) {
   const validate = ajv.compile(schema)
   return (data: any) => {
@@ -181,10 +164,25 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
   }
 }
 
+type ValidationFunction = ReturnType<typeof checkErrors>
+
+export class ValidationError extends Error {
+  constructor(public validationErrors: ReturnType<ValidationFunction>) {
+    super()
+  }
+}
+
+export function validateBatch(validationSet: [ValidationFunction, any][]) {
+  for (const [validate, data] of validationSet) {
+    const errors = validate(data)
+    if (errors) throw new ValidationError(errors)
+  }
+  return null
+}
+
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
-export const checkSendTransactionErrors = checkErrors(AjvSendTransactionSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
-export const checkGetTransactions = checkErrors(AjvGetTransactionsSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)
+export const checkTraceId = checkErrors(AjvTraceIdSchema)

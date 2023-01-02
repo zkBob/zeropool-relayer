@@ -42,11 +42,11 @@ export interface Limits {
 export interface LimitsFetch {
   deposit: {
     singleOperation: string
-    daylyForAddress: {
+    dailyForAddress: {
       total: string
       available: string
     }
-    daylyForAll: {
+    dailyForAll: {
       total: string
       available: string
     }
@@ -56,7 +56,7 @@ export interface LimitsFetch {
     }
   }
   withdraw: {
-    daylyForAll: {
+    dailyForAll: {
       total: string
       available: string
     }
@@ -109,7 +109,7 @@ class Pool {
     this.isInitialized = true
   }
 
-  async transact(txs: PoolTx[]) {
+  async transact(txs: PoolTx[], traceId?: string) {
     const queueTxs = txs.map(({ proof, txType, memo, depositSignature }) => {
       return {
         amount: '0',
@@ -120,8 +120,8 @@ class Pool {
         depositSignature,
       }
     })
-    const job = await poolTxQueue.add('tx', queueTxs)
-    logger.debug(`Added job: ${job.id}`)
+    const job = await poolTxQueue.add('tx', { transactions: queueTxs, traceId })
+    logger.debug(`Added poolTxWorker job: ${job.id}`)
     return job.id
   }
 
@@ -249,11 +249,11 @@ class Pool {
     const limitsFetch = {
       deposit: {
         singleOperation: limits.depositCap.toString(10),
-        daylyForAddress: {
+        dailyForAddress: {
           total: limits.dailyUserDepositCap.toString(10),
           available: limits.dailyUserDepositCap.sub(limits.dailyUserDepositCapUsage).toString(10),
         },
-        daylyForAll: {
+        dailyForAll: {
           total: limits.dailyDepositCap.toString(10),
           available: limits.dailyDepositCap.sub(limits.dailyDepositCapUsage).toString(10),
         },
@@ -263,7 +263,7 @@ class Pool {
         },
       },
       withdraw: {
-        daylyForAll: {
+        dailyForAll: {
           total: limits.dailyWithdrawalCap.toString(10),
           available: limits.dailyWithdrawalCap.sub(limits.dailyWithdrawalCapUsage).toString(10),
         },

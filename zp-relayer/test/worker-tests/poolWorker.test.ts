@@ -8,7 +8,7 @@ import { web3 } from './web3'
 import { pool } from '../../pool'
 import config from '../../config'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
-import { poolTxQueue, TxPayload, PoolTxResult } from '../../queue/poolTxQueue'
+import { poolTxQueue, PoolTxResult, BatchTx } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
@@ -26,17 +26,20 @@ import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 chai.use(chaiAsPromised)
 const expect = chai.expect
 
-async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<TxPayload[], PoolTxResult[]>> {
-  const job = await poolTxQueue.add('test', [
-    {
-      amount: '0',
-      gas: '2000000',
-      txProof: item.proof,
-      txType: item.txType,
-      rawMemo: item.transactionData.memo,
-      depositSignature: item.depositSignature,
-    },
-  ])
+async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx, PoolTxResult[]>> {
+  const job = await poolTxQueue.add('test', {
+    transactions: [
+      {
+        amount: '0',
+        gas: '2000000',
+        txProof: item.proof,
+        txType: item.txType,
+        rawMemo: item.transactionData.memo,
+        depositSignature: item.depositSignature,
+      },
+    ],
+    traceId: 'test',
+  })
   return job
 }
 

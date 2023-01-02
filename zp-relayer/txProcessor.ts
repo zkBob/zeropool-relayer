@@ -62,20 +62,18 @@ function buildTxData(txData: TxData) {
   return data.join('')
 }
 
-export async function processTx(id: string, tx: TxPayload) {
+export async function processTx(tx: TxPayload) {
   const { txType, txProof, rawMemo: memo, depositSignature } = tx
 
   const nullifier = getTxProofField(txProof, 'nullifier')
   const outCommit = getTxProofField(txProof, 'out_commit')
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
 
-  const logPrefix = `Job ${id}:`
-
   const { pub, sec, commitIndex } = pool.optimisticState.getVirtualTreeProofInputs(outCommit)
 
-  logger.debug(`${logPrefix} Proving tree...`)
+  logger.debug(`Proving tree...`)
   const treeProof = await Proof.treeAsync(pool.treeParams, pub, sec)
-  logger.debug(`${logPrefix} Tree proved`)
+  logger.debug(`Tree proved`)
 
   const rootAfter = treeProof.inputs[1]
   const data = buildTxData({

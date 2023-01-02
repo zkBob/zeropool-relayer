@@ -2,7 +2,7 @@ import { toBN, toWei } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
 import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { poolTxQueue, PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
+import { poolTxQueue, BatchTx, PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
 import { readNonce, updateField, RelayerKeys, updateNonce } from '@/utils/redisFields'
 import { buildPrefixedMemo, truncateMemoTxPrefix, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
@@ -25,6 +25,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
   mutex: Mutex,
   redis: Redis
 ) {
+  const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
     connection: redis,
@@ -35,17 +36,18 @@ export async function createPoolTxWorker<T extends EstimationType>(
   await updateNonce(nonce)
 
   const CHAIN_ID = await getChainId(web3)
-  const poolTxWorkerProcessor = async (job: Job<TxPayload[]>) => {
+  const poolTxWorkerProcessor = async (job: Job<BatchTx, PoolTxResult[]>) => {
     const sentTxNum = await sentTxQueue.count()
     if (sentTxNum >= config.maxSentQueueSize) {
       throw new Error('Optimistic state overflow')
     }
 
-    const txs = job.data
+    const txs = job.data.transactions
+    const traceId = job.data.traceId
 
-    const logPrefix = `POOL WORKER: Job ${job.id}:`
-    logger.info('%s processing...', logPrefix)
-    logger.info('Received %s txs', txs.length)
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId })
+    jobLogger.info('Processing...')
+    jobLogger.info('Received %s txs', txs.length)
 
     const txHashes: [string, string][] = []
     for (const tx of txs) {
@@ -53,9 +55,9 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
       await validateTx(tx, pool)
 
-      const { data, commitIndex, rootAfter } = await processTx(job.id as string, tx)
+      const { data, commitIndex, rootAfter } = await processTx(tx)
 
-      logger.info(`${logPrefix} nonce: ${nonce}`)
+      jobLogger.info(`nonce: ${nonce}`)
 
       const txConfig = {
         data,
@@ -81,7 +83,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
         const err = e as Error
         if (isInsufficientBalanceError(err)) {
           const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPriceWithExtra)))
-          logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+          jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
           await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
           waitForFunds(
             web3,
@@ -96,7 +98,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
       await updateNonce(++nonce)
 
-      logger.info(`${logPrefix} TX hash ${txHash}`)
+      jobLogger.info('Sent tx', { txHash })
 
       await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
 
@@ -107,7 +109,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
       const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
 
       pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
-      logger.debug('Adding nullifier %s to OS', nullifier)
+      jobLogger.debug('Adding nullifier %s to OS', nullifier)
       await pool.optimisticState.nullifiers.add([nullifier])
 
       const sentJob = await sentTxQueue.add(
@@ -122,12 +124,14 @@ export async function createPoolTxWorker<T extends EstimationType>(
           txConfig,
           txPayload: tx,
           prevAttempts: [[txHash, gasPriceWithExtra]],
+          traceId,
         },
         {
           delay: config.sentTxDelay,
           priority: nonce,
         }
       )
+      jobLogger.info(`Added sentTxWorker job: ${sentJob.id}`)
 
       txHashes.push([txHash, sentJob.id as string])
     }
@@ -135,7 +139,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
     return txHashes
   }
 
-  const poolTxWorker = new Worker<TxPayload[], PoolTxResult[]>(
+  const poolTxWorker = new Worker<BatchTx, PoolTxResult[]>(
     TX_QUEUE_NAME,
     job => withErrorLog(
       withMutex(mutex, () => poolTxWorkerProcessor(job)),
@@ -145,7 +149,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
   )
 
   poolTxWorker.on('error', e => {
-    logger.info('POOL_WORKER ERR: %o', e)
+    workerLogger.info('POOL_WORKER ERR: %o', e)
   })
 
   return poolTxWorker
