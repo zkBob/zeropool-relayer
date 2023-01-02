@@ -29,7 +29,10 @@
 | RELAYER_REDIS_URL | Url to redis instance | URL |
 | RPC_URL | The HTTPS URL(s) used to communicate to the RPC nodes. Several URLs can be specified, delimited by spaces. If the connection to one of these nodes is lost the next URL is used for connection. | URL |
 | RELAYER_TX_REDUNDANCY | If set to `true`, instructs relayer to send `eth_sendRawTransaction` requests through all available RPC urls defined in `RPC_URL` variables instead of using first available one. Defaults to `false` | boolean |
-| RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL | Interval for checking JSON RPC sync state, by requesting the latest block number. Relayer will switch to the fallback JSON RPC in case sync process is stuck. If this variable is `0` sync state check is disabled. Defaults to `0`  | integer |
+| RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL | Interval in milliseconds for checking JSON RPC sync state, by requesting the latest block number. Relayer will switch to the fallback JSON RPC in case sync process is stuck. If this variable is `0` sync state check is disabled. Defaults to `0`  | integer |
+| INSUFFICIENT_BALANCE_CHECK_TIMEOUT | Interval in milliseconds to check for relayer balance update if transaction send failed with insufficient balance error. Default `60000` | integer |
 | SENT_TX_DELAY | Delay in milliseconds for sentTxWorker to verify submitted transactions | integer |
 | PERMIT_DEADLINE_THRESHOLD_INITIAL | Minimum time threshold in seconds for permit signature deadline to be valid (before initial transaction submission) | integer |
 | PERMIT_DEADLINE_THRESHOLD_RESEND | Minimum time threshold in seconds for permit signature deadline to be valid (for re-send attempts) | integer |
+| RELAYER_REQUIRE_TRACE_ID | If set to `true`, then requests to relayer (except `/info`, `/version`, `/params/hash/tree`, `/params/hash/tx`) without `zkbob-support-id` header will be rejected. | boolean |
+| RELAYER_REQUIRE_HTTPS | If set to `true`, then RPC URL(s) must be in HTTPS format. HTTP RPC URL(s) should be used in test environment only. | boolean |
