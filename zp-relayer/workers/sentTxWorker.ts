@@ -7,8 +7,14 @@ import config from '@/config'
 import { pool } from '@/pool'
 import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
-import { buildPrefixedMemo, waitForFunds, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
+import {
+  GasPrice,
+  EstimationType,
+  chooseGasPriceOptions,
+  addExtraGasPrice,
+  getMaxRequiredGasPrice,
+} from '@/services/gas-price'
+import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isInsufficientBalanceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
