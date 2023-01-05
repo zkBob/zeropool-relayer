@@ -224,7 +224,7 @@ async function checkScreener(address: string) {
       body: JSON.stringify({ address }),
     })
     const response = await rawResponse.json()
-    if (response.result === false) {
+    if (response.result === true) {
       return new TxValidationError(ACC_VALIDATION_FAILED)
     }
   } catch (e) {
