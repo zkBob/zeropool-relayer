@@ -155,7 +155,7 @@ class Pool {
 
     const lastBlockNumber = await this.getLastBlockToProcess()
     let toBlock = startBlock
-    for (let fromBlock = startBlock; toBlock <= lastBlockNumber + 1; startBlock = toBlock) {
+    for (let fromBlock = startBlock; toBlock <= lastBlockNumber + 1; fromBlock = toBlock) {
       toBlock += config.eventsProcessingBatchSize
       const events = await getEvents(this.PoolInstance, 'Message', {
         fromBlock,
