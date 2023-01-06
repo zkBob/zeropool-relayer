@@ -141,10 +141,11 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
   const poolTxWorker = new Worker<BatchTx, PoolTxResult[]>(
     TX_QUEUE_NAME,
-    job => withErrorLog(
-      withMutex(mutex, () => poolTxWorkerProcessor(job)),
-      [TxValidationError]
-    ),
+    job =>
+      withErrorLog(
+        withMutex(mutex, () => poolTxWorkerProcessor(job)),
+        [TxValidationError]
+      ),
     WORKER_OPTIONS
   )
 
