@@ -100,8 +100,6 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
       jobLogger.info('Sent tx', { txHash })
 
-      await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
-
       const nullifier = getTxProofField(txProof, 'nullifier')
       const outCommit = getTxProofField(txProof, 'out_commit')
 
