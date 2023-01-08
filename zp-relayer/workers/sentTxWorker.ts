@@ -97,7 +97,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
     if (shouldReprocess) {
       // TODO: handle this case later
-      logger.warn('Ambiguity detected: nonce increased but no respond that transaction was mined')
+      jobLogger.warn('Ambiguity detected: nonce increased but no respond that transaction was mined')
       // Error should be caught by `withLoop` to re-run job
       throw new Error(RECHECK_ERROR)
     }
