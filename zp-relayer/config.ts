@@ -47,6 +47,7 @@ const config = {
     .map(s => parseInt(s, 10)),
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
   requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
+  logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
 }
 
 export default config
