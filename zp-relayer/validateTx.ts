@@ -10,7 +10,7 @@ import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
 import { numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
-import { ZERO_ADDRESS } from './utils/constants'
+import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
 import { getTxProofField, parseDelta } from './utils/proofInputs'
 import type { PoolState } from './state/PoolState'
@@ -207,20 +207,24 @@ async function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
   return null
 }
 
-async function checkScreener(address: string) {
+async function checkScreener(address: string, traceId?: string) {
   if (config.screenerUrl === null || config.screenerToken === null) {
     return null
   }
 
   const ACC_VALIDATION_FAILED = 'Internal account validation failed'
 
+  const headers: Record<string, string> = {
+    'Content-type': 'application/json',
+    'Authorization': `Bearer ${config.screenerToken}`,
+  }
+
+  if (traceId) headers[TRACE_ID] = traceId
+
   try {
     const rawResponse = await fetch(config.screenerUrl, {
       method: 'POST',
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': `Bearer ${config.screenerToken}`,
-      },
+      headers,
       body: JSON.stringify({ address }),
     })
     const response = await rawResponse.json()
@@ -235,7 +239,7 @@ async function checkScreener(address: string) {
   return null
 }
 
-export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool) {
+export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool, traceId?: string) {
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
@@ -286,6 +290,6 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   }
 
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT || txType === TxType.WITHDRAWAL) {
-    await checkAssertion(() => checkScreener(userAddress))
+    await checkAssertion(() => checkScreener(userAddress, traceId))
   }
 }
