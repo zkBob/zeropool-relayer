@@ -169,7 +169,7 @@ export function waitForFunds(
   address: string,
   cb: (balance: BN) => void,
   minimumBalance: BN,
-  timeout: number,
+  timeout: number
 ) {
   return promiseRetry(
     async retry => {

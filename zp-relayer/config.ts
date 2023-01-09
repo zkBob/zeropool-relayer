@@ -47,6 +47,8 @@ const config = {
     .map(s => parseInt(s, 10)),
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
   requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
+  screenerUrl: process.env.RELAYER_SCREENER_URL || null,
+  screenerToken: process.env.RELAYER_SCREENER_TOKEN || null,
 }
 
 export default config

@@ -99,7 +99,7 @@ describe('poolWorker', () => {
     gasPriceService.stop()
   })
 
-  async function expectJobFinished(job: Job<TxPayload[], PoolTxResult[]>) {
+  async function expectJobFinished(job: Job<BatchTx, PoolTxResult[]>) {
     const [[initialHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
     expect(initialHash.length).eq(66)
 
