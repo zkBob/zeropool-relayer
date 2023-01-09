@@ -1,6 +1,7 @@
 import { format, transports } from 'winston'
 import expressWinston from 'express-winston'
 import config from '@/config'
+import { logger } from './appLogger'
 
 export function createPersistentLoggerMiddleware(filename: string = 'zp.log') {
   return expressWinston.logger({
@@ -11,8 +12,8 @@ export function createPersistentLoggerMiddleware(filename: string = 'zp.log') {
 
 export function createConsoleLoggerMiddleware() {
   return expressWinston.logger({
-    transports: [new transports.Console()],
-    format: format.combine(format.colorize(), format.simple()),
+    winstonInstance: logger,
+    level: 'debug',
     ignoredRoutes: config.logIgnoreRoutes,
     headerBlacklist: [
       'accept',
@@ -25,5 +26,6 @@ export function createConsoleLoggerMiddleware() {
       'referer',
       'upgrade-insecure-requests',
     ],
+    requestWhitelist: ['headers', 'httpVersion'],
   })
 }
