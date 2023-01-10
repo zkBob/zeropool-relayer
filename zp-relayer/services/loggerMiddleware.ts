@@ -15,17 +15,7 @@ export function createConsoleLoggerMiddleware() {
     winstonInstance: logger,
     level: 'debug',
     ignoredRoutes: config.logIgnoreRoutes,
-    headerBlacklist: [
-      'accept',
-      'accept-language',
-      'accept-encoding',
-      'connection',
-      'content-length',
-      'content-type',
-      'postman-token',
-      'referer',
-      'upgrade-insecure-requests',
-    ],
+    headerBlacklist: config.logHeaderBlacklist,
     requestWhitelist: ['headers', 'httpVersion'],
   })
 }

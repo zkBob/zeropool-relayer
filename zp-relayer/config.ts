@@ -7,6 +7,9 @@ const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
 ).address
 
+const defaultHeaderBlacklist =
+  'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
+
 const config = {
   relayerRef: process.env.RELAYER_REF || null,
   relayerSHA: process.env.RELAYER_SHA || null,
@@ -51,6 +54,9 @@ const config = {
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
   requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
   logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
+  logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
+    .split(' ')
+    .filter(r => r.length > 0),
   screenerUrl: process.env.RELAYER_SCREENER_URL || null,
   screenerToken: process.env.RELAYER_SCREENER_TOKEN || null,
 }
