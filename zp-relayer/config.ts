@@ -38,6 +38,7 @@ const config = {
   rpcUrls: (process.env.RPC_URL as string).split(' ').filter(url => url.length > 0),
   relayerTxRedundancy: process.env.RELAYER_TX_REDUNDANCY === 'true',
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
+  sentTxLogErrorThreshold: parseInt(process.env.SENT_TX_ERROR_THRESHOLD || '3'),
   rpcRequestTimeout: parseInt(process.env.RPC_REQUEST_TIMEOUT || '1000'),
   insufficientBalanceCheckTimeout: parseInt(process.env.INSUFFICIENT_BALANCE_CHECK_TIMEOUT || '60000'),
   rpcSyncCheckInterval: parseInt(process.env.RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL || '0'),
@@ -48,6 +49,8 @@ const config = {
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
   requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
   logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
+  screenerUrl: process.env.RELAYER_SCREENER_URL || null,
+  screenerToken: process.env.RELAYER_SCREENER_TOKEN || null,
 }
 
 export default config

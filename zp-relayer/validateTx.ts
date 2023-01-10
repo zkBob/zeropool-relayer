@@ -10,7 +10,7 @@ import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
 import { numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
-import { ZERO_ADDRESS } from './utils/constants'
+import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
 import { getTxProofField, parseDelta } from './utils/proofInputs'
 import type { PoolState } from './state/PoolState'
@@ -207,7 +207,39 @@ async function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
   return null
 }
 
-export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool) {
+async function checkScreener(address: string, traceId?: string) {
+  if (config.screenerUrl === null || config.screenerToken === null) {
+    return null
+  }
+
+  const ACC_VALIDATION_FAILED = 'Internal account validation failed'
+
+  const headers: Record<string, string> = {
+    'Content-type': 'application/json',
+    'Authorization': `Bearer ${config.screenerToken}`,
+  }
+
+  if (traceId) headers[TRACE_ID] = traceId
+
+  try {
+    const rawResponse = await fetch(config.screenerUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ address }),
+    })
+    const response = await rawResponse.json()
+    if (response.result === true) {
+      return new TxValidationError(ACC_VALIDATION_FAILED)
+    }
+  } catch (e) {
+    logger.error('Request to screener failed', { error: (e as Error).message })
+    return new TxValidationError(ACC_VALIDATION_FAILED)
+  }
+
+  return null
+}
+
+export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool, traceId?: string) {
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
@@ -223,44 +255,41 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
     fee.toString(10)
   )
 
-  // prettier-ignore
-  await checkAssertion(() => checkRoot(
-    delta.transferIndex,
-    root,
-    pool.optimisticState,
-  ))
+  await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.optimisticState))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
-
   await checkAssertion(() => checkFee(fee))
-
-  if (txType === TxType.WITHDRAWAL) {
-    const { nativeAmount, receiver } = txData as WithdrawTxData
-    const receiverAddress = web3.utils.bytesToHex(Array.from(receiver))
-    logger.info('Withdraw address: %s', receiverAddress)
-    await checkAssertion(() => checkNonZeroWithdrawAddress(receiverAddress))
-    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
-  }
-
   await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
   const tokenAmountWithFee = delta.tokenAmount.add(fee)
   await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount))
 
-  const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
   let userAddress = ZERO_ADDRESS
-  if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
+
+  if (txType === TxType.WITHDRAWAL) {
+    const { nativeAmount, receiver } = txData as WithdrawTxData
+    userAddress = web3.utils.bytesToHex(Array.from(receiver))
+    logger.info('Withdraw address: %s', userAddress)
+    await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
+    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
+  } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
+    const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
     userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
     logger.info('Deposit address: %s', userAddress)
     await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
   }
+
+  const limits = await pool.getLimitsFor(userAddress)
+  await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
+
   if (txType === TxType.PERMITTABLE_DEPOSIT) {
     const { deadline } = txData as PermittableDepositTxData
     logger.info('Deadline: %s', deadline)
     await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdInitial))
   }
 
-  const limits = await pool.getLimitsFor(userAddress)
-  await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
+  if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT || txType === TxType.WITHDRAWAL) {
+    await checkAssertion(() => checkScreener(userAddress, traceId))
+  }
 }
