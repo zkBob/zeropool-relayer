@@ -13,6 +13,7 @@
 | TREE_UPDATE_PARAMS_PATH | Local path to tree update circuit parameters | string |
 | TRANSFER_PARAMS_PATH | Local path to transfer circuit parameters | string |
 | TX_VK_PATH | Local path to transaction circuit verification key | string |
+| RELAYER_REQUEST_LOG_PATH | Path to a file where all HTTP request logs will be saved. Default `./zp.log`. | string |
 | STATE_DIR_PATH | Path to persistent state files related to tree and transactions storage. Default: `./POOL_STATE` | string |
 | GAS_PRICE_FALLBACK | Default fallback gas price | integer |
 | GAS_PRICE_ESTIMATION_TYPE | Gas price estimation type | `web3` / `gas-price-oracle` / `eip1559-gas-estimation` / `polygon-gasstation-v2` |
