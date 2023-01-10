@@ -8,7 +8,7 @@ import { init } from './init'
 
 const app = express()
 
-app.use(createPersistentLoggerMiddleware('zp.log'))
+app.use(createPersistentLoggerMiddleware(config.requestLogPath))
 app.use(createConsoleLoggerMiddleware())
 
 app.use(router)
