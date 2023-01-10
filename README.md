@@ -15,6 +15,11 @@ You can use a pre-built [image](https://github.com/zkBob/zeropool-relayer/pkgs/c
 cd zp-relayer && yarn test:unit
 ```
 
+**Worker tests**
+To run worker tests you need Docker and docker-compose installed locally.
+```bash
+cd zp-relayer && yarn test:worker
+```
 
 ## Workflow
 

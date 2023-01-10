@@ -13,6 +13,7 @@
 | TREE_UPDATE_PARAMS_PATH | Local path to tree update circuit parameters | string |
 | TRANSFER_PARAMS_PATH | Local path to transfer circuit parameters | string |
 | TX_VK_PATH | Local path to transaction circuit verification key | string |
+| RELAYER_REQUEST_LOG_PATH | Path to a file where all HTTP request logs will be saved. Default `./zp.log`. | string |
 | STATE_DIR_PATH | Path to persistent state files related to tree and transactions storage. Default: `./POOL_STATE` | string |
 | GAS_PRICE_FALLBACK | Default fallback gas price | integer |
 | GAS_PRICE_ESTIMATION_TYPE | Gas price estimation type | `web3` / `gas-price-oracle` / `eip1559-gas-estimation` / `polygon-gasstation-v2` |
@@ -37,5 +38,7 @@
 | PERMIT_DEADLINE_THRESHOLD_RESEND | Minimum time threshold in seconds for permit signature deadline to be valid (for re-send attempts) | integer |
 | RELAYER_REQUIRE_TRACE_ID | If set to `true`, then requests to relayer (except `/info`, `/version`, `/params/hash/tree`, `/params/hash/tx`) without `zkbob-support-id` header will be rejected. | boolean |
 | RELAYER_REQUIRE_HTTPS | If set to `true`, then RPC URL(s) must be in HTTPS format. HTTP RPC URL(s) should be used in test environment only. | boolean |
+| RELAYER_LOG_IGNORE_ROUTES | List of space separated relayer endpoints for which request logging will be suppressed. E.g. `/fee /version` | string(s) |
+| RELAYER_LOG_HEADER_BLACKLIST | List of space separated HTTP headers which will be suppressed in request logs. E.g. `content-length content-type` | string(s) |
 | RELAYER_SCREENER_URL | Screener service URL | URL |
 | RELAYER_SCREENER_TOKEN | Authorization token for screener service | string |
