@@ -38,6 +38,7 @@ const config = {
   rpcUrls: (process.env.RPC_URL as string).split(' ').filter(url => url.length > 0),
   relayerTxRedundancy: process.env.RELAYER_TX_REDUNDANCY === 'true',
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
+  sentTxLogErrorThreshold: parseInt(process.env.SENT_TX_ERROR_THRESHOLD || '3'),
   rpcRequestTimeout: parseInt(process.env.RPC_REQUEST_TIMEOUT || '1000'),
   insufficientBalanceCheckTimeout: parseInt(process.env.INSUFFICIENT_BALANCE_CHECK_TIMEOUT || '60000'),
   rpcSyncCheckInterval: parseInt(process.env.RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL || '0'),

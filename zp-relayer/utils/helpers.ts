@@ -103,11 +103,14 @@ export async function setIntervalAndRun(f: () => Promise<void> | void, interval:
   return handler
 }
 
-export function withMutex<R>(mutex: Mutex, f: () => Promise<R>): () => Promise<R> {
-  return async () => {
+export function withMutex<F extends (...args: any[]) => any>(
+  mutex: Mutex,
+  f: F
+): (...args: Parameters<F>) => Promise<Awaited<ReturnType<F>>> {
+  return async (...args) => {
     const release = await mutex.acquire()
     try {
-      return await f()
+      return await f(...args)
     } finally {
       release()
     }
@@ -136,12 +139,16 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export function withLoop<R>(f: () => Promise<R>, timeout: number, suppressedErrors: string[] = []): () => Promise<R> {
-  // @ts-ignore
+export function withLoop<F extends (i: number) => any>(
+  f: F,
+  timeout: number,
+  suppressedErrors: string[] = []
+): () => Promise<Awaited<ReturnType<F>>> {
   return async () => {
+    let i = 1
     while (1) {
       try {
-        return await f()
+        return await f(i++)
       } catch (e) {
         const err = e as Error
         let isSuppressed = false

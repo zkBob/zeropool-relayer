@@ -16,7 +16,7 @@ import {
 } from '@/services/gas-price'
 import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { isGasPriceError, isInsufficientBalanceError, isSameTransactionError } from '@/utils/web3Errors'
+import { isGasPriceError, isInsufficientBalanceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
@@ -84,8 +84,8 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     return [null, true]
   }
 
-  const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
-    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId })
+  const sentTxWorkerProcessor = async (job: Job<SentTxPayload>, resendNum: number = 1) => {
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId, resendNum })
 
     jobLogger.info('Verifying job %s', job.data.poolJobId)
     const { truncatedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
@@ -97,8 +97,9 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
     if (shouldReprocess) {
       // TODO: handle this case later
+      jobLogger.warn('Ambiguity detected: nonce increased but no respond that transaction was mined')
       // Error should be caught by `withLoop` to re-run job
-      throw new Error('Ambiguity detected: nonce increased but no respond that transaction was mined')
+      throw new Error(RECHECK_ERROR)
     }
 
     if (tx) {
@@ -181,6 +182,10 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       }
     } else {
       // Resend with updated gas price
+      if (resendNum > config.sentTxLogErrorThreshold) {
+        jobLogger.error('Too many unsuccessful re-sends')
+      }
+
       const fetchedGasPrice = await gasPrice.fetchOnce()
       const oldWithExtra = addExtraGasPrice(lastGasPrice, config.minGasPriceBumpFactor, null)
       const newWithExtra = addExtraGasPrice(fetchedGasPrice, config.gasPriceSurplus, null)
@@ -201,7 +206,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         jobLogger.info('Re-send tx', { txHash: newTxHash })
       } catch (e) {
         const err = e as Error
-        jobLogger.warn('Tx resend failed: %s', err.message, { txHash: newTxHash })
+        jobLogger.warn('Tx resend failed', { error: err.message, txHash: newTxHash })
         if (isGasPriceError(err) || isSameTransactionError(err)) {
           // Tx wasn't sent successfully, but still update last attempt's
           // gasPrice to be accounted in the next iteration
@@ -213,7 +218,11 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           job.data.prevAttempts.at(-1)![1] = lastGasPrice
 
           const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(newGasPrice)))
-          logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+          jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+        } else if (isNonceError(err)) {
+          jobLogger.warn('Nonce error', { error: err.message, txHash: newTxHash })
+          // Throw suppressed error to be treated as a warning
+          throw new Error(RECHECK_ERROR)
         }
         // Error should be caught by `withLoop` to re-run job
         throw e
@@ -241,7 +250,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     job =>
       withErrorLog(
         withLoop(
-          withMutex(mutex, () => sentTxWorkerProcessor(job)),
+          withMutex(mutex, (i: number) => sentTxWorkerProcessor(job, i)),
           config.sentTxDelay,
           [RECHECK_ERROR]
         )
