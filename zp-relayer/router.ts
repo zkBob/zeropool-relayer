@@ -52,14 +52,14 @@ router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
 router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
 
 // Error handler middleware
-router.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (err instanceof ValidationError) {
-    const validationErrors = err.validationErrors
-    logger.info('Request errors: %o', validationErrors, { path: req.path })
+router.use((error: any, req: Request, res: Response) => {
+  if (error instanceof ValidationError) {
+    const validationErrors = error.validationErrors
+    logger.warn('Validation errors', { errors: validationErrors, path: req.path })
     res.status(400).json(validationErrors)
-    next()
   } else {
-    next(err)
+    logger.error('Internal error', { error, path: req.path })
+    res.status(500).send('Internal server error')
   }
 })
 
