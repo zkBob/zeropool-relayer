@@ -1,30 +1,30 @@
-import { Request, Response, NextFunction } from 'express'
-import { pool } from './pool'
-import { logger } from './services/appLogger'
+import { Request, Response } from 'express'
+import { pool, PoolTx } from './pool'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './config'
 import {
   checkGetLimits,
   checkGetSiblings,
-  checkGetTransactions,
   checkGetTransactionsV2,
   checkMerkleRootErrors,
-  checkSendTransactionErrors,
   checkSendTransactionsErrors,
+  checkTraceId,
+  validateBatch,
 } from './validation/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
+import { TRACE_ID } from './utils/constants'
 
-async function sendTransactions(req: Request, res: Response, next: NextFunction) {
-  const errors = checkSendTransactionsErrors(req.body)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+async function sendTransactions(req: Request, res: Response) {
+  validateBatch([
+    [checkTraceId, req.headers],
+    [checkSendTransactionsErrors, req.body],
+  ])
 
-  const rawTxs = req.body
-  const txs = rawTxs.map((tx: any) => {
+  const rawTxs = req.body as PoolTx[]
+  const traceId = req.headers[TRACE_ID] as string
+
+  const txs = rawTxs.map(tx => {
     const { proof, memo, txType, depositSignature } = tx
     return {
       proof,
@@ -33,59 +33,26 @@ async function sendTransactions(req: Request, res: Response, next: NextFunction)
       depositSignature,
     }
   })
-  const jobId = await pool.transact(txs)
+  const jobId = await pool.transact(txs, traceId)
   res.json({ jobId })
 }
 
-async function sendTransaction(req: Request, res: Response, next: NextFunction) {
-  const errors = checkSendTransactionErrors(req.body)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
-  const { proof, memo, txType, depositSignature } = req.body
-  const tx = [{ proof, memo, txType, depositSignature }]
-  const jobId = await pool.transact(tx)
-  res.json({ jobId })
-}
-
-async function merkleRoot(req: Request, res: Response, next: NextFunction) {
-  const errors = checkMerkleRootErrors(req.params)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+async function merkleRoot(req: Request, res: Response) {
+  validateBatch([
+    [checkTraceId, req.headers],
+    [checkMerkleRootErrors, req.params],
+  ])
 
   const index = req.params.index
   const root = await pool.getContractMerkleRoot(index)
   res.json(root)
 }
 
-async function getTransactions(req: Request, res: Response, next: NextFunction) {
-  const errors = checkGetTransactions(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
-
-  const state = req.query.optimistic ? pool.optimisticState : pool.state
-  // Types checked in validation stage
-  // @ts-ignore
-  const { txs } = await state.getTransactions(req.query.limit, req.query.offset)
-  res.json(txs)
-}
-
-async function getTransactionsV2(req: Request, res: Response, next: NextFunction) {
-  const errors = checkGetTransactionsV2(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+async function getTransactionsV2(req: Request, res: Response) {
+  validateBatch([
+    [checkTraceId, req.headers],
+    [checkGetTransactionsV2, req.query],
+  ])
 
   const toV2Format = (prefix: string) => (tx: string) => {
     const outCommit = tx.slice(0, 64)
@@ -127,6 +94,8 @@ async function getJob(req: Request, res: Response) {
     state: JobStatus
     txHash: null | string
   }
+
+  validateBatch([[checkTraceId, req.headers]])
 
   const jobId = req.params.id
 
@@ -233,18 +202,18 @@ function relayerInfo(req: Request, res: Response) {
 }
 
 function getFee(req: Request, res: Response) {
+  validateBatch([[checkTraceId, req.headers]])
+
   res.json({
     fee: config.relayerFee.toString(10),
   })
 }
 
 async function getLimits(req: Request, res: Response) {
-  const errors = checkGetLimits(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+  validateBatch([
+    [checkTraceId, req.headers],
+    [checkGetLimits, req.query],
+  ])
 
   const address = req.query.address as unknown as string
   const limits = await pool.getLimitsFor(address)
@@ -253,12 +222,10 @@ async function getLimits(req: Request, res: Response) {
 }
 
 function getSiblings(req: Request, res: Response) {
-  const errors = checkGetSiblings(req.query)
-  if (errors) {
-    logger.info('Request errors: %o', errors)
-    res.status(400).json({ errors })
-    return
-  }
+  validateBatch([
+    [checkTraceId, req.headers],
+    [checkGetSiblings, req.query],
+  ])
 
   const index = req.query.index as unknown as number
 
@@ -278,15 +245,20 @@ function getParamsHash(type: 'tree' | 'transfer') {
   }
 }
 
+function relayerVersion(req: Request, res: Response) {
+  res.json({
+    ref: config.relayerRef,
+    commitHash: config.relayerSHA,
+  })
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
 
 export default {
-  sendTransaction,
   sendTransactions,
   merkleRoot,
-  getTransactions,
   getTransactionsV2,
   getJob,
   relayerInfo,
@@ -294,5 +266,6 @@ export default {
   getLimits,
   getSiblings,
   getParamsHash,
+  relayerVersion,
   root,
 }

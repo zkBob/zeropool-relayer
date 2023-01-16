@@ -5,7 +5,7 @@ import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
 import config from './config'
 import type { Limits, Pool } from './pool'
-import { NullifierSet } from './state/nullifierSet'
+import type { NullifierSet } from './state/nullifierSet'
 import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
 import { numToHex, unpackSignature } from './utils/helpers'
@@ -13,13 +13,14 @@ import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
 import { getTxProofField, parseDelta } from './utils/proofInputs'
-import { RootSet } from './state/rootSet'
+import type { PoolState } from './state/PoolState'
 
 const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
 const ZERO = toBN(0)
 
 export class TxValidationError extends Error {
+  name = 'TxValidationError'
   constructor(message: string) {
     super(message)
   }
@@ -195,33 +196,12 @@ async function getRecoveredAddress(
   return recoveredAddress
 }
 
-async function checkRoot(
-  proofIndex: BN,
-  proofRoot: string,
-  poolSet: RootSet,
-  optimisticSet: RootSet,
-  contractFallback: (i: string) => Promise<string>
-) {
-  const indexStr = proofIndex.toString(10)
+async function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
+  const index = proofIndex.toNumber()
 
-  // Lookup root in cache
-  let isPresent = true
-  let root = (await poolSet.get(indexStr)) || (await optimisticSet.get(indexStr))
-
-  // Get root from contract if not found in cache
-  if (root === null) {
-    logger.info('Getting root from contract...')
-    root = await contractFallback(indexStr)
-    isPresent = false
-  }
-
-  if (root !== proofRoot) {
-    return new TxValidationError(`Incorrect root at index ${indexStr}: given ${proofRoot}, expected ${root}`)
-  }
-
-  // If received correct root from contract update cache (only confirmed state)
-  if (!isPresent) {
-    await poolSet.add({ [proofIndex.toNumber()]: root })
+  const stateRoot = state.getMerkleRootAt(index)
+  if (stateRoot !== proofRoot) {
+    return new TxValidationError(`Incorrect root at index ${index}: given ${proofRoot}, expected ${stateRoot}`)
   }
 
   return null
@@ -247,9 +227,7 @@ export async function validateTx({ txType, rawMemo, txProof, depositSignature }:
   await checkAssertion(() => checkRoot(
     delta.transferIndex,
     root,
-    pool.state.roots,
-    pool.optimisticState.roots,
-    i => pool.getContractMerkleRoot(i)
+    pool.optimisticState,
   ))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))

@@ -1,15 +1,16 @@
 import type Redis from 'ioredis'
 import type { Mutex } from 'async-mutex'
+import { toBN } from 'web3-utils'
 import type { TransactionReceipt } from 'web3-core'
 import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
 import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice } from '@/services/gas-price'
-import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
+import { GasPrice, EstimationType, chooseGasPriceOptions, addExtraGasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
+import { buildPrefixedMemo, waitForFunds, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { isGasPriceError, isSameTransactionError } from '@/utils/web3Errors'
+import { isGasPriceError, isInsufficientBalanceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
@@ -33,8 +34,6 @@ async function clearOptimisticState() {
   pool.optimisticState.rollbackTo(pool.state)
   logger.info('Clearing optimistic nullifiers...')
   await pool.optimisticState.nullifiers.clear()
-  logger.info('Clearing optimistic roots...')
-  await pool.optimisticState.roots.clear()
 
   const root1 = pool.state.getMerkleRoot()
   const root2 = pool.optimisticState.getMerkleRoot()
@@ -42,6 +41,7 @@ async function clearOptimisticState() {
 }
 
 export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
+  const workerLogger = logger.child({ worker: 'sent-tx' })
   const WORKER_OPTIONS = {
     autorun: false,
     connection: redis,
@@ -63,11 +63,11 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     // Iterate in reverse order to check the latest hash first
     for (let i = prevAttempts.length - 1; i >= 0; i--) {
       const txHash = prevAttempts[i][0]
-      logger.info('Verifying %s ...', txHash)
+      logger.info('Verifying tx', { txHash })
       try {
         tx = await web3.eth.getTransactionReceipt(txHash)
       } catch (e) {
-        logger.warn('Cannot get tx receipt for %s; RPC response: %s', txHash, (e as Error).message)
+        logger.warn('Cannot get tx receipt; RPC response: %s', (e as Error).message, { txHash })
         // Exception should be caught by `withLoop` to re-run job
         throw e
       }
@@ -79,8 +79,9 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   }
 
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
-    const logPrefix = `SENT WORKER: Job ${job.id}:`
-    logger.info('%s processing...', logPrefix)
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId })
+
+    jobLogger.info('Verifying job %s', job.data.poolJobId)
     const { truncatedMemo, commitIndex, outCommit, nullifier, root, prevAttempts, txConfig } = job.data
 
     // Any thrown web3 error will re-trigger re-send loop iteration
@@ -99,7 +100,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       // Tx mined
       if (tx.status) {
         // Successful
-        logger.info('%s Transaction %s was successfully mined at block %s', logPrefix, txHash, tx.blockNumber)
+        jobLogger.info('Transaction was successfully mined', { txHash, blockNumber: tx.blockNumber })
 
         const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
         pool.state.updateState(commitIndex, outCommit, prefixedMemo)
@@ -107,41 +108,34 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
         // Add nullifier to confirmed state and remove from optimistic one
-        logger.info('Adding nullifier %s to PS', nullifier)
+        jobLogger.info('Adding nullifier %s to PS', nullifier)
         await pool.state.nullifiers.add([nullifier])
-        logger.info('Removing nullifier %s from OS', nullifier)
+        jobLogger.info('Removing nullifier %s from OS', nullifier)
         await pool.optimisticState.nullifiers.remove([nullifier])
-
-        // Add root to confirmed state and remove from optimistic one
-        const poolIndex = ((commitIndex + 1) * OUTPLUSONE).toString(10)
-        logger.info('Adding root %s %s to PS', poolIndex, root)
-        await pool.state.roots.add({ [poolIndex]: root })
-        logger.info('Removing root %s %s from OS', poolIndex, root)
-        await pool.optimisticState.roots.remove([poolIndex])
 
         const node1 = pool.state.getCommitment(commitIndex)
         const node2 = pool.optimisticState.getCommitment(commitIndex)
-        logger.info(`Assert commitments are equal: ${node1}, ${node2}`)
+        jobLogger.info('Assert commitments are equal: %s, %s', node1, node2)
         if (node1 !== node2) {
-          logger.error('Commitments are not equal')
+          jobLogger.error('Commitments are not equal')
         }
 
         const rootConfirmed = pool.state.getMerkleRoot()
-        logger.info(`Assert roots are equal`)
+        jobLogger.info('Assert roots are equal')
         if (rootConfirmed !== root) {
           // TODO: Should be impossible but in such case
           // we should recover from some checkpoint
-          logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
+          jobLogger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
         }
 
         return [SentTxState.MINED, txHash, []] as SentTxResult
       } else {
         // Revert
-        logger.error('%s Transaction %s reverted at block %s', logPrefix, txHash, tx.blockNumber)
+        jobLogger.error('Transaction reverted', { txHash, blockNumber: tx.blockNumber })
 
         // Means that rollback was done previously, no need to do it now
         if (await checkMarked(redis, job.id as string)) {
-          logger.info('%s Job %s marked as failed, skipping', logPrefix, job.id)
+          jobLogger.info('Job marked as failed, skipping')
           return [SentTxState.REVERT, txHash, []] as SentTxResult
         }
 
@@ -158,18 +152,23 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
           // https://github.com/taskforcesh/bullmq/blob/master/src/commands/addJob-8.lua#L142-L143
           if (!wj?.id) continue
           waitingJobIds.push(wj.id)
-          const reschedulePromise = poolTxQueue.add(txHash, [wj.data.txPayload]).then(j => {
+
+          const { txPayload, traceId } = wj.data
+          const transactions = [txPayload]
+
+          // To not mess up traceId we add each transaction separately
+          const reschedulePromise = poolTxQueue.add(txHash, { transactions, traceId }).then(j => {
             const newPoolJobId = j.id as string
             newPoolJobIdMapping[wj.data.poolJobId] = newPoolJobId
             return newPoolJobId
           })
           reschedulePromises.push(reschedulePromise)
         }
-        logger.info('Marking ids %j as failed', waitingJobIds)
+        jobLogger.info('Marking ids %j as failed', waitingJobIds)
         await markFailed(redis, waitingJobIds)
-        logger.info('%s Rescheduling %d jobs to process...', logPrefix, waitingJobs.length)
+        jobLogger.info('Rescheduling %d jobs to process...', waitingJobs.length)
         const rescheduledIds = await Promise.all(reschedulePromises)
-        logger.info('%s Update pool job id mapping %j ...', logPrefix, newPoolJobIdMapping)
+        jobLogger.info('Update pool job id mapping %j ...', newPoolJobIdMapping)
         await pool.state.jobIdsMapping.add(newPoolJobIdMapping)
 
         return [SentTxState.REVERT, txHash, rescheduledIds] as SentTxResult
@@ -182,7 +181,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
       const newGasPrice = chooseGasPriceOptions(oldWithExtra, newWithExtra)
 
-      logger.warn('%s Tx %s is not mined; updating gasPrice: %o -> %o', logPrefix, lastHash, lastGasPrice, newGasPrice)
+      jobLogger.warn('Tx %s is not mined; updating gasPrice: %o -> %o', lastHash, lastGasPrice, newGasPrice)
 
       const newTxConfig = {
         ...txConfig,
@@ -193,16 +192,22 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
       job.data.prevAttempts.push([newTxHash, newGasPrice])
       try {
         await sendTransaction(web3Redundant, rawTransaction)
-        logger.info(`${logPrefix} Re-send tx; New hash: ${newTxHash}`)
+        jobLogger.info('Re-send tx', { txHash: newTxHash })
       } catch (e) {
         const err = e as Error
-        logger.warn('%s Tx resend failed for %s: %s', logPrefix, lastHash, err.message)
+        jobLogger.warn('Tx resend failed: %s', err.message, { txHash: newTxHash })
         if (isGasPriceError(err) || isSameTransactionError(err)) {
           // Tx wasn't sent successfully, but still update last attempt's
           // gasPrice to be accounted in the next iteration
           await job.update({
             ...job.data,
           })
+        } else if (isInsufficientBalanceError(err)) {
+          // We don't want to take into account last gasPrice increase
+          job.data.prevAttempts.at(-1)![1] = lastGasPrice
+
+          const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(newGasPrice)))
+          logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
         }
         // Error should be caught by `withLoop` to re-run job
         throw e
@@ -239,7 +244,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
   )
 
   sentTxWorker.on('error', e => {
-    logger.info('SENT_WORKER ERR: %o', e)
+    workerLogger.info('SENT_WORKER ERR: %o', e)
   })
 
   return sentTxWorker

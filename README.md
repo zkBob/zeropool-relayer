@@ -60,12 +60,9 @@ sequenceDiagram
 ## API
 
 For a detailed description of each method's payload you can refer to [`zp-relayer/validation/validation.ts`](zp-relayer/validation/validation.ts) file with JSON validation schemas.
-
-- `/sendTransaction` - submit a transaction to relayer (deprecated).
+Note, that requests to all endpoints (except `/`, `/info`, `/params/hash/tree`, `/params/hash/tx`) also require a special `zkbob-support-id` header if `RELAYER_REQUIRE_TRACE_ID` env is set to `true`. This header should be automatically set by the client application.
 
 - `/sendTransactions` - submit batch of transaction to relayer.
-
-- `/transactions?limit=${limit}&offset=${offset}&optimistic=${true|false}` - list of transaction memo blocks (deprecated).
 
 - `/transactions/v2?limit=${limit}&offset=${offset}` - list of encoded transactions data in the following format `"${stateBit}${txHash}${outCommit}${memo}"`. `stateBit` is `1` if transaction is in confirmed state and `0` otherwise.
 
@@ -120,11 +117,11 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
     {
         deposit: {
             singleOperation // Limit for single pool operation
-            daylyForAddress: { // Daily deposit limits for address
+            dailyForAddress: { // Daily deposit limits for address
               total
               available
             },
-            daylyForAll: { // Daily deposit limits  for all users
+            dailyForAll: { // Daily deposit limits  for all users
               total
               available
             },
@@ -134,12 +131,22 @@ For a detailed description of each method's payload you can refer to [`zp-relaye
             },
         },
         withdraw: {
-            daylyForAll: { // Daily withdraw limit for all users
+            dailyForAll: { // Daily withdraw limit for all users
               total
               available
             },
         },
         tier // Address tier
+    }
+    ```
+
+- `/version` - currently used relayer version
+
+    **Response**
+    ```
+    {
+        ref // Branch or tag
+        commitHash // Commit hash
     }
     ```
 

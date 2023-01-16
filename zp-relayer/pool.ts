@@ -17,7 +17,7 @@ import { PoolState } from './state/PoolState'
 import { TxType } from 'zp-memo-parser'
 import { numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
-import { INIT_ROOT, OUTPLUSONE } from './utils/constants'
+import { OUTPLUSONE } from './utils/constants'
 
 export interface PoolTx {
   proof: Proof
@@ -42,11 +42,11 @@ export interface Limits {
 export interface LimitsFetch {
   deposit: {
     singleOperation: string
-    daylyForAddress: {
+    dailyForAddress: {
       total: string
       available: string
     }
-    daylyForAll: {
+    dailyForAll: {
       total: string
       available: string
     }
@@ -56,7 +56,7 @@ export interface LimitsFetch {
     }
   }
   withdraw: {
-    daylyForAll: {
+    dailyForAll: {
       total: string
       available: string
     }
@@ -109,7 +109,7 @@ class Pool {
     this.isInitialized = true
   }
 
-  async transact(txs: PoolTx[]) {
+  async transact(txs: PoolTx[], traceId?: string) {
     const queueTxs = txs.map(({ proof, txType, memo, depositSignature }) => {
       return {
         amount: '0',
@@ -120,8 +120,8 @@ class Pool {
         depositSignature,
       }
     })
-    const job = await poolTxQueue.add('tx', queueTxs)
-    logger.debug(`Added job: ${job.id}`)
+    const job = await poolTxQueue.add('tx', { transactions: queueTxs, traceId })
+    logger.debug(`Added poolTxWorker job: ${job.id}`)
     return job.id
   }
 
@@ -130,8 +130,8 @@ class Pool {
     return lastBlockNumber
   }
 
-  async syncState(fromBlock: number) {
-    logger.debug('Syncing state; starting from block %d', fromBlock)
+  async syncState(startBlock: number) {
+    logger.debug('Syncing state; starting from block %d', startBlock)
 
     const localIndex = this.state.getNextIndex()
     const localRoot = this.state.getMerkleRoot()
@@ -147,11 +147,6 @@ class Pool {
       return
     }
 
-    // Set initial root
-    await this.state.roots.add({
-      0: INIT_ROOT,
-    })
-
     const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
     const missedIndices = Array(numTxs)
     for (let i = 0; i < numTxs; i++) {
@@ -159,12 +154,12 @@ class Pool {
     }
 
     const lastBlockNumber = await this.getLastBlockToProcess()
-    let finishBlock = fromBlock
-    for (let startBlock = fromBlock; finishBlock <= lastBlockNumber; startBlock = finishBlock) {
-      finishBlock += config.eventsProcessingBatchSize
+    let toBlock = startBlock
+    for (let fromBlock = startBlock; toBlock <= lastBlockNumber + 1; fromBlock = toBlock) {
+      toBlock += config.eventsProcessingBatchSize
       const events = await getEvents(this.PoolInstance, 'Message', {
-        fromBlock: startBlock,
-        toBlock: finishBlock,
+        fromBlock,
+        toBlock: toBlock - 1,
         filter: {
           index: missedIndices,
         },
@@ -206,12 +201,6 @@ class Pool {
         // Save nullifier in confirmed state
         const nullifier = parser.getField('nullifier')
         await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
-
-        // Save root in confirmed state
-        const root = this.state.getMerkleRoot()
-        await this.state.roots.add({
-          [newPoolIndex]: root,
-        })
       }
     }
 
@@ -260,11 +249,11 @@ class Pool {
     const limitsFetch = {
       deposit: {
         singleOperation: limits.depositCap.toString(10),
-        daylyForAddress: {
+        dailyForAddress: {
           total: limits.dailyUserDepositCap.toString(10),
           available: limits.dailyUserDepositCap.sub(limits.dailyUserDepositCapUsage).toString(10),
         },
-        daylyForAll: {
+        dailyForAll: {
           total: limits.dailyDepositCap.toString(10),
           available: limits.dailyDepositCap.sub(limits.dailyDepositCapUsage).toString(10),
         },
@@ -274,7 +263,7 @@ class Pool {
         },
       },
       withdraw: {
-        daylyForAll: {
+        dailyForAll: {
           total: limits.dailyWithdrawalCap.toString(10),
           available: limits.dailyWithdrawalCap.sub(limits.dailyWithdrawalCapUsage).toString(10),
         },

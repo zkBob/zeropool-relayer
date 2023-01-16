@@ -16,6 +16,7 @@ export interface SentTxPayload {
   nullifier: string
   txPayload: TxPayload
   prevAttempts: SendAttempt[]
+  traceId?: string
 }
 
 export enum SentTxState {

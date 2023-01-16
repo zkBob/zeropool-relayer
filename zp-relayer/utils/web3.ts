@@ -1,4 +1,4 @@
-import Web3 from 'web3'
+import type Web3 from 'web3'
 import { Contract, PastEventOptions } from 'web3-eth-contract'
 import { logger } from '@/services/appLogger'
 
