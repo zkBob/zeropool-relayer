@@ -1,4 +1,5 @@
 import type Web3 from 'web3'
+import type { Contract } from 'web3-eth-contract'
 import type BN from 'bn.js'
 import { padLeft, toBN } from 'web3-utils'
 import { logger } from '@/services/appLogger'
@@ -6,6 +7,7 @@ import type { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'
 import promiseRetry from 'promise-retry'
+import { isContractCallError } from './web3Errors'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 const S_MAX = toBN('0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0')
@@ -210,4 +212,26 @@ export function checkHTTPS(isRequired: boolean) {
       }
     }
   }
+}
+
+export function contractCallRetry(contract: Contract, method: string, args: any[] = []) {
+  return promiseRetry(
+    async retry => {
+      try {
+        return await contract.methods[method](...args).call()
+      } catch (e) {
+        if (isContractCallError(e as Error)) {
+          logger.warn('Retrying failed contract call', { method, args })
+          retry(e)
+        } else {
+          throw e
+        }
+      }
+    },
+    {
+      retries: 2,
+      minTimeout: 500,
+      maxTimeout: 500,
+    }
+  )
 }

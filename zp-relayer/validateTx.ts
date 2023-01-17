@@ -8,7 +8,7 @@ import type { Limits, Pool } from './pool'
 import type { NullifierSet } from './state/nullifierSet'
 import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
-import { numToHex, unpackSignature } from './utils/helpers'
+import { contractCallRetry, numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
@@ -39,7 +39,7 @@ export function checkSize(data: string, size: number) {
 }
 
 export async function checkBalance(address: string, minBalance: string) {
-  const balance = await tokenContract.methods.balanceOf(address).call()
+  const balance = await contractCallRetry(tokenContract, 'balanceOf', [address])
   const res = toBN(balance).gte(toBN(minBalance))
   if (!res) {
     return new TxValidationError('Not enough balance for deposit')
@@ -175,7 +175,7 @@ async function getRecoveredAddress(
     const { deadline, holder } = txData as PermittableDepositTxData
     const owner = web3.utils.toChecksumAddress(web3.utils.bytesToHex(Array.from(holder)))
     const spender = web3.utils.toChecksumAddress(config.poolAddress as string)
-    const nonce = await tokenContract.methods.nonces(owner).call()
+    const nonce = await contractCallRetry(tokenContract, 'nonces', [owner])
 
     const message = {
       owner,
@@ -239,7 +239,11 @@ async function checkScreener(address: string, traceId?: string) {
   return null
 }
 
-export async function validateTx({ txType, rawMemo, txProof, depositSignature }: TxPayload, pool: Pool, traceId?: string) {
+export async function validateTx(
+  { txType, rawMemo, txProof, depositSignature }: TxPayload,
+  pool: Pool,
+  traceId?: string
+) {
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
