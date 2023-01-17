@@ -3,8 +3,8 @@ import { Job, Worker } from 'bullmq'
 import { web3, web3Redundant } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { poolTxQueue, BatchTx, PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
-import { TX_QUEUE_NAME, OUTPLUSONE } from '@/utils/constants'
-import { readNonce, updateField, RelayerKeys, updateNonce } from '@/utils/redisFields'
+import { TX_QUEUE_NAME } from '@/utils/constants'
+import { readNonce, updateNonce } from '@/utils/redisFields'
 import { buildPrefixedMemo, truncateMemoTxPrefix, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
 import { signTransaction, sendTransaction } from '@/tx/signAndSend'
 import { Pool, pool } from '@/pool'
@@ -77,11 +77,11 @@ export async function createPoolTxWorker<T extends EstimationType>(
         },
         config.relayerPrivateKey
       )
+      jobLogger.info('Sending tx', { txHash })
       try {
         await sendTransaction(web3Redundant, rawTransaction)
       } catch (e) {
-        const err = e as Error
-        if (isInsufficientBalanceError(err)) {
+        if (isInsufficientBalanceError(e as Error)) {
           const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPriceWithExtra)))
           jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
           await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
@@ -92,15 +92,12 @@ export async function createPoolTxWorker<T extends EstimationType>(
             minimumBalance,
             config.insufficientBalanceCheckTimeout
           )
+          throw e
         }
-        throw e
+        jobLogger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
       }
 
       await updateNonce(++nonce)
-
-      jobLogger.info('Sent tx', { txHash })
-
-      await updateField(RelayerKeys.TRANSFER_NUM, commitIndex * OUTPLUSONE)
 
       const nullifier = getTxProofField(txProof, 'nullifier')
       const outCommit = getTxProofField(txProof, 'out_commit')
