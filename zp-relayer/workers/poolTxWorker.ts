@@ -21,7 +21,7 @@ import { TxValidationError } from '@/validateTx'
 
 export async function createPoolTxWorker<T extends EstimationType>(
   gasPrice: GasPrice<T>,
-  validateTx: (tx: TxPayload, pool: Pool) => Promise<void>,
+  validateTx: (tx: TxPayload, pool: Pool, traceId?: string) => Promise<void>,
   mutex: Mutex,
   redis: Redis
 ) {
@@ -53,7 +53,7 @@ export async function createPoolTxWorker<T extends EstimationType>(
     for (const tx of txs) {
       const { gas, amount, rawMemo, txType, txProof } = tx
 
-      await validateTx(tx, pool)
+      await validateTx(tx, pool, traceId)
 
       const { data, commitIndex, rootAfter } = await processTx(tx)
 
@@ -138,10 +138,11 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
   const poolTxWorker = new Worker<BatchTx, PoolTxResult[]>(
     TX_QUEUE_NAME,
-    job => withErrorLog(
-      withMutex(mutex, () => poolTxWorkerProcessor(job)),
-      [TxValidationError]
-    ),
+    job =>
+      withErrorLog(
+        withMutex(mutex, () => poolTxWorkerProcessor(job)),
+        [TxValidationError]
+      ),
     WORKER_OPTIONS
   )
 

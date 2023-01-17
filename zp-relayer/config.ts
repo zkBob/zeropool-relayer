@@ -7,6 +7,9 @@ const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
 ).address
 
+const defaultHeaderBlacklist =
+  'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
+
 const config = {
   relayerRef: process.env.RELAYER_REF || null,
   relayerSHA: process.env.RELAYER_SHA || null,
@@ -21,6 +24,7 @@ const config = {
   treeUpdateParamsPath: process.env.TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
   transferParamsPath: process.env.TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
   txVKPath: process.env.TX_VK_PATH || './params/transfer_verification_key.json',
+  requestLogPath: process.env.RELAYER_REQUEST_LOG_PATH || './zp.log',
   stateDirPath: process.env.STATE_DIR_PATH || './POOL_STATE',
   gasPriceFallback: process.env.GAS_PRICE_FALLBACK as string,
   gasPriceEstimationType: (process.env.GAS_PRICE_ESTIMATION_TYPE as EstimationType) || 'web3',
@@ -38,15 +42,23 @@ const config = {
   rpcUrls: (process.env.RPC_URL as string).split(' ').filter(url => url.length > 0),
   relayerTxRedundancy: process.env.RELAYER_TX_REDUNDANCY === 'true',
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
+  sentTxLogErrorThreshold: parseInt(process.env.SENT_TX_ERROR_THRESHOLD || '3'),
   rpcRequestTimeout: parseInt(process.env.RPC_REQUEST_TIMEOUT || '1000'),
   insufficientBalanceCheckTimeout: parseInt(process.env.INSUFFICIENT_BALANCE_CHECK_TIMEOUT || '60000'),
   rpcSyncCheckInterval: parseInt(process.env.RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL || '0'),
   permitDeadlineThresholdInitial: parseInt(process.env.PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),
-  relayerJsonRpcErrorCodes: (process.env.RELAYER_JSONRPC_ERROR_CODES || '-32603,-32002,-32005')
-    .split(',')
+  relayerJsonRpcErrorCodes: (process.env.RELAYER_JSONRPC_ERROR_CODES || '-32603 -32002 -32005')
+    .split(' ')
+    .filter(s => s.length > 0)
     .map(s => parseInt(s, 10)),
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
   requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
+  logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
+  logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
+    .split(' ')
+    .filter(r => r.length > 0),
+  screenerUrl: process.env.RELAYER_SCREENER_URL || null,
+  screenerToken: process.env.RELAYER_SCREENER_TOKEN || null,
 }
 
 export default config

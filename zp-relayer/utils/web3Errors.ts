@@ -28,3 +28,8 @@ export function isInsufficientBalanceError(e: Error) {
   const message = e.message.toLowerCase()
   return message.includes('insufficient funds')
 }
+
+export function isContractCallError(e: Error) {
+  const message = e.message.toLowerCase()
+  return message.includes('did it run out of gas')
+}

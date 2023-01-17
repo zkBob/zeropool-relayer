@@ -233,8 +233,8 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     return [null, true]
   }
 
-  const sentTxWorkerProcessor = async (job: Job<SentTxPayload>) => {
-    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId })
+  const sentTxWorkerProcessor = async (job: Job<SentTxPayload>, resendNum: number = 1) => {
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId, resendNum })
 
     jobLogger.info('Verifying job %s', job.data.poolJobId)
     const { prevAttempts, txConfig } = job.data
@@ -245,8 +245,9 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
     if (shouldReprocess) {
       // TODO: handle this case later
+      jobLogger.warn('Ambiguity detected: nonce increased but no respond that transaction was mined')
       // Error should be caught by `withLoop` to re-run job
-      throw new Error('Ambiguity detected: nonce increased but no respond that transaction was mined')
+      throw new Error(RECHECK_ERROR)
     }
 
     if (!tx) {
@@ -271,7 +272,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
     job =>
       withErrorLog(
         withLoop(
-          withMutex(mutex, () => sentTxWorkerProcessor(job)),
+          withMutex(mutex, (i: number) => sentTxWorkerProcessor(job, i)),
           config.sentTxDelay,
           [RECHECK_ERROR]
         )

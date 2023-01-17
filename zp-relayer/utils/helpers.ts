@@ -1,4 +1,5 @@
 import type Web3 from 'web3'
+import type { Contract } from 'web3-eth-contract'
 import type BN from 'bn.js'
 import { padLeft, toBN } from 'web3-utils'
 import { logger } from '@/services/appLogger'
@@ -6,6 +7,7 @@ import type { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { Mutex } from 'async-mutex'
 import promiseRetry from 'promise-retry'
+import { isContractCallError } from './web3Errors'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 const S_MAX = toBN('0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0')
@@ -103,11 +105,14 @@ export async function setIntervalAndRun(f: () => Promise<void> | void, interval:
   return handler
 }
 
-export function withMutex<R>(mutex: Mutex, f: () => Promise<R>): () => Promise<R> {
-  return async () => {
+export function withMutex<F extends (...args: any[]) => any>(
+  mutex: Mutex,
+  f: F
+): (...args: Parameters<F>) => Promise<Awaited<ReturnType<F>>> {
+  return async (...args) => {
     const release = await mutex.acquire()
     try {
-      return await f()
+      return await f(...args)
     } finally {
       release()
     }
@@ -136,12 +141,16 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export function withLoop<R>(f: () => Promise<R>, timeout: number, suppressedErrors: string[] = []): () => Promise<R> {
-  // @ts-ignore
+export function withLoop<F extends (i: number) => any>(
+  f: F,
+  timeout: number,
+  suppressedErrors: string[] = []
+): () => Promise<Awaited<ReturnType<F>>> {
   return async () => {
+    let i = 1
     while (1) {
       try {
-        return await f()
+        return await f(i++)
       } catch (e) {
         const err = e as Error
         let isSuppressed = false
@@ -169,7 +178,7 @@ export function waitForFunds(
   address: string,
   cb: (balance: BN) => void,
   minimumBalance: BN,
-  timeout: number,
+  timeout: number
 ) {
   return promiseRetry(
     async retry => {
@@ -203,4 +212,26 @@ export function checkHTTPS(isRequired: boolean) {
       }
     }
   }
+}
+
+export function contractCallRetry(contract: Contract, method: string, args: any[] = []) {
+  return promiseRetry(
+    async retry => {
+      try {
+        return await contract.methods[method](...args).call()
+      } catch (e) {
+        if (isContractCallError(e as Error)) {
+          logger.warn('Retrying failed contract call', { method, args })
+          retry(e)
+        } else {
+          throw e
+        }
+      }
+    },
+    {
+      retries: 2,
+      minTimeout: 500,
+      maxTimeout: 500,
+    }
+  )
 }

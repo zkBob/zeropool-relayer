@@ -1,9 +1,21 @@
-import winston from 'winston'
+import { format, transports } from 'winston'
 import expressWinston from 'express-winston'
+import config from '@/config'
+import { logger } from './appLogger'
 
-export function createLoggerMiddleware(filename: string = 'zp.log') {
+export function createPersistentLoggerMiddleware(filename: string = 'zp.log') {
   return expressWinston.logger({
-    transports: [new winston.transports.File({ filename })],
-    format: winston.format.combine(winston.format.json()),
+    transports: [new transports.File({ filename })],
+    format: format.combine(format.json()),
+  })
+}
+
+export function createConsoleLoggerMiddleware() {
+  return expressWinston.logger({
+    winstonInstance: logger,
+    level: 'debug',
+    ignoredRoutes: config.logIgnoreRoutes,
+    headerBlacklist: config.logHeaderBlacklist,
+    requestWhitelist: ['headers', 'httpVersion'],
   })
 }
