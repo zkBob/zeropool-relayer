@@ -252,6 +252,10 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
 
     if (!tx) {
       // Resend with updated gas price
+      if (resendNum > config.sentTxLogErrorThreshold) {
+        jobLogger.error('Too many unsuccessful re-sends')
+      }
+
       await handleResend(txConfig, gasPrice, job, jobLogger)
 
       // Tx re-send successful
