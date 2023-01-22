@@ -1,26 +1,20 @@
 import type Redis from 'ioredis'
-import type { Mutex } from 'async-mutex'
 import { toBN } from 'web3-utils'
 import type { TransactionReceipt, TransactionConfig } from 'web3-core'
 import { Job, Worker } from 'bullmq'
 import config from '@/config'
 import { pool } from '@/pool'
-import { web3, web3Redundant } from '@/services/web3'
+import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import {
-  GasPrice,
-  EstimationType,
-  chooseGasPriceOptions,
-  addExtraGasPrice,
-  getMaxRequiredGasPrice,
-} from '@/services/gas-price'
+import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/helpers'
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isInsufficientBalanceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
-import { sendTransaction, signTransaction } from '@/tx/signAndSend'
 import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
+import { ISentWorkerConfig } from './workerConfig'
+import { TxManager } from '@/tx/TxManager'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -132,35 +126,30 @@ async function handleReverted(
   return [SentTxState.REVERT, txHash, rescheduledIds] as SentTxResult
 }
 
-async function handleResend<T extends EstimationType>(
+async function handleResend(
   txConfig: TransactionConfig,
-  gasPrice: GasPrice<T>,
+  txManager: TxManager,
   job: Job<SentTxPayload>,
   jobLogger = logger
 ) {
   const [lastHash, lastGasPrice] = job.data.prevAttempts.at(-1) as SendAttempt
+  jobLogger.warn('Tx %s is not mined, resending', lastHash)
 
-  const fetchedGasPrice = await gasPrice.fetchOnce()
-  const oldWithExtra = addExtraGasPrice(lastGasPrice, config.minGasPriceBumpFactor, null)
-  const newWithExtra = addExtraGasPrice(fetchedGasPrice, config.gasPriceSurplus, null)
+  const {
+    txConfig: newTxConfig,
+    gasPrice,
+    txHash,
+    rawTransaction,
+  } = await txManager.prepareTx(txConfig, jobLogger, true)
 
-  const newGasPrice = chooseGasPriceOptions(oldWithExtra, newWithExtra)
-
-  jobLogger.warn('Tx %s is not mined; updating gasPrice: %o -> %o', lastHash, lastGasPrice, newGasPrice)
-
-  const newTxConfig = {
-    ...txConfig,
-    ...newGasPrice,
-  }
-
-  const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
-  job.data.prevAttempts.push([newTxHash, newGasPrice])
-  jobLogger.info('Re-send tx', { txHash: newTxHash })
+  // const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
+  job.data.prevAttempts.push([txHash, gasPrice])
+  jobLogger.info('Re-send tx', { txHash })
   try {
-    await sendTransaction(web3Redundant, rawTransaction)
+    await txManager.sendTransaction(rawTransaction)
   } catch (e) {
     const err = e as Error
-    jobLogger.warn('Tx resend failed', { error: err.message, txHash: newTxHash })
+    jobLogger.warn('Tx resend failed', { error: err.message, txHash })
     if (isGasPriceError(err) || isSameTransactionError(err)) {
       // Tx wasn't sent successfully, but still update last attempt's
       // gasPrice to be accounted in the next iteration
@@ -171,10 +160,10 @@ async function handleResend<T extends EstimationType>(
       // We don't want to take into account last gasPrice increase
       job.data.prevAttempts.at(-1)![1] = lastGasPrice
 
-      const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(newGasPrice)))
+      const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(gasPrice)))
       jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
     } else if (isNonceError(err)) {
-      jobLogger.warn('Nonce error', { error: err.message, txHash: newTxHash })
+      jobLogger.warn('Nonce error', { error: err.message, txHash })
       // Throw suppressed error to be treated as a warning
       throw new Error(RECHECK_ERROR)
     }
@@ -184,7 +173,7 @@ async function handleResend<T extends EstimationType>(
 
   // Overwrite old tx recorded in optimistic state db with new tx hash
   const { truncatedMemo, outCommit, commitIndex } = job.data
-  const prefixedMemo = buildPrefixedMemo(outCommit, newTxHash, truncatedMemo)
+  const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
   pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
   // Update job
@@ -192,10 +181,10 @@ async function handleResend<T extends EstimationType>(
     ...job.data,
     txConfig: newTxConfig,
   })
-  await job.updateProgress({ txHash: newTxHash, gasPrice: newGasPrice })
+  await job.updateProgress({ txHash, gasPrice })
 }
 
-export async function createSentTxWorker<T extends EstimationType>(gasPrice: GasPrice<T>, mutex: Mutex, redis: Redis) {
+export async function createSentTxWorker({ redis, mutex, txManager }: ISentWorkerConfig) {
   const workerLogger = logger.child({ worker: 'sent-tx' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -256,7 +245,7 @@ export async function createSentTxWorker<T extends EstimationType>(gasPrice: Gas
         jobLogger.error('Too many unsuccessful re-sends')
       }
 
-      await handleResend(txConfig, gasPrice, job, jobLogger)
+      await handleResend(txConfig, txManager, job, jobLogger)
 
       // Tx re-send successful
       // Throw error to re-run job after delay and

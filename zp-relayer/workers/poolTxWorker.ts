@@ -1,30 +1,21 @@
 import { toBN, toWei } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
-import { web3, web3Redundant } from '@/services/web3'
+import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { poolTxQueue, BatchTx, PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
+import { poolTxQueue, BatchTx, PoolTxResult } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME } from '@/utils/constants'
-import { readNonce, updateNonce } from '@/utils/redisFields'
 import { buildPrefixedMemo, truncateMemoTxPrefix, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
-import { signTransaction, sendTransaction } from '@/tx/signAndSend'
-import { Pool, pool } from '@/pool'
+import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
 import config from '@/config'
-import { addExtraGasPrice, EstimationType, GasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
-import type { Mutex } from 'async-mutex'
-import { getChainId } from '@/utils/web3'
+import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { getTxProofField } from '@/utils/proofInputs'
-import type { Redis } from 'ioredis'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
 import { TxValidationError } from '@/validateTx'
+import { IPoolWorkerConfig } from './workerConfig'
 
-export async function createPoolTxWorker<T extends EstimationType>(
-  gasPrice: GasPrice<T>,
-  validateTx: (tx: TxPayload, pool: Pool, traceId?: string) => Promise<void>,
-  mutex: Mutex,
-  redis: Redis
-) {
+export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -32,10 +23,6 @@ export async function createPoolTxWorker<T extends EstimationType>(
     concurrency: 1,
   }
 
-  let nonce = await readNonce(true)
-  await updateNonce(nonce)
-
-  const CHAIN_ID = await getChainId(web3)
   const poolTxWorkerProcessor = async (job: Job<BatchTx, PoolTxResult[]>) => {
     const sentTxNum = await sentTxQueue.count()
     if (sentTxNum >= config.maxSentQueueSize) {
@@ -57,32 +44,18 @@ export async function createPoolTxWorker<T extends EstimationType>(
 
       const { data, commitIndex, rootAfter } = await processTx(tx)
 
-      jobLogger.info(`nonce: ${nonce}`)
-
-      const txConfig = {
+      const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
         data,
-        nonce,
         value: toWei(toBN(amount)),
         gas,
         to: config.poolAddress,
-        chainId: CHAIN_ID,
-      }
-      const gasPriceValue = await gasPrice.fetchOnce()
-      const gasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceSurplus)
-      const [txHash, rawTransaction] = await signTransaction(
-        web3,
-        {
-          ...txConfig,
-          ...gasPriceWithExtra,
-        },
-        config.relayerPrivateKey
-      )
+      })
       jobLogger.info('Sending tx', { txHash })
       try {
-        await sendTransaction(web3Redundant, rawTransaction)
+        await txManager.sendTransaction(rawTransaction)
       } catch (e) {
         if (isInsufficientBalanceError(e as Error)) {
-          const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPriceWithExtra)))
+          const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPrice)))
           jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
           await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
           waitForFunds(
@@ -92,12 +65,9 @@ export async function createPoolTxWorker<T extends EstimationType>(
             minimumBalance,
             config.insufficientBalanceCheckTimeout
           )
-          throw e
         }
         jobLogger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
       }
-
-      await updateNonce(++nonce)
 
       const nullifier = getTxProofField(txProof, 'nullifier')
       const outCommit = getTxProofField(txProof, 'out_commit')
@@ -120,12 +90,11 @@ export async function createPoolTxWorker<T extends EstimationType>(
           nullifier,
           txConfig,
           txPayload: tx,
-          prevAttempts: [[txHash, gasPriceWithExtra]],
+          prevAttempts: [[txHash, gasPrice]],
           traceId,
         },
         {
           delay: config.sentTxDelay,
-          priority: nonce,
         }
       )
       jobLogger.info(`Added sentTxWorker job: ${sentJob.id}`)

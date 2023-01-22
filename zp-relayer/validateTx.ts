@@ -114,7 +114,6 @@ export function checkNonZeroWithdrawAddress(address: string) {
  * @param threshold "window" added to current relayer time, in seconds
  */
 export function checkDeadline(signedDeadline: BN, threshold: number) {
-  logger.debug(`Deadline: ${signedDeadline}`)
   // Check native amount (relayer faucet)
   const currentTimestamp = new BN(Math.floor(Date.now() / 1000))
   if (signedDeadline <= currentTimestamp.addn(threshold)) {

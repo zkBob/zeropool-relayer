@@ -18,6 +18,7 @@ import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
 import { validateTx } from '../../validateTx'
+import { TxManager } from '../../tx/TxManager'
 
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
@@ -47,6 +48,7 @@ describe('poolWorker', () => {
   let poolWorker: Worker
   let sentWorker: Worker
   let gasPriceService: GasPrice<'web3'>
+  let txManager: TxManager
   let poolQueueEvents: QueueEvents
   let sentQueueEvents: QueueEvents
   let workerMutex: Mutex
@@ -68,9 +70,21 @@ describe('poolWorker', () => {
     gasPriceService = new GasPrice(web3, 10000, 'web3', {})
     await gasPriceService.start()
 
+    txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
+    await txManager.init()
+
     workerMutex = new Mutex()
-    poolWorker = await createPoolTxWorker(gasPriceService, validateTx, workerMutex, redis)
-    sentWorker = await createSentTxWorker(gasPriceService, workerMutex, redis)
+
+    const baseConfig = {
+      mutex: workerMutex,
+      redis,
+      txManager,
+    }
+    poolWorker = await createPoolTxWorker({
+      ...baseConfig,
+      validateTx,
+    })
+    sentWorker = await createSentTxWorker(baseConfig)
     sentWorker.run()
     poolWorker.run()
 
@@ -133,7 +147,12 @@ describe('poolWorker', () => {
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await sentWorker.pause()
 
-    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => {}, workerMutex, newConnection())
+    const mockPoolWorker = await createPoolTxWorker({
+      mutex: workerMutex,
+      redis: newConnection(),
+      txManager,
+      validateTx: async () => {},
+    })
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()
 
@@ -255,13 +274,11 @@ describe('poolWorker', () => {
     await setBalance(config.relayerAddress, '0x0')
 
     // @ts-ignore
-    const failJob = await submitJob(deposit)
-    await expect(failJob.waitUntilFinished(poolQueueEvents)).rejectedWith('Insufficient funds for gas * price + value')
-
-    // @ts-ignore
     const job = await submitJob(deposit)
+    await job.waitUntilFinished(poolQueueEvents)
 
-    expect(await poolTxQueue.count()).eq(1)
+    expect(await poolTxQueue.count()).eq(0)
+    expect(await sentTxQueue.count()).eq(1)
     expect(await poolTxQueue.isPaused()).eq(true)
     expect(await sentTxQueue.isPaused()).eq(true)
 
