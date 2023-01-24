@@ -196,7 +196,7 @@ async function getRecoveredAddress(
   return recoveredAddress
 }
 
-async function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
+function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
   const index = proofIndex.toNumber()
 
   const stateRoot = state.getMerkleRootAt(index)
@@ -205,6 +205,13 @@ async function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
   }
 
   return null
+}
+
+function checkPoolId(deltaPoolId: BN, contractPoolId: BN) {
+  if (deltaPoolId.eq(contractPoolId)) {
+    return null
+  }
+  return new TxValidationError(`Incorrect poolId: given ${deltaPoolId}, expected ${contractPoolId}`)
 }
 
 async function checkScreener(address: string, traceId?: string) {
@@ -259,6 +266,7 @@ export async function validateTx(
     fee.toString(10)
   )
 
+  await checkAssertion(() => checkPoolId(delta.poolId, pool.poolId))
   await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.optimisticState))
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))

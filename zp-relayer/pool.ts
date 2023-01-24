@@ -73,6 +73,7 @@ class Pool {
   public state: PoolState
   public optimisticState: PoolState
   public denominator: BN = toBN(1)
+  public poolId: BN = toBN(0)
   public isInitialized = false
 
   constructor() {
@@ -105,6 +106,8 @@ class Pool {
     if (this.isInitialized) return
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
+    this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
+
     await this.syncState(config.startBlock)
     this.isInitialized = true
   }
