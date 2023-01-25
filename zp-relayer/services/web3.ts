@@ -15,6 +15,7 @@ interface InitWeb3Params {
   rpcRequestTimeout: number
   rpcSyncCheckInterval: number
   relayerTxRedundancy: boolean
+  jsonRpcErrorCodes: number[]
 }
 
 export function initWeb3(config: InitWeb3Params) {
@@ -23,7 +24,7 @@ export function initWeb3(config: InitWeb3Params) {
     retry: RETRY_CONFIG,
   }
   config.rpcUrls.forEach(checkHTTPS(config.requireHTTPS))
-  const provider = new HttpListProvider(config.rpcUrls, providerOptions)
+  const provider = new HttpListProvider(config.rpcUrls, providerOptions, config.jsonRpcErrorCodes)
   provider.startSyncStateChecker(config.rpcSyncCheckInterval)
   web3 = new Web3(SafeEthLogsProvider(provider as HttpProvider))
 

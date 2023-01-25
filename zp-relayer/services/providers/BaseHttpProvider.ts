@@ -1,9 +1,6 @@
 import fetch from 'node-fetch'
 import { HttpProvider } from 'web3-core'
 import type { OperationOptions } from 'retry'
-import config from '@/configs/relayerConfig'
-
-const JSONRPC_ERROR_CODES = config.relayerJsonRpcErrorCodes
 
 export interface ProviderOptions {
   name: string
@@ -23,7 +20,7 @@ export default abstract class BaseHttpProvider implements HttpProvider {
   options: ProviderOptions
   connected = false
 
-  constructor(public host: string, options: Partial<ProviderOptions> = {}) {
+  constructor(public host: string, options: Partial<ProviderOptions> = {}, private jsonRpcErrorCodes: number[] = []) {
     this.options = { ...defaultOptions, ...options }
   }
 
@@ -47,7 +44,7 @@ export default abstract class BaseHttpProvider implements HttpProvider {
 
     if (
       response.error &&
-      (JSONRPC_ERROR_CODES.includes(response.error.code) || response.error.message?.includes('ancient block'))
+      (this.jsonRpcErrorCodes.includes(response.error.code) || response.error.message?.includes('ancient block'))
     ) {
       throw new Error(response?.error.message)
     }

@@ -11,6 +11,10 @@ const config = {
   requireHTTPS: process.env.WATCHER_REQUIRE_HTTPS === 'true',
   rpcSyncCheckInterval: parseInt(process.env.WATCHER_RPC_SYNC_STATE_CHECK_INTERVAL || '0'),
   rpcRequestTimeout: parseInt(process.env.RPC_REQUEST_TIMEOUT || '1000'),
+  jsonRpcErrorCodes: (process.env.WATCHER_JSONRPC_ERROR_CODES || '-32603 -32002 -32005')
+    .split(' ')
+    .filter(s => s.length > 0)
+    .map(s => parseInt(s, 10)),
 
   eventsProcessingBatchSize: parseInt(process.env.EVENTS_PROCESSING_BATCH_SIZE || '10000'),
   eventPollingInterval: parseInt(process.env.WATCHER_EVENT_POLLING_INTERVAL || '600000'),
