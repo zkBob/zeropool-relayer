@@ -1,7 +1,7 @@
 import fetch from 'node-fetch'
 import { HttpProvider } from 'web3-core'
 import type { OperationOptions } from 'retry'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 
 const JSONRPC_ERROR_CODES = config.relayerJsonRpcErrorCodes
 

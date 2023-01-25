@@ -2,8 +2,9 @@ import { Queue } from 'bullmq'
 import { redis } from '@/services/redisClient'
 import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import type { TransactionConfig } from 'web3-core'
-import { GasPriceValue } from '@/services/gas-price'
+import type { GasPriceValue } from '@/services/gas-price'
 import type { TxPayload } from './poolTxQueue'
+import type { DirectDeposit } from './directDepositQueue'
 
 export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
@@ -13,8 +14,8 @@ export interface SentTxPayload {
   commitIndex: number
   truncatedMemo: string
   txConfig: TransactionConfig
-  nullifier: string
-  txPayload: TxPayload
+  nullifier?: string
+  txPayload: TxPayload | DirectDeposit[]
   prevAttempts: SendAttempt[]
   traceId?: string
 }

@@ -1,6 +1,6 @@
 # Configuration
 
-## Common configuration
+## Relayer
 
 | name | description | value |
 | - | - | - |
@@ -24,14 +24,15 @@
 | MIN_GAS_PRICE_BUMP_FACTOR | Minimum `gasPrice` bump factor to meet RPC node requirements. Default `0.1`. | float |
 | MAX_FEE_PER_GAS_LIMIT | Max limit on `maxFeePerGas` parameter for each transaction in wei | integer |
 | MAX_SENT_QUEUE_SIZE | Maximum number of jobs waiting in the `sentTxQueue` at a time. | integer |
-| START_BLOCK | The block number used to start searching for events when the relayer instance is run for the first time | integer
-| EVENTS_PROCESSING_BATCH_SIZE | Batch size for one `eth_getLogs` request when reprocessing old logs. Defaults to `10000` | integer
+| START_BLOCK | The block number used to start searching for events when the relayer instance is run for the first time | integer |
+| EVENTS_PROCESSING_BATCH_SIZE | Batch size for one `eth_getLogs` request when reprocessing old logs. Defaults to `10000` | integer |
 | RELAYER_LOG_LEVEL | Log level | Winston log level |
 | RELAYER_REDIS_URL | Url to redis instance | URL |
 | RPC_URL | The HTTPS URL(s) used to communicate to the RPC nodes. Several URLs can be specified, delimited by spaces. If the connection to one of these nodes is lost the next URL is used for connection. | URL |
 | RELAYER_TX_REDUNDANCY | If set to `true`, instructs relayer to send `eth_sendRawTransaction` requests through all available RPC urls defined in `RPC_URL` variables instead of using first available one. Defaults to `false` | boolean |
 | RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL | Interval in milliseconds for checking JSON RPC sync state, by requesting the latest block number. Relayer will switch to the fallback JSON RPC in case sync process is stuck. If this variable is `0` sync state check is disabled. Defaults to `0`  | integer |
 | INSUFFICIENT_BALANCE_CHECK_TIMEOUT | Interval in milliseconds to check for relayer balance update if transaction send failed with insufficient balance error. Default `60000` | integer |
+| RPC_REQUEST_TIMEOUT | Timeout in milliseconds for a single RPC request. Defaults to `1000`. | integer |
 | SENT_TX_DELAY | Delay in milliseconds for sentTxWorker to verify submitted transactions | integer |
 | SENT_TX_ERROR_THRESHOLD | Maximum number of re-sends which is considered to be normal. After this threshold each re-send will log a corresponding error (but re-send loop will continue). Defaults to `3`. | integer |
 | PERMIT_DEADLINE_THRESHOLD_INITIAL | Minimum time threshold in seconds for permit signature deadline to be valid (before initial transaction submission) | integer |
@@ -42,3 +43,21 @@
 | RELAYER_LOG_HEADER_BLACKLIST | List of space separated HTTP headers which will be suppressed in request logs. E.g. `content-length content-type` | string(s) |
 | RELAYER_SCREENER_URL | Screener service URL | URL |
 | RELAYER_SCREENER_TOKEN | Authorization token for screener service | string |
+
+## Watcher
+
+| name | description | value |
+| - | - | - |
+| WATCHER_LOG_LEVEL | Log level | Winston log level |
+| POOL_ADDRESS | Address of the pool contract | hexadecimal prefixed with "0x" |
+| START_BLOCK | The block number used to start searching for events when the watcher instance is run for the first time | integer |
+| WATCHER_REDIS_URL | Url to redis instance | URL |
+| RPC_URL | The HTTPS URL(s) used to communicate to the RPC nodes. Several URLs can be specified, delimited by spaces. If the connection to one of these nodes is lost the next URL is used for connection. | URL |
+| BLOCK_CONFIRMATIONS | Number of required block confirmations to process direct deposit events. | integer |
+| WATCHER_REQUIRE_HTTPS | If set to `true`, then RPC URL(s) must be in HTTPS format. HTTP RPC URL(s) should be used in test environment only. | boolean |
+| WATCHER_RPC_SYNC_STATE_CHECK_INTERVAL | Interval in milliseconds for checking JSON RPC sync state, by requesting the latest block number. Watcher will switch to the fallback JSON RPC in case sync process is stuck. If this variable is `0` sync state check is disabled. Defaults to `0`.  | integer |
+| RPC_REQUEST_TIMEOUT | Timeout in milliseconds for a single RPC request. Defaults to `1000`. | integer |
+| EVENTS_PROCESSING_BATCH_SIZE | Batch size for one `eth_getLogs` request. Defaults to `10000`. | integer |
+| WATCHER_EVENT_POLLING_INTERVAL | The interval in milliseconds used to request the RPC node for new blocks. | integer |
+| DIRECT_DEPOSIT_BATCH_SIZE | Maximum size of a single direct deposit batch. Defaults to `16`. | integer |
+| DIRECT_DEPOSIT_BATCH_TTL | Maximum TTL in milliseconds for a new direct deposit batch. After this time batch will be submitted to the queue, even if it has less than `DIRECT_DEPOSIT_BATCH_SIZE` elements. Defaults to `3600000` (1 hour) | integer |

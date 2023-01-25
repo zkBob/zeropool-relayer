@@ -4,6 +4,7 @@ const constants = {
   FALLBACK_RPC_URL_SWITCH_TIMEOUT: 60 * 60 * 1000,
   TX_QUEUE_NAME: 'tx',
   SENT_TX_QUEUE_NAME: 'sent',
+  DIRECT_DEPOSIT_QUEUE_NAME: 'direct-deposit',
   OUTPLUSONE: Constants.OUT + 1,
   TRANSFER_INDEX_SIZE: 12,
   ENERGY_SIZE: 28,

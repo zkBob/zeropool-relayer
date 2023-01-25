@@ -15,3 +15,4 @@ export interface IPoolWorkerConfig extends IWorkerBaseConfig {
 }
 
 export interface ISentWorkerConfig extends IWorkerBaseConfig {}
+export interface IDirectDepositWorkerConfig extends IWorkerBaseConfig {}

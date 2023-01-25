@@ -3,7 +3,7 @@ import cors from 'cors'
 import endpoints from './endpoints'
 import { logger } from './services/appLogger'
 import { ValidationError } from './validation/validation'
-import config from './config'
+import config from './configs/relayerConfig'
 import { TRACE_ID } from './utils/constants'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {

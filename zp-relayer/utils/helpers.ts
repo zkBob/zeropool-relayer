@@ -1,11 +1,11 @@
-import type Web3 from 'web3'
-import type { Contract } from 'web3-eth-contract'
 import type BN from 'bn.js'
+import type Web3 from 'web3'
+import type { Mutex } from 'async-mutex'
+import type { Contract } from 'web3-eth-contract'
+import type { SnarkProof } from 'libzkbob-rs-node'
 import { padLeft, toBN } from 'web3-utils'
 import { logger } from '@/services/appLogger'
-import type { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
-import type { Mutex } from 'async-mutex'
 import promiseRetry from 'promise-retry'
 import { isContractCallError } from './web3Errors'
 
@@ -85,9 +85,12 @@ export function unpackSignature(packedSign: string) {
   return sig
 }
 
-export function flattenProof(p: SnarkProof): string {
-  return [p.a, p.b.flat(), p.c]
-    .flat()
+export function flattenProof(p: SnarkProof): string[] {
+  return [p.a, p.b, p.c].flat(2)
+}
+
+export function encodeProof(p: SnarkProof): string {
+  return flattenProof(p)
     .map(n => {
       const hex = numToHex(toBN(n))
       return hex

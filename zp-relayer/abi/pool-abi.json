@@ -20,10 +20,34 @@
         "internalType": "contract ITreeVerifier",
         "name": "_tree_verifier",
         "type": "address"
+      },
+      {
+        "internalType": "contract IBatchDepositVerifier",
+        "name": "_batch_deposit_verifier",
+        "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "treeIndex",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[]",
+        "name": "indices",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "CompleteDirectDepositBatch",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -73,6 +97,175 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "nonce",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RefundDirectDeposit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "nonce",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "fallbackUser",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes10",
+            "name": "diversifier",
+            "type": "bytes10"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "pk",
+            "type": "bytes32"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct ZkAddress.ZkAddress",
+        "name": "zkAddress",
+        "type": "tuple"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "deposit",
+        "type": "uint64"
+      }
+    ],
+    "name": "SubmitDirectDeposit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "fee",
+        "type": "uint64"
+      }
+    ],
+    "name": "UpdateDirectDepositFee",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint40",
+        "name": "timeout",
+        "type": "uint40"
+      }
+    ],
+    "name": "UpdateDirectDepositTimeout",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint56",
+            "name": "tvlCap",
+            "type": "uint56"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyDepositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyWithdrawalCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyUserDepositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "depositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "directDepositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyUserDirectDepositCap",
+            "type": "uint32"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct ZkBobAccounting.TierLimits",
+        "name": "limits",
+        "type": "tuple"
+      }
+    ],
+    "name": "UpdateLimits",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "manager",
+        "type": "address"
+      }
+    ],
+    "name": "UpdateOperatorManager",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": false,
         "internalType": "address",
         "name": "user",
@@ -86,6 +279,38 @@
       }
     ],
     "name": "UpdateTier",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "seller",
+        "type": "address"
+      }
+    ],
+    "name": "UpdateTokenSeller",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "name": "WithdrawFee",
     "type": "event"
   },
   {
@@ -121,6 +346,52 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_root_after",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_indices",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_out_commit",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[8]",
+        "name": "_batch_deposit_proof",
+        "type": "uint256[8]"
+      },
+      {
+        "internalType": "uint256[8]",
+        "name": "_tree_proof",
+        "type": "uint256[8]"
+      }
+    ],
+    "name": "appendDirectDeposits",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "batch_deposit_verifier",
+    "outputs": [
+      {
+        "internalType": "contract IBatchDepositVerifier",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "denominator",
     "outputs": [
@@ -131,6 +402,122 @@
       }
     ],
     "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_fallbackUser",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "_rawZkAddress",
+        "type": "bytes"
+      }
+    ],
+    "name": "directDeposit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "directDepositFee",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "directDepositNonce",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "directDepositTimeout",
+    "outputs": [
+      {
+        "internalType": "uint40",
+        "name": "",
+        "type": "uint40"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "directDeposits",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint96",
+        "name": "amount",
+        "type": "uint96"
+      },
+      {
+        "internalType": "uint64",
+        "name": "deposit",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "fee",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint40",
+        "name": "timestamp",
+        "type": "uint40"
+      },
+      {
+        "internalType": "enum ZkBobPool.DirectDepositStatus",
+        "name": "status",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes10",
+        "name": "diversifier",
+        "type": "bytes10"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "pk",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -194,6 +581,21 @@
             "internalType": "uint8",
             "name": "tier",
             "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyUserDirectDepositCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyUserDirectDepositCapUsage",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "directDepositCap",
+            "type": "uint256"
           }
         ],
         "internalType": "struct ZkBobAccounting.Limits",
@@ -235,6 +637,16 @@
         "internalType": "uint256",
         "name": "_depositCap",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dailyUserDirectDepositCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_directDepositCap",
+        "type": "uint256"
       }
     ],
     "name": "initialize",
@@ -259,6 +671,35 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_from",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_value",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "_data",
+        "type": "bytes"
+      }
+    ],
+    "name": "onTokenTransfer",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -314,8 +755,47 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "_indices",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "refundDirectDeposit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_index",
+        "type": "uint256"
+      }
+    ],
+    "name": "refundDirectDeposit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "resetDailyLimits",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -337,6 +817,32 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "_fee",
+        "type": "uint64"
+      }
+    ],
+    "name": "setDirectDepositFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint40",
+        "name": "_timeout",
+        "type": "uint40"
+      }
+    ],
+    "name": "setDirectDepositTimeout",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -370,6 +876,16 @@
         "internalType": "uint256",
         "name": "_depositCap",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dailyUserDirectDepositCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_directDepositCap",
+        "type": "uint256"
       }
     ],
     "name": "setLimits",
@@ -386,6 +902,19 @@
       }
     ],
     "name": "setOperatorManager",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_seller",
+        "type": "address"
+      }
+    ],
+    "name": "setTokenSeller",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -423,9 +952,22 @@
   },
   {
     "inputs": [],
+    "name": "tokenSeller",
+    "outputs": [
+      {
+        "internalType": "contract ITokenSeller",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "transact",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

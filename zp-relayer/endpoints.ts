@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { pool, PoolTx } from './pool'
 import { poolTxQueue } from './queue/poolTxQueue'
-import config from './config'
+import config from './configs/relayerConfig'
 import {
   checkGetLimits,
   checkGetSiblings,

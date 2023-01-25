@@ -8,12 +8,12 @@ import { buildPrefixedMemo, truncateMemoTxPrefix, waitForFunds, withErrorLog, wi
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { processTx } from '@/txProcessor'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { getTxProofField } from '@/utils/proofInputs'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
 import { TxValidationError } from '@/validateTx'
-import { IPoolWorkerConfig } from './workerConfig'
+import { IPoolWorkerConfig } from './workerTypes'
 
 export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })

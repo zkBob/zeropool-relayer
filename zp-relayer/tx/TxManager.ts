@@ -10,10 +10,10 @@ import {
   getGasPriceValue,
 } from '@/services/gas-price'
 import { getChainId, getNonce } from '@/utils/web3'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 import { Mutex } from 'async-mutex'
 import { logger } from '@/services/appLogger'
-import { updateNonce } from '@/utils/redisFields'
+import { readNonce, updateNonce } from '@/utils/redisFields'
 
 export class TxManager {
   nonce!: number
@@ -25,7 +25,8 @@ export class TxManager {
   }
 
   async init() {
-    this.nonce = await getNonce(this.web3, config.relayerAddress)
+    this.nonce = await readNonce(true)
+    await updateNonce(this.nonce)
     this.chainId = await getChainId(this.web3)
   }
 

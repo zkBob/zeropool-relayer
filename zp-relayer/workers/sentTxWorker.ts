@@ -2,7 +2,7 @@ import type Redis from 'ioredis'
 import { toBN } from 'web3-utils'
 import type { TransactionReceipt, TransactionConfig } from 'web3-core'
 import { Job, Worker } from 'bullmq'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 import { pool } from '@/pool'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
@@ -13,8 +13,9 @@ import { isGasPriceError, isInsufficientBalanceError, isNonceError, isSameTransa
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
 import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
-import { ISentWorkerConfig } from './workerConfig'
-import { TxManager } from '@/tx/TxManager'
+import type { ISentWorkerConfig } from './workerTypes'
+import type { TxManager } from '@/tx/TxManager'
+import { directDepositQueue } from '@/queue/directDepositQueue'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -54,10 +55,12 @@ async function handleMined(
   pool.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
 
   // Add nullifier to confirmed state and remove from optimistic one
-  jobLogger.info('Adding nullifier %s to PS', nullifier)
-  await pool.state.nullifiers.add([nullifier])
-  jobLogger.info('Removing nullifier %s from OS', nullifier)
-  await pool.optimisticState.nullifiers.remove([nullifier])
+  if (nullifier) {
+    jobLogger.info('Adding nullifier %s to PS', nullifier)
+    await pool.state.nullifiers.add([nullifier])
+    jobLogger.info('Removing nullifier %s from OS', nullifier)
+    await pool.optimisticState.nullifiers.remove([nullifier])
+  }
 
   const node1 = pool.state.getCommitment(commitIndex)
   const node2 = pool.optimisticState.getCommitment(commitIndex)
@@ -106,15 +109,24 @@ async function handleReverted(
     waitingJobIds.push(wj.id)
 
     const { txPayload, traceId } = wj.data
-    const transactions = [txPayload]
+    let reschedulePromise: Promise<any>
+    if (Array.isArray(txPayload)) {
+      // Direct deposit
+      reschedulePromise = directDepositQueue.add(txHash, txPayload)
+    } else {
+      // Normal pool tx
+      const transactions = [txPayload]
+      reschedulePromise = poolTxQueue.add(txHash, { transactions, traceId })
+    }
 
     // To not mess up traceId we add each transaction separately
-    const reschedulePromise = poolTxQueue.add(txHash, { transactions, traceId }).then(j => {
-      const newPoolJobId = j.id as string
-      newPoolJobIdMapping[wj.data.poolJobId] = newPoolJobId
-      return newPoolJobId
-    })
-    reschedulePromises.push(reschedulePromise)
+    reschedulePromises.push(
+      reschedulePromise.then(j => {
+        const newPoolJobId = j.id as string
+        newPoolJobIdMapping[wj.data.poolJobId] = newPoolJobId
+        return newPoolJobId
+      })
+    )
   }
   jobLogger.info('Marking ids %j as failed', waitingJobIds)
   await markFailed(redis, waitingJobIds)

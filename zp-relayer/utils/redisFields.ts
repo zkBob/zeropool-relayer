@@ -1,7 +1,7 @@
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
 import { web3 } from '@/services/web3'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 import { getNonce } from './web3'
 
 export enum RelayerKeys {

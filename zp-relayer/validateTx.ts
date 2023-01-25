@@ -3,7 +3,7 @@ import { toBN, AbiItem } from 'web3-utils'
 import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
-import config from './config'
+import config from './configs/relayerConfig'
 import type { Limits, Pool } from './pool'
 import type { NullifierSet } from './state/nullifierSet'
 import TokenAbi from './abi/token-abi.json'
@@ -14,6 +14,7 @@ import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
 import { TxPayload } from './queue/poolTxQueue'
 import { getTxProofField, parseDelta } from './utils/proofInputs'
 import type { PoolState } from './state/PoolState'
+import { DirectDeposit } from './queue/directDepositQueue'
 
 const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
@@ -295,4 +296,9 @@ export async function validateTx(
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT || txType === TxType.WITHDRAWAL) {
     await checkAssertion(() => checkScreener(userAddress, traceId))
   }
+}
+
+export async function validateDirectDeposit(dd: DirectDeposit) {
+  await checkAssertion(() => checkScreener(dd.sender))
+  await checkAssertion(() => checkScreener(dd.fallbackUser))
 }

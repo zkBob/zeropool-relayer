@@ -1,8 +1,11 @@
-import { createLogger, format, transports } from 'winston'
-import config from '@/config'
+import { createLogger, format, transports, Logger } from 'winston'
 
-export const logger = createLogger({
-  level: config.logLevel,
-  format: format.combine(format.colorize(), format.timestamp(), format.splat(), format.simple()),
-  transports: [new transports.Console()],
-})
+export let logger: Logger
+
+export function initLogger(level: string) {
+  logger = createLogger({
+    level,
+    format: format.combine(format.colorize(), format.timestamp(), format.splat(), format.simple()),
+    transports: [new transports.Console()],
+  })
+}
