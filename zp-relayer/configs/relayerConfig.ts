@@ -37,7 +37,7 @@ const config = {
   startBlock: parseInt(process.env.START_BLOCK || '0'),
   eventsProcessingBatchSize: parseInt(process.env.EVENTS_PROCESSING_BATCH_SIZE || '10000'),
   logLevel: process.env.RELAYER_LOG_LEVEL || 'debug',
-  redisUrl: process.env.RELAYER_REDIS_URL as string,
+  redisUrl: process.env.REDIS_URL as string,
   rpcUrls: (process.env.RPC_URL as string).split(' ').filter(url => url.length > 0),
   relayerTxRedundancy: process.env.RELAYER_TX_REDUNDANCY === 'true',
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),

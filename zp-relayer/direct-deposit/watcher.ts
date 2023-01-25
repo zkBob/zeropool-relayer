@@ -24,9 +24,10 @@ const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddr
 
 const eventName = 'SubmitDirectDeposit'
 
-const batch = new BatchCache<DirectDeposit>(config.directDepositBatchSize, config.directDepositBatchTtl, ds =>
+const batch = new BatchCache<DirectDeposit>(config.directDepositBatchSize, config.directDepositBatchTtl, ds => {
+  logger.info('Adding direct-deposit events to queue', { count: ds.length })
   directDepositQueue.add('', ds, {})
-)
+})
 
 async function init() {
   try {

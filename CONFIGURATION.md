@@ -27,7 +27,7 @@
 | START_BLOCK | The block number used to start searching for events when the relayer instance is run for the first time | integer |
 | EVENTS_PROCESSING_BATCH_SIZE | Batch size for one `eth_getLogs` request when reprocessing old logs. Defaults to `10000` | integer |
 | RELAYER_LOG_LEVEL | Log level | Winston log level |
-| RELAYER_REDIS_URL | Url to redis instance | URL |
+| REDIS_URL | Url to redis instance | URL |
 | RPC_URL | The HTTPS URL(s) used to communicate to the RPC nodes. Several URLs can be specified, delimited by spaces. If the connection to one of these nodes is lost the next URL is used for connection. | URL |
 | RELAYER_TX_REDUNDANCY | If set to `true`, instructs relayer to send `eth_sendRawTransaction` requests through all available RPC urls defined in `RPC_URL` variables instead of using first available one. Defaults to `false` | boolean |
 | RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL | Interval in milliseconds for checking JSON RPC sync state, by requesting the latest block number. Relayer will switch to the fallback JSON RPC in case sync process is stuck. If this variable is `0` sync state check is disabled. Defaults to `0`  | integer |
@@ -52,7 +52,7 @@
 | WATCHER_LOG_LEVEL | Log level | Winston log level |
 | POOL_ADDRESS | Address of the pool contract | hexadecimal prefixed with "0x" |
 | START_BLOCK | The block number used to start searching for events when the watcher instance is run for the first time | integer |
-| WATCHER_REDIS_URL | Url to redis instance | URL |
+| REDIS_URL | Url to redis instance | URL |
 | RPC_URL | The HTTPS URL(s) used to communicate to the RPC nodes. Several URLs can be specified, delimited by spaces. If the connection to one of these nodes is lost the next URL is used for connection. | URL |
 | WATCHER_JSONRPC_ERROR_CODES | Override default JSON rpc error codes that can trigger RPC fallback to the next URL from the list (or a retry in case of a single RPC URL). Default is `-32603,-32002,-32005`. Should be a comma-separated list of negative integers. | `string`
 | BLOCK_CONFIRMATIONS | Number of required block confirmations to process direct deposit events. | integer |

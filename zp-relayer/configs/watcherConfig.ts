@@ -3,7 +3,7 @@ const config = {
   poolAddress: process.env.POOL_ADDRESS as string,
   startBlock: parseInt(process.env.START_BLOCK || '0'),
 
-  redisUrl: process.env.WATCHER_REDIS_URL as string,
+  redisUrl: process.env.REDIS_URL as string,
   rpcUrls: (process.env.RPC_URL as string).split(' ').filter(url => url.length > 0),
 
   blockConfirmations: parseInt(process.env.BLOCK_CONFIRMATIONS || '128'),
