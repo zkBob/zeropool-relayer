@@ -11,7 +11,7 @@ prover.js
 *params.bin
 *_key.json
 
-.env
+*.env
 
 # Log file
 zp.log

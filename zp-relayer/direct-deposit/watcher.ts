@@ -9,7 +9,7 @@ import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock } f
 
 import config from '@/configs/watcherConfig'
 import PoolAbi from '@/abi/pool-abi.json'
-import { BatchCache } from './batchCache'
+import { BatchCache } from './BatchCache'
 import { directDepositQueue, DirectDeposit } from '@/queue/directDepositQueue'
 import { initRedis } from '@/services/redisClient'
 

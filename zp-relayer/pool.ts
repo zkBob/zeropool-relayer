@@ -152,10 +152,10 @@ class Pool {
       missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
     }
 
-    const lastBlockNumber = await this.getLastBlockToProcess()
+    const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
     let toBlock = startBlock
-    for (let fromBlock = startBlock; toBlock <= lastBlockNumber + 1; fromBlock = toBlock) {
-      toBlock += config.eventsProcessingBatchSize
+    for (let fromBlock = startBlock; toBlock < lastBlockNumber; fromBlock = toBlock) {
+      toBlock = Math.min(toBlock + config.eventsProcessingBatchSize, lastBlockNumber)
       const events = await getEvents(this.PoolInstance, 'Message', {
         fromBlock,
         toBlock: toBlock - 1,
@@ -166,40 +166,57 @@ class Pool {
 
       for (let i = 0; i < events.length; i++) {
         const { returnValues, transactionHash } = events[i]
-        const memoString: string = returnValues.message
-        if (!memoString) {
-          throw new Error('incorrect memo in event')
-        }
-
         const { input } = await getTransaction(web3, transactionHash)
-        const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
-
-        const parser = new PoolCalldataParser(calldata)
-
-        const outCommitRaw = parser.getField('outCommit')
-        const outCommit = web3.utils.hexToNumberString(outCommitRaw)
-
-        const txTypeRaw = parser.getField('txType')
-        const txType = toTxType(txTypeRaw)
-
-        const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
-        const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
-
-        const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
-        const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
+        const memoString: string = returnValues.message
 
         const newPoolIndex = Number(returnValues.index)
         const prevPoolIndex = newPoolIndex - OUTPLUSONE
         const prevCommitIndex = Math.floor(Number(prevPoolIndex) / OUTPLUSONE)
 
-        for (let state of [this.state, this.optimisticState]) {
-          state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
-          state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
-        }
+        // TODO: properly handle this case
+        if (!memoString) {
+          // Direct deposit case
+          const res = web3.eth.abi.decodeParameters(
+            [
+              'uint256', // Root after
+              'uint256[]', // Indices
+              'uint256', // Out commit
+              'uint256[8]', // Deposit proof
+              'uint256[8]', // Tree proof
+            ],
+            input.slice(10) // Cut off selector
+          )
+          const outCommit = res[2]
+          for (let state of [this.state, this.optimisticState]) {
+            state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
+          }
+        } else {
+          // Normal tx case
+          const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
 
-        // Save nullifier in confirmed state
-        const nullifier = parser.getField('nullifier')
-        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+          const parser = new PoolCalldataParser(calldata)
+
+          const outCommitRaw = parser.getField('outCommit')
+          const outCommit = web3.utils.hexToNumberString(outCommitRaw)
+
+          const txTypeRaw = parser.getField('txType')
+          const txType = toTxType(txTypeRaw)
+
+          const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
+          const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
+
+          const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
+          const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
+
+          for (let state of [this.state, this.optimisticState]) {
+            state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
+            state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
+          }
+
+          // Save nullifier in confirmed state
+          const nullifier = parser.getField('nullifier')
+          await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+        }
       }
     }
 
@@ -273,5 +290,10 @@ class Pool {
   }
 }
 
-export const pool = new Pool()
+export let pool: Pool
+
+export function initPool() {
+  pool = new Pool()
+}
+
 export type { Pool }

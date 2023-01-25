@@ -1,5 +1,5 @@
+import Redis from 'ioredis'
 import { Queue } from 'bullmq'
-import { redis } from '@/services/redisClient'
 import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'
 
 interface ZkAddress {
@@ -18,5 +18,5 @@ export interface DirectDeposit {
 export type DirectDepositResult = [string, string]
 
 export const directDepositQueue = new Queue<DirectDeposit[], DirectDepositResult>(DIRECT_DEPOSIT_QUEUE_NAME, {
-  connection: redis,
+  connection: new Redis(process.env.REDIS_URL as string),
 })

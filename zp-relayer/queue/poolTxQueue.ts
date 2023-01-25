@@ -1,5 +1,5 @@
+import Redis from 'ioredis'
 import { Queue } from 'bullmq'
-import { redis } from '@/services/redisClient'
 import { TX_QUEUE_NAME } from '@/utils/constants'
 import type { Proof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
@@ -21,5 +21,5 @@ export interface BatchTx {
 export type PoolTxResult = [string, string]
 
 export const poolTxQueue = new Queue<BatchTx, PoolTxResult[]>(TX_QUEUE_NAME, {
-  connection: redis,
+  connection: new Redis(process.env.REDIS_URL as string),
 })

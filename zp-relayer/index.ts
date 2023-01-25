@@ -1,5 +1,5 @@
 import express from 'express'
-import router from './router'
+import { createRouter } from './router'
 import { logger } from './services/appLogger'
 import { createConsoleLoggerMiddleware, createPersistentLoggerMiddleware } from './services/loggerMiddleware'
 import config from './configs/relayerConfig'
@@ -11,7 +11,7 @@ init().then(() => {
   app.use(createPersistentLoggerMiddleware(config.requestLogPath))
   app.use(createConsoleLoggerMiddleware())
 
-  app.use(router)
+  app.use(createRouter())
   const PORT = config.port
   app.listen(PORT, () => logger.info(`Started relayer on port ${PORT}`))
 })

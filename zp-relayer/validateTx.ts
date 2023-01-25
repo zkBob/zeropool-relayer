@@ -1,5 +1,6 @@
 import BN from 'bn.js'
 import { toBN, AbiItem } from 'web3-utils'
+import Contract from 'web3-eth-contract'
 import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
@@ -16,7 +17,8 @@ import { getTxProofField, parseDelta } from './utils/proofInputs'
 import type { PoolState } from './state/PoolState'
 import { DirectDeposit } from './queue/directDepositQueue'
 
-const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
+// @ts-ignore
+const tokenContract = new Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
 const ZERO = toBN(0)
 

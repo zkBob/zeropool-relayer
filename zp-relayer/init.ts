@@ -1,4 +1,4 @@
-import { pool } from './pool'
+import { pool, initPool } from './pool'
 import { GasPrice } from './services/gas-price'
 import { initWeb3, web3, web3Redundant } from './services/web3'
 import config from './configs/relayerConfig'
@@ -10,7 +10,7 @@ import { initializeDomain } from './utils/EIP712SaltedPermit'
 import { initRedis, redis } from './services/redisClient'
 import { validateTx } from './validateTx'
 import { TxManager } from './tx/TxManager'
-import { IWorkerBaseConfig } from './workers/workerTypes'
+import type { IWorkerBaseConfig } from './workers/workerTypes'
 import { createDirectDepositWorker } from './workers/directDepositWorker'
 import { initLogger } from './services/appLogger'
 
@@ -18,9 +18,11 @@ export async function init() {
   initLogger(config.logLevel)
   initRedis(config.redisUrl)
   initWeb3(config)
-  await initializeDomain(web3)
+  initPool()
 
+  await initializeDomain(web3)
   await pool.init()
+
   const gasPriceService = new GasPrice(web3, config.gasPriceUpdateInterval, config.gasPriceEstimationType, {
     speedType: config.gasPriceSpeedType,
     factor: config.gasPriceFactor,
