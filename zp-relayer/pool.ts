@@ -187,8 +187,11 @@ class Pool {
             input.slice(10) // Cut off selector
           )
           const outCommit = res[2]
+
+          const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat('')
           for (let state of [this.state, this.optimisticState]) {
             state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
+            state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
           }
         } else {
           // Normal tx case
