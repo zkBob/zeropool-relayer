@@ -31,18 +31,15 @@ services:
       - relayer_tree:/app/tree.db
       - relayer_txs:/app/txs.db
       - $PARAMS_PATH:/app/zp-relayer/params/
-      - ./zp-relayer/relayer.env:/app/zp-relayer/relayer.env
+    env_file: ./zp-relayer/relayer.env
     ports:
       - 8000:8000
-    depends_on:
-      - verifier
   watcher:
     build:
       context: .
       dockerfile: docker/Dockerfile.relayer
     command: yarn run start:direct-deposit-watcher:prod
-    volumes:
-      - ./zp-relayer/watcher.env:/app/zp-relayer/watcher.env
+    env_file: ./zp-relayer/watcher.env
 volumes:
   relayer_tree:
   relayer_txs:
