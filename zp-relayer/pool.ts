@@ -2,6 +2,7 @@ import fs from 'fs'
 import crypto from 'crypto'
 import BN from 'bn.js'
 import PoolAbi from './abi/pool-abi.json'
+import TokenAbi from './abi/token-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
 import type { Contract } from 'web3-eth-contract'
 import config from './configs/relayerConfig'
@@ -65,6 +66,7 @@ export interface LimitsFetch {
 
 class Pool {
   public PoolInstance: Contract
+  public TokenInstance: Contract
   public treeParams: Params
   public treeParamsHash: string
   public transferParamsHash: string
@@ -76,6 +78,7 @@ class Pool {
 
   constructor() {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
+    this.TokenInstance = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
     this.treeParamsHash = Pool.getHash(config.treeUpdateParamsPath)
     this.transferParamsHash = Pool.getHash(config.transferParamsPath)

@@ -1,13 +1,12 @@
 import BN from 'bn.js'
-import { toBN, AbiItem } from 'web3-utils'
-import Contract from 'web3-eth-contract'
+import { toBN } from 'web3-utils'
+import type { Contract } from 'web3-eth-contract'
 import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from './services/appLogger'
 import config from './configs/relayerConfig'
 import type { Limits, Pool } from './pool'
 import type { NullifierSet } from './state/nullifierSet'
-import TokenAbi from './abi/token-abi.json'
 import { web3 } from './services/web3'
 import { contractCallRetry, numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
@@ -16,9 +15,6 @@ import { TxPayload } from './queue/poolTxQueue'
 import { getTxProofField, parseDelta } from './utils/proofInputs'
 import type { PoolState } from './state/PoolState'
 import { DirectDeposit } from './queue/directDepositQueue'
-
-// @ts-ignore
-const tokenContract = new Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
 const ZERO = toBN(0)
 
@@ -41,8 +37,8 @@ export function checkSize(data: string, size: number) {
   return data.length === size
 }
 
-export async function checkBalance(address: string, minBalance: string) {
-  const balance = await contractCallRetry(tokenContract, 'balanceOf', [address])
+export async function checkBalance(token: Contract, address: string, minBalance: string) {
+  const balance = await contractCallRetry(token, 'balanceOf', [address])
   const res = toBN(balance).gte(toBN(minBalance))
   if (!res) {
     return new TxValidationError('Not enough balance for deposit')
@@ -147,18 +143,19 @@ export function checkLimits(limits: Limits, amount: BN) {
   return null
 }
 
-async function checkDepositEnoughBalance(address: string, requiredTokenAmount: BN) {
+async function checkDepositEnoughBalance(token: Contract, address: string, requiredTokenAmount: BN) {
   if (requiredTokenAmount.lte(toBN(0))) {
     throw new TxValidationError('Requested balance check for token amount <= 0')
   }
 
-  return checkBalance(address, requiredTokenAmount.toString(10))
+  return checkBalance(token, address, requiredTokenAmount.toString(10))
 }
 
 async function getRecoveredAddress(
   txType: TxType,
   proofNullifier: string,
   txData: TxData,
+  tokenContract: Contract,
   tokenAmount: BN,
   depositSignature: string | null
 ) {
@@ -281,9 +278,16 @@ export async function validateTx(
     await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
-    userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
+    userAddress = await getRecoveredAddress(
+      txType,
+      nullifier,
+      txData,
+      pool.TokenInstance,
+      requiredTokenAmount,
+      depositSignature
+    )
     logger.info('Deposit address: %s', userAddress)
-    await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
+    await checkAssertion(() => checkDepositEnoughBalance(pool.TokenInstance, userAddress, requiredTokenAmount))
   }
 
   const limits = await pool.getLimitsFor(userAddress)
