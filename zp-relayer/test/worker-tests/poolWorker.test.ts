@@ -5,9 +5,7 @@ import chaiAsPromised from 'chai-as-promised'
 import { Job, QueueEvents, Worker } from 'bullmq'
 import { TxType } from 'zp-memo-parser'
 import { web3 } from './web3'
-import { initWeb3 } from '../../services/web3'
-import { initLogger } from '../../services/appLogger'
-import { pool, initPool } from '../../pool'
+import { pool } from '../../pool'
 import config from '../../configs/relayerConfig'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
 import { poolTxQueue, PoolTxResult, BatchTx } from '../../queue/poolTxQueue'
@@ -15,7 +13,7 @@ import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
 import { GasPrice } from '../../services/gas-price'
-import { redis, initRedis } from '../../services/redisClient'
+import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
@@ -56,13 +54,6 @@ describe('poolWorker', () => {
   let workerMutex: Mutex
   let snapShotId: string
   let eventsInit = false
-
-  before(() => {
-    initLogger(config.logLevel)
-    initRedis(config.redisUrl)
-    initWeb3(config)
-    initPool()
-  })
 
   beforeEach(async () => {
     snapShotId = await evmSnapshot()

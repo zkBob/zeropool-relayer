@@ -1,25 +1,20 @@
-import { pool, initPool } from './pool'
+import { pool } from './pool'
 import { GasPrice } from './services/gas-price'
-import { initWeb3, web3, web3Redundant } from './services/web3'
+import { web3 } from './services/web3'
+import { web3Redundant } from './services/web3Redundant'
 import config from './configs/relayerConfig'
 import { Mutex } from 'async-mutex'
 
 import { createPoolTxWorker } from './workers/poolTxWorker'
 import { createSentTxWorker } from './workers/sentTxWorker'
 import { initializeDomain } from './utils/EIP712SaltedPermit'
-import { initRedis, redis } from './services/redisClient'
+import { redis } from './services/redisClient'
 import { validateTx } from './validateTx'
 import { TxManager } from './tx/TxManager'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
 import { createDirectDepositWorker } from './workers/directDepositWorker'
-import { initLogger } from './services/appLogger'
 
 export async function init() {
-  initLogger(config.logLevel)
-  initRedis(config.redisUrl)
-  initWeb3(config)
-  initPool()
-
   await initializeDomain(web3)
   await pool.init()
 

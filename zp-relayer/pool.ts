@@ -296,10 +296,6 @@ class Pool {
   }
 }
 
-export let pool: Pool
-
-export function initPool() {
-  pool = new Pool()
-}
+export let pool: Pool = new Pool()
 
 export type { Pool }

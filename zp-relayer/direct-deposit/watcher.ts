@@ -3,22 +3,14 @@
 import Web3 from 'web3'
 import type { AbiItem } from 'web3-utils'
 import { getBlockNumber, getEvents } from '../utils/web3'
-import { initWeb3, web3 } from '@/services/web3'
-import { logger, initLogger } from '@/services/appLogger'
+import { web3 } from '@/services/web3'
+import { logger } from '@/services/appLogger'
 import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock } from './utils'
 
 import config from '@/configs/watcherConfig'
 import PoolAbi from '@/abi/pool-abi.json'
 import { BatchCache } from './BatchCache'
 import { directDepositQueue, DirectDeposit } from '@/queue/directDepositQueue'
-import { initRedis } from '@/services/redisClient'
-
-initRedis(config.redisUrl)
-initLogger(config.logLevel)
-initWeb3({
-  ...config,
-  relayerTxRedundancy: false,
-})
 
 const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
 

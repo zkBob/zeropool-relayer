@@ -1,6 +1,7 @@
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
 import type { EstimationType, GasPriceKey } from '../services/gas-price'
+import baseConfig from './baseConfig'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -10,12 +11,12 @@ const defaultHeaderBlacklist =
   'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
 
 const config = {
+  ...baseConfig,
   relayerRef: process.env.RELAYER_REF || null,
   relayerSHA: process.env.RELAYER_SHA || null,
   port: parseInt(process.env.PORT || '8000'),
   relayerAddress,
   relayerPrivateKey: process.env.RELAYER_ADDRESS_PRIVATE_KEY as string,
-  poolAddress: process.env.POOL_ADDRESS as string,
   tokenAddress: process.env.TOKEN_ADDRESS as string,
   relayerGasLimit: toBN(process.env.RELAYER_GAS_LIMIT as string),
   relayerFee: toBN(process.env.RELAYER_FEE as string),
@@ -34,24 +35,12 @@ const config = {
   minGasPriceBumpFactor: parseFloat(process.env.MIN_GAS_PRICE_BUMP_FACTOR || '0.1'),
   maxFeeLimit: process.env.MAX_FEE_PER_GAS_LIMIT ? toBN(process.env.MAX_FEE_PER_GAS_LIMIT) : null,
   maxSentQueueSize: parseInt(process.env.MAX_SENT_QUEUE_SIZE || '20'),
-  startBlock: parseInt(process.env.START_BLOCK || '0'),
-  eventsProcessingBatchSize: parseInt(process.env.EVENTS_PROCESSING_BATCH_SIZE || '10000'),
-  logLevel: process.env.RELAYER_LOG_LEVEL || 'debug',
-  redisUrl: process.env.REDIS_URL as string,
-  rpcUrls: (process.env.RPC_URL as string).split(' ').filter(url => url.length > 0),
   relayerTxRedundancy: process.env.RELAYER_TX_REDUNDANCY === 'true',
   sentTxDelay: parseInt(process.env.SENT_TX_DELAY || '30000'),
   sentTxLogErrorThreshold: parseInt(process.env.SENT_TX_ERROR_THRESHOLD || '3'),
-  rpcRequestTimeout: parseInt(process.env.RPC_REQUEST_TIMEOUT || '1000'),
   insufficientBalanceCheckTimeout: parseInt(process.env.INSUFFICIENT_BALANCE_CHECK_TIMEOUT || '60000'),
-  rpcSyncCheckInterval: parseInt(process.env.RELAYER_RPC_SYNC_STATE_CHECK_INTERVAL || '0'),
   permitDeadlineThresholdInitial: parseInt(process.env.PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),
-  jsonRpcErrorCodes: (process.env.RELAYER_JSONRPC_ERROR_CODES || '-32603 -32002 -32005')
-    .split(' ')
-    .filter(s => s.length > 0)
-    .map(s => parseInt(s, 10)),
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
-  requireHTTPS: process.env.RELAYER_REQUIRE_HTTPS === 'true',
   logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
