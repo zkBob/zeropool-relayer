@@ -4,7 +4,7 @@ import { web3 } from './web3'
 import { toBN } from 'web3-utils'
 import TokenAbi from '../abi/token-abi.json'
 
-export const token = new web3.eth.Contract(TokenAbi as any, '0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab')
+export const token = new web3.eth.Contract(TokenAbi as any, process.env.TOKEN_ADDRESS)
 const denominator = toBN(1000000000)
 const minter = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1'
 

@@ -9,7 +9,7 @@ import {
   GasPriceValue,
   getGasPriceValue,
 } from '@/services/gas-price'
-import { getChainId, getNonce } from '@/utils/web3'
+import { getChainId } from '@/utils/web3'
 import config from '@/configs/relayerConfig'
 import { Mutex } from 'async-mutex'
 import { logger } from '@/services/appLogger'
