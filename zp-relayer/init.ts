@@ -7,12 +7,13 @@ import { Mutex } from 'async-mutex'
 
 import { createPoolTxWorker } from './workers/poolTxWorker'
 import { createSentTxWorker } from './workers/sentTxWorker'
+import { createDirectDepositWorker } from './workers/directDepositWorker'
 import { initializeDomain } from './utils/EIP712SaltedPermit'
 import { redis } from './services/redisClient'
 import { validateTx } from './validateTx'
 import { TxManager } from './tx/TxManager'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
-import { createDirectDepositWorker } from './workers/directDepositWorker'
+import setQueuePriority from './queue/setQueuePriority'
 
 export async function init() {
   await initializeDomain(web3)
@@ -44,6 +45,8 @@ export async function init() {
     createSentTxWorker(baseConfig),
     createDirectDepositWorker(baseConfig),
   ].map(p => p.then(w => w.run()))
+
+  setQueuePriority()
 
   await Promise.all(workerPromises)
 }
