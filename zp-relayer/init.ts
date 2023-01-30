@@ -44,9 +44,10 @@ export async function init() {
     }),
     createSentTxWorker(baseConfig),
     createDirectDepositWorker(baseConfig),
-  ].map(p => p.then(w => w.run()))
+  ]
 
   setQueuePriority()
 
-  await Promise.all(workerPromises)
+  const workers = await Promise.all(workerPromises)
+  workers.forEach(w => w.run())
 }
