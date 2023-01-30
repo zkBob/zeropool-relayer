@@ -155,6 +155,9 @@ class Pool {
       missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
     }
 
+    const transactSelector = '0xaf989083'
+    const directDepositSelector = '0x1dc4cb33'
+
     const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
     let toBlock = startBlock
     for (let fromBlock = startBlock; toBlock < lastBlockNumber; fromBlock = toBlock) {
@@ -170,14 +173,15 @@ class Pool {
       for (let i = 0; i < events.length; i++) {
         const { returnValues, transactionHash } = events[i]
         const { input } = await getTransaction(web3, transactionHash)
-        const memoString: string = returnValues.message
 
         const newPoolIndex = Number(returnValues.index)
         const prevPoolIndex = newPoolIndex - OUTPLUSONE
         const prevCommitIndex = Math.floor(Number(prevPoolIndex) / OUTPLUSONE)
 
-        // TODO: properly handle this case
-        if (!memoString) {
+        let outCommit: string
+        let memo: string
+
+        if (input.startsWith(directDepositSelector)) {
           // Direct deposit case
           const res = web3.eth.abi.decodeParameters(
             [
@@ -189,21 +193,16 @@ class Pool {
             ],
             input.slice(10) // Cut off selector
           )
-          const outCommit = res[2]
-
-          const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat('')
-          for (let state of [this.state, this.optimisticState]) {
-            state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
-            state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
-          }
-        } else {
+          outCommit = res[2]
+          memo = truncateHexPrefix(returnValues.message || '')
+        } else if (input.startsWith(transactSelector)) {
           // Normal tx case
           const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
 
           const parser = new PoolCalldataParser(calldata)
 
           const outCommitRaw = parser.getField('outCommit')
-          const outCommit = web3.utils.hexToNumberString(outCommitRaw)
+          outCommit = web3.utils.hexToNumberString(outCommitRaw)
 
           const txTypeRaw = parser.getField('txType')
           const txType = toTxType(txTypeRaw)
@@ -211,17 +210,19 @@ class Pool {
           const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
           const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
 
-          const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
-          const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
-
-          for (let state of [this.state, this.optimisticState]) {
-            state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
-            state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
-          }
+          memo = truncateMemoTxPrefix(memoRaw, txType)
 
           // Save nullifier in confirmed state
           const nullifier = parser.getField('nullifier')
           await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+        } else {
+          throw new Error(`Unknown transaction type: ${input}`)
+        }
+
+        const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(memo)
+        for (let state of [this.state, this.optimisticState]) {
+          state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
+          state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
         }
       }
     }
