@@ -4,7 +4,7 @@ import crypto from 'crypto'
 import BN from 'bn.js'
 import PoolAbi from './abi/pool-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
-import { Contract } from 'web3-eth-contract'
+import type { Contract } from 'web3-eth-contract'
 import config from './config'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
@@ -14,8 +14,8 @@ import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
 import { PoolState } from './state/PoolState'
 
-import { TxType } from 'zp-memo-parser'
-import { numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
+import type { TxType } from 'zp-memo-parser'
+import { contractCallRetry, numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
 import { OUTPLUSONE } from './utils/constants'
 
@@ -73,6 +73,7 @@ class Pool {
   public state: PoolState
   public optimisticState: PoolState
   public denominator: BN = toBN(1)
+  public poolId: BN = toBN(0)
   public isInitialized = false
 
   constructor() {
@@ -105,6 +106,8 @@ class Pool {
     if (this.isInitialized) return
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
+    this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
+
     await this.syncState(config.startBlock)
     this.isInitialized = true
   }
@@ -216,7 +219,7 @@ class Pool {
   }
 
   async getContractIndex() {
-    const poolIndex = await this.PoolInstance.methods.pool_index().call()
+    const poolIndex = await contractCallRetry(this.PoolInstance, 'pool_index')
     return Number(poolIndex)
   }
 
@@ -225,12 +228,12 @@ class Pool {
       index = await this.getContractIndex()
       logger.info('CONTRACT INDEX %d', index)
     }
-    const root = await this.PoolInstance.methods.roots(index).call()
+    const root = await contractCallRetry(this.PoolInstance, 'roots', [index])
     return root.toString()
   }
 
   async getLimitsFor(address: string): Promise<Limits> {
-    const limits = await this.PoolInstance.methods.getLimitsFor(address).call()
+    const limits = await contractCallRetry(this.PoolInstance, 'getLimitsFor', [address])
     return {
       tvlCap: toBN(limits.tvlCap),
       tvl: toBN(limits.tvl),
