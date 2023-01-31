@@ -10,7 +10,7 @@ import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock } f
 import config from '@/configs/watcherConfig'
 import PoolAbi from '@/abi/pool-abi.json'
 import { BatchCache } from './BatchCache'
-import { directDepositQueue, DirectDeposit } from '@/queue/directDepositQueue'
+import { DirectDeposit, poolTxQueue } from '@/queue/poolTxQueue'
 
 const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
 
@@ -18,7 +18,7 @@ const eventName = 'SubmitDirectDeposit'
 
 const batch = new BatchCache<DirectDeposit>(config.directDepositBatchSize, config.directDepositBatchTtl, ds => {
   logger.info('Adding direct-deposit events to queue', { count: ds.length })
-  directDepositQueue.add('', ds, {})
+  poolTxQueue.add('', { transactions: [ds] }, {})
 })
 
 async function init() {
