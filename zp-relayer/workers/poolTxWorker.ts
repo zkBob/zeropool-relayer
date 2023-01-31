@@ -1,19 +1,33 @@
-import { toBN, toWei } from 'web3-utils'
+import { toBN } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { poolTxQueue, BatchTx, PoolTxResult } from '@/queue/poolTxQueue'
+import { poolTxQueue, BatchTx, PoolTxResult, DirectDeposit, TxPayload, WorkerTxType } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME } from '@/utils/constants'
-import { buildPrefixedMemo, truncateMemoTxPrefix, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
+import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
-import { processTx } from '@/txProcessor'
+import { buildDirectDeposits, ProcessResult, buildTx } from '@/txProcessor'
 import config from '@/configs/relayerConfig'
 import { getMaxRequiredGasPrice } from '@/services/gas-price'
-import { getTxProofField } from '@/utils/proofInputs'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
-import { TxValidationError } from '@/validateTx'
-import { IPoolWorkerConfig } from './workerTypes'
+import { TxValidationError, validateDirectDeposit } from '@/validateTx'
+import type { IPoolWorkerConfig } from './workerTypes'
+import type { Logger } from 'winston'
+
+interface HandlerConfig {
+  logger: Logger
+  traceId?: string
+  jobId: string
+}
+
+function isDirectDeposit(tx: WorkerTxType): tx is DirectDeposit[] {
+  return Array.isArray(tx) && tx.length > 0 && 'sender' in tx[0]
+}
+
+function isNormalTransaction(tx: WorkerTxType): tx is TxPayload {
+  return 'amount' in tx
+}
 
 export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })
@@ -23,7 +37,70 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
     concurrency: 1,
   }
 
-  const poolTxWorkerProcessor = async (job: Job<BatchTx, PoolTxResult[]>) => {
+  async function handleTx<T extends WorkerTxType>(
+    tx: T,
+    processor: (tx: T) => Promise<ProcessResult>,
+    { logger, traceId, jobId }: HandlerConfig
+  ): Promise<[string, string]> {
+    const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = await processor(tx)
+
+    const gas = config.relayerGasLimit
+    const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
+      data,
+      gas: gas.toString(),
+      to: config.poolAddress,
+    })
+    logger.info('Sending tx', { txHash })
+    try {
+      await txManager.sendTransaction(rawTransaction)
+    } catch (e) {
+      if (isInsufficientBalanceError(e as Error)) {
+        const minimumBalance = gas.mul(toBN(getMaxRequiredGasPrice(gasPrice)))
+        logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+        await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
+        waitForFunds(
+          web3,
+          config.relayerAddress,
+          () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
+          minimumBalance,
+          config.insufficientBalanceCheckTimeout
+        )
+      }
+      logger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
+    }
+
+    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
+
+    pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
+
+    if (nullifier) {
+      logger.debug('Adding nullifier %s to OS', nullifier)
+      await pool.optimisticState.nullifiers.add([nullifier])
+    }
+
+    const sentJob = await sentTxQueue.add(
+      txHash,
+      {
+        poolJobId: jobId,
+        root: rootAfter,
+        outCommit,
+        commitIndex,
+        truncatedMemo: memo,
+        nullifier,
+        txConfig,
+        txPayload: tx,
+        prevAttempts: [[txHash, gasPrice]],
+        traceId,
+      },
+      {
+        delay: config.sentTxDelay,
+      }
+    )
+    logger.info(`Added sentTxWorker job: ${sentJob.id}`)
+    return [txHash, sentJob.id as string]
+  }
+
+  const poolTxWorkerProcessor = async (job: Job<BatchTx<WorkerTxType>, PoolTxResult[]>) => {
     const sentTxNum = await sentTxQueue.count()
     if (sentTxNum >= config.maxSentQueueSize) {
       throw new Error('Optimistic state overflow')
@@ -37,75 +114,47 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
     jobLogger.info('Received %s txs', txs.length)
 
     const txHashes: [string, string][] = []
-    for (const tx of txs) {
-      const { gas, amount, rawMemo, txType, txProof } = tx
+    const handlerConfig = {
+      logger: jobLogger,
+      traceId,
+      jobId: job.id as string,
+    }
+    for (const payload of txs) {
+      if (isDirectDeposit(payload)) {
+        jobLogger.info('Received direct deposit', { number: txs.length })
 
-      await validateTx(tx, pool, traceId)
-
-      const { data, commitIndex, rootAfter } = await processTx(tx)
-
-      const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
-        data,
-        value: toWei(toBN(amount)),
-        gas,
-        to: config.poolAddress,
-      })
-      jobLogger.info('Sending tx', { txHash })
-      try {
-        await txManager.sendTransaction(rawTransaction)
-      } catch (e) {
-        if (isInsufficientBalanceError(e as Error)) {
-          const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPrice)))
-          jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
-          await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
-          waitForFunds(
-            web3,
-            config.relayerAddress,
-            () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
-            minimumBalance,
-            config.insufficientBalanceCheckTimeout
-          )
+        const validatedDeposits: DirectDeposit[] = []
+        for (const dd of payload) {
+          try {
+            await validateDirectDeposit(dd)
+            validatedDeposits.push(dd)
+          } catch (e) {
+            jobLogger.error('Direct deposit validation failed', {
+              error: (e as Error).message,
+              deposit: dd,
+            })
+          }
         }
-        jobLogger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
+
+        jobLogger.info('Processing direct deposits', { number: validatedDeposits.length })
+        if (validatedDeposits.length === 0) {
+          jobLogger.warn('Empty direct deposit batch after validation')
+          continue
+        }
+
+        await handleTx(validatedDeposits, buildDirectDeposits, handlerConfig)
+      } else if (isNormalTransaction(payload)) {
+        await validateTx(payload, pool, traceId)
+
+        const res = await handleTx(payload, buildTx, handlerConfig)
+        txHashes.push(res)
       }
-
-      const nullifier = getTxProofField(txProof, 'nullifier')
-      const outCommit = getTxProofField(txProof, 'out_commit')
-
-      const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
-      const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
-
-      pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
-      jobLogger.debug('Adding nullifier %s to OS', nullifier)
-      await pool.optimisticState.nullifiers.add([nullifier])
-
-      const sentJob = await sentTxQueue.add(
-        txHash,
-        {
-          poolJobId: job.id as string,
-          root: rootAfter,
-          outCommit,
-          commitIndex,
-          truncatedMemo,
-          nullifier,
-          txConfig,
-          txPayload: tx,
-          prevAttempts: [[txHash, gasPrice]],
-          traceId,
-        },
-        {
-          delay: config.sentTxDelay,
-        }
-      )
-      jobLogger.info(`Added sentTxWorker job: ${sentJob.id}`)
-
-      txHashes.push([txHash, sentJob.id as string])
     }
 
     return txHashes
   }
 
-  const poolTxWorker = new Worker<BatchTx, PoolTxResult[]>(
+  const poolTxWorker = new Worker<BatchTx<WorkerTxType>, PoolTxResult[]>(
     TX_QUEUE_NAME,
     job =>
       withErrorLog(

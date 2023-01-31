@@ -1,17 +1,17 @@
 import Contract from 'web3-eth-contract'
-import PoolAbi from './abi/pool-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
+import type { TxType } from 'zp-memo-parser'
+import { SnarkProof, Proof } from 'libzkbob-rs-node'
+import PoolAbi from './abi/pool-abi.json'
 import { logger } from './services/appLogger'
 import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE } from './utils/constants'
-import { numToHex, flattenProof, truncateHexPrefix, encodeProof } from './utils/helpers'
+import { numToHex, flattenProof, truncateHexPrefix, encodeProof, truncateMemoTxPrefix } from './utils/helpers'
 import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
-import { SnarkProof, Proof } from 'libzkbob-rs-node'
-import type { TxType } from 'zp-memo-parser'
 import { pool } from './pool'
-import { TxPayload } from './queue/poolTxQueue'
-import type { DirectDeposit } from './queue/directDepositQueue'
+import type { DirectDeposit, TxPayload } from './queue/poolTxQueue'
 
 // @ts-ignore
+// Used only to get `transact` method selector
 const PoolInstance = new Contract(PoolAbi as AbiItem[])
 
 interface TxData {
@@ -72,8 +72,17 @@ async function getTreeProof(outCommit: string) {
   return { treeProof, commitIndex }
 }
 
-export async function processTx(tx: TxPayload) {
-  const { txType, txProof, rawMemo: memo, depositSignature } = tx
+export interface ProcessResult {
+  data: string
+  commitIndex: number
+  outCommit: string
+  rootAfter: string
+  memo: string
+  nullifier?: string
+}
+
+export async function buildTx(tx: TxPayload): Promise<ProcessResult> {
+  const { txType, txProof, rawMemo, depositSignature } = tx
 
   const nullifier = getTxProofField(txProof, 'nullifier')
   const outCommit = getTxProofField(txProof, 'out_commit')
@@ -90,13 +99,16 @@ export async function processTx(tx: TxPayload) {
     rootAfter: numToHex(toBN(rootAfter)),
     delta,
     txType,
-    memo,
+    memo: rawMemo,
     depositSignature,
   })
-  return { data, commitIndex, rootAfter }
+
+  const memo = truncateMemoTxPrefix(rawMemo, txType)
+
+  return { data, commitIndex, outCommit, rootAfter, nullifier, memo }
 }
 
-export async function processDirectDeposits(directDeposits: DirectDeposit[]) {
+export async function buildDirectDeposits(directDeposits: DirectDeposit[]): Promise<ProcessResult> {
   // TODO: get proof + outCommit for all deposits directDeposits
   // Now, just use some random value
   const outCommit = '11469701942666298368112882412133877458305516134926649826543144744382391691533'
@@ -117,5 +129,8 @@ export async function processDirectDeposits(directDeposits: DirectDeposit[]) {
     )
     .encodeABI()
 
-  return { data, commitIndex, outCommit, rootAfter }
+  // TODO: add memo constructor after contract upgrade
+  const memo = ''
+
+  return { data, commitIndex, outCommit, rootAfter, memo }
 }

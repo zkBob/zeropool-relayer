@@ -15,7 +15,6 @@ import { poolTxQueue } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
 import type { ISentWorkerConfig } from './workerTypes'
 import type { TxManager } from '@/tx/TxManager'
-import { directDepositQueue } from '@/queue/directDepositQueue'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -110,14 +109,9 @@ async function handleReverted(
 
     const { txPayload, traceId } = wj.data
     let reschedulePromise: Promise<any>
-    if (Array.isArray(txPayload)) {
-      // Direct deposit
-      reschedulePromise = directDepositQueue.add(txHash, txPayload)
-    } else {
-      // Normal pool tx
-      const transactions = [txPayload]
-      reschedulePromise = poolTxQueue.add(txHash, { transactions, traceId })
-    }
+
+    const transactions = [txPayload]
+    reschedulePromise = poolTxQueue.add(txHash, { transactions, traceId })
 
     // To not mess up traceId we add each transaction separately
     reschedulePromises.push(
@@ -154,7 +148,6 @@ async function handleResend(
     rawTransaction,
   } = await txManager.prepareTx(txConfig, jobLogger, true)
 
-  // const [newTxHash, rawTransaction] = await signTransaction(web3, newTxConfig, config.relayerPrivateKey)
   job.data.prevAttempts.push([txHash, gasPrice])
   jobLogger.info('Re-send tx', { txHash })
   try {
