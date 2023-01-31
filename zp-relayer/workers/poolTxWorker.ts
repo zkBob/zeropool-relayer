@@ -126,7 +126,7 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
         const validatedDeposits: DirectDeposit[] = []
         for (const dd of payload) {
           try {
-            await validateDirectDeposit(dd)
+            await validateDirectDeposit(dd, pool)
             validatedDeposits.push(dd)
           } catch (e) {
             jobLogger.error('Direct deposit validation failed', {

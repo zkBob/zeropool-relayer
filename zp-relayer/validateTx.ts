@@ -303,7 +303,23 @@ export async function validateTx(
   }
 }
 
-export async function validateDirectDeposit(dd: DirectDeposit) {
+enum DirectDepositStatus {
+  Missing = '0',
+  Pending = '1',
+  Completed = '2',
+  Refunded = '3',
+}
+
+async function checkDirectDepositStatus(nonce: string, poolContract: Contract) {
+  const dd = await contractCallRetry(poolContract, 'directDeposits', [nonce])
+  if (dd.status === DirectDepositStatus.Pending) {
+    return null
+  }
+  throw new Error(`Direct deposit with nonce ${nonce} is not pending`)
+}
+
+export async function validateDirectDeposit(dd: DirectDeposit, pool: Pool) {
+  await checkAssertion(() => checkDirectDepositStatus(dd.nonce, pool.PoolInstance))
   await checkAssertion(() => checkScreener(dd.sender))
   await checkAssertion(() => checkScreener(dd.fallbackUser))
 }
