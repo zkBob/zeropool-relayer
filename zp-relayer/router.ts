@@ -52,7 +52,7 @@ router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
 router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
 
 // Error handler middleware
-router.use((error: any, req: Request, res: Response) => {
+router.use((error: any, req: Request, res: Response, next: NextFunction) => {
   if (error instanceof ValidationError) {
     const validationErrors = error.validationErrors
     logger.warn('Validation errors', { errors: validationErrors, path: req.path })
