@@ -3,8 +3,7 @@ import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { redis } from '@/services/redisClient'
 import type { TransactionConfig } from 'web3-core'
 import type { GasPriceValue } from '@/services/gas-price'
-import type { TxPayload } from './poolTxQueue'
-import type { DirectDeposit } from './directDepositQueue'
+import type { DirectDeposit, TxPayload } from './poolTxQueue'
 
 export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {

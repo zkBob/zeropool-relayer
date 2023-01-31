@@ -11,10 +11,9 @@ import { web3 } from './services/web3'
 import { contractCallRetry, numToHex, unpackSignature } from './utils/helpers'
 import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
-import { TxPayload } from './queue/poolTxQueue'
+import type { DirectDeposit, TxPayload } from './queue/poolTxQueue'
 import { getTxProofField, parseDelta } from './utils/proofInputs'
 import type { PoolState } from './state/PoolState'
-import { DirectDeposit } from './queue/directDepositQueue'
 
 const ZERO = toBN(0)
 
