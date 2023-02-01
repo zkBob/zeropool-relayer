@@ -1,6 +1,7 @@
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
 import config from '@/configs/watcherConfig'
+import type { DirectDeposit } from '@/queue/poolTxQueue'
 
 const serviceKey = 'direct-deposit'
 const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`
@@ -17,4 +18,13 @@ export async function getLastProcessedBlock() {
 export function updateLastProcessedBlock(lastBlockNumber: number) {
   lastProcessedBlock = lastBlockNumber
   return redis.set(lastBlockRedisKey, lastProcessedBlock)
+}
+
+export function validateDirectDepositEvent(o: Object): o is DirectDeposit {
+  for (const field in ['sender', 'nonce', 'fallbackUser', 'zkAddress', 'deposit']) {
+    if (!(field in o)) {
+      return false
+    }
+  }
+  return true
 }

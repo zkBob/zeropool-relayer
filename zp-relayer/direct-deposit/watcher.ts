@@ -5,7 +5,13 @@ import type { AbiItem } from 'web3-utils'
 import { getBlockNumber, getEvents } from '../utils/web3'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock } from './utils'
+import { redis } from '@/services/redisClient'
+import {
+  lastProcessedBlock,
+  getLastProcessedBlock,
+  updateLastProcessedBlock,
+  validateDirectDepositEvent,
+} from './utils'
 
 import config from '@/configs/watcherConfig'
 import PoolAbi from '@/abi/pool-abi.json'
@@ -16,10 +22,15 @@ const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddr
 
 const eventName = 'SubmitDirectDeposit'
 
-const batch = new BatchCache<DirectDeposit>(config.directDepositBatchSize, config.directDepositBatchTtl, ds => {
-  logger.info('Adding direct-deposit events to queue', { count: ds.length })
-  poolTxQueue.add('', { transactions: [ds] }, {})
-})
+const batch = new BatchCache<DirectDeposit>(
+  config.directDepositBatchSize,
+  config.directDepositBatchTtl,
+  ds => {
+    logger.info('Adding direct-deposit events to queue', { count: ds.length })
+    poolTxQueue.add('', { transactions: [ds] }, {})
+  },
+  redis
+)
 
 async function init() {
   try {
@@ -54,11 +65,15 @@ async function watch() {
   })
   logger.info(`Found ${events.length} direct-deposit events`)
 
+  const directDeposits: DirectDeposit[] = []
   for (let event of events) {
-    const dd = event.returnValues as DirectDeposit
-    // TODO: Probably we can add values in bulk
-    batch.add(dd)
+    const dd = event.returnValues
+    if (validateDirectDepositEvent(dd)) {
+      directDeposits.push(dd)
+    }
   }
+
+  await batch.add(directDeposits)
 
   logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })
   await updateLastProcessedBlock(toBlock)
