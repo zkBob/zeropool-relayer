@@ -39,6 +39,7 @@ export function createRouter() {
     next()
   })
 
+
   router.get('/', endpoints.root)
   router.get('/version', endpoints.relayerVersion)
   router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
@@ -53,7 +54,7 @@ export function createRouter() {
   router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
 
   // Error handler middleware
-  router.use((error: any, req: Request, res: Response) => {
+  router.use((error: any, req: Request, res: Response, next: NextFunction) => {
     if (error instanceof ValidationError) {
       const validationErrors = error.validationErrors
       logger.warn('Validation errors', { errors: validationErrors, path: req.path })
@@ -63,5 +64,6 @@ export function createRouter() {
       res.status(500).send('Internal server error')
     }
   })
+
   return router
 }
