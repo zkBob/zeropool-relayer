@@ -62,7 +62,7 @@ async function watch() {
 
   await batch.add(directDeposits)
 
-  logger.debug('Updating last processed block', { lastProcessedNonce: lastNonceToProcess.toString() })
+  logger.debug('Updating last processed nonce', { lastProcessedNonce: lastNonceToProcess.toString() })
   await updateLastProcessedNonce(lastNonceToProcess)
 }
 
