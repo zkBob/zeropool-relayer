@@ -40,6 +40,7 @@ export class BatchCache<T> {
   private async execute() {
     this.clearTimer()
     const es = await this.take(this.batchSize)
+    if (es.length == 0) return
     await this.cb(es)
   }
 
