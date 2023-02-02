@@ -16,6 +16,7 @@ export class BatchCache<T> {
   private clearTimer() {
     if (this.timer) {
       clearTimeout(this.timer)
+      this.timer = null
     }
   }
 
