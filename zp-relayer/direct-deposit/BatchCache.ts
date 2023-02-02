@@ -22,26 +22,19 @@ export class BatchCache<T> {
     this.timer = setTimeout(() => this.execute(), this.ttl)
   }
 
-  private addToRedis(values: T[]) {
-    const rawValues = values.map(v => JSON.stringify(v))
-    return this.redis.rpush(this.key, ...rawValues)
+  private addToRedis(values: [number, T][]) {
+    const rawValues = values.map(([s, v]) => [s, JSON.stringify(v)] as [number, string])
+    return this.redis.zadd(this.key, ...rawValues.flat())
   }
 
   private async take(count: number) {
-    const es: T[] = []
-    // TODO: does order really matter here?
-    // Maybe we can pop all elements with Promise.all
-    for (let i = 0; i < count; i++) {
-      const el = await this.redis.lpop(this.key)
-      if (el === null) break
-      es.push(JSON.parse(el))
-    }
-    return es
+    const es: string[] = await this.redis.zpopmin(this.key, count)
+    return es.map(e => JSON.parse(e))
   }
 
   // TODO: count could be maintained in-memory
   private count() {
-    return this.redis.llen(this.key)
+    return this.redis.zcount(this.key, '-inf', '+inf')
   }
 
   private async execute() {
@@ -53,7 +46,7 @@ export class BatchCache<T> {
   // TODO: could be optimized
   // We don't need to insert `values` in db if `count` + `values.length` > `batchSize`
   // This implementation is simpler and doesn't have any tricky edge cases
-  async add(values: T[]) {
+  async add(values: [number, T][]) {
     if (values.length === 0) {
       return
     }

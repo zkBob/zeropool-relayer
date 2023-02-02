@@ -1,26 +1,23 @@
 // Reference implementation:
 // https://github.com/omni/tokenbridge/blob/master/oracle/src/watcher.js
-import Web3 from 'web3'
 import type { AbiItem } from 'web3-utils'
-import { getBlockNumber, getEvents } from '../utils/web3'
 import { web3 } from '@/services/web3'
+import PoolAbi from '@/abi/pool-abi.json'
+import config from '@/configs/watcherConfig'
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
+import { DirectDeposit, poolTxQueue } from '@/queue/poolTxQueue'
+import { contractCallRetry } from '@/utils/helpers'
+
 import {
-  lastProcessedBlock,
-  getLastProcessedBlock,
-  updateLastProcessedBlock,
+  lastProcessedNonce,
+  getLastProcessedNonce,
+  updateLastProcessedNonce,
   validateDirectDepositEvent,
 } from './utils'
-
-import config from '@/configs/watcherConfig'
-import PoolAbi from '@/abi/pool-abi.json'
 import { BatchCache } from './BatchCache'
-import { DirectDeposit, poolTxQueue } from '@/queue/poolTxQueue'
 
 const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
-
-const eventName = 'SubmitDirectDeposit'
 
 const batch = new BatchCache<DirectDeposit>(
   config.directDepositBatchSize,
@@ -34,7 +31,7 @@ const batch = new BatchCache<DirectDeposit>(
 
 async function init() {
   try {
-    await getLastProcessedBlock()
+    await getLastProcessedNonce()
     runWatcher()
   } catch (e) {
     logger.error(e)
@@ -42,41 +39,31 @@ async function init() {
   }
 }
 
-async function getLastBlockToProcess(web3: Web3) {
-  const lastBlockNumber = await getBlockNumber(web3)
-  return lastBlockNumber - config.blockConfirmations
+async function getLastNonceToProcess() {
+  const lastNonce = await PoolInstance.methods.directDepositNonce().call()
+  return lastNonce
 }
 
 async function watch() {
-  const lastBlockToProcess = await getLastBlockToProcess(web3)
+  const lastNonceToProcess = await getLastNonceToProcess()
 
-  if (lastBlockToProcess <= lastProcessedBlock) {
-    logger.debug('All blocks already processed')
+  if (lastNonceToProcess <= lastProcessedNonce) {
+    logger.debug('All deposits are already processed')
     return
   }
 
-  const fromBlock = lastProcessedBlock + 1
-  const rangeEndBlock = fromBlock + config.eventsProcessingBatchSize
-  let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
-
-  let events = await getEvents(PoolInstance, eventName, {
-    fromBlock,
-    toBlock,
-  })
-  logger.info(`Found ${events.length} direct-deposit events`)
-
-  const directDeposits: DirectDeposit[] = []
-  for (let event of events) {
-    const dd = event.returnValues
+  const directDeposits: [number, DirectDeposit][] = []
+  for (let nonce = lastProcessedNonce + 1; nonce <= lastNonceToProcess; nonce++) {
+    const dd = await contractCallRetry(PoolInstance, 'directDeposits', [nonce])
     if (validateDirectDepositEvent(dd)) {
-      directDeposits.push(dd)
+      directDeposits.push([nonce, dd])
     }
   }
 
   await batch.add(directDeposits)
 
-  logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })
-  await updateLastProcessedBlock(toBlock)
+  logger.debug('Updating last processed block', { lastProcessedNonce: lastNonceToProcess.toString() })
+  await updateLastProcessedNonce(lastNonceToProcess)
 }
 
 async function runWatcher() {
