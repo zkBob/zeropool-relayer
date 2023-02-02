@@ -34,7 +34,7 @@ export class BatchCache<T> {
 
   // TODO: count could be maintained in-memory
   private count() {
-    return this.redis.zcount(this.key, '-inf', '+inf')
+    return this.redis.zcard(this.key)
   }
 
   private async execute() {
