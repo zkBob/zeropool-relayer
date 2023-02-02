@@ -3,10 +3,10 @@ import type Web3 from 'web3'
 import type { Mutex } from 'async-mutex'
 import type { Contract } from 'web3-eth-contract'
 import type { SnarkProof } from 'libzkbob-rs-node'
-import { padLeft, toBN } from 'web3-utils'
-import { logger } from '@/services/appLogger'
 import { TxType } from 'zp-memo-parser'
 import promiseRetry from 'promise-retry'
+import { padLeft, toBN } from 'web3-utils'
+import { logger } from '@/services/appLogger'
 import { isContractCallError } from './web3Errors'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')

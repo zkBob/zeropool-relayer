@@ -3,38 +3,20 @@ import { toBN } from 'web3-utils'
 import type { Contract } from 'web3-eth-contract'
 import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
-import { logger } from './services/appLogger'
-import config from './configs/relayerConfig'
-import type { Limits, Pool } from './pool'
-import type { NullifierSet } from './state/nullifierSet'
-import { web3 } from './services/web3'
-import { contractCallRetry, numToHex, unpackSignature } from './utils/helpers'
-import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
-import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
-import type { DirectDeposit, TxPayload } from './queue/poolTxQueue'
-import { getTxProofField, parseDelta } from './utils/proofInputs'
-import type { PoolState } from './state/PoolState'
+import { logger } from '@/services/appLogger'
+import config from '@/configs/relayerConfig'
+import type { Limits, Pool } from '@/pool'
+import type { NullifierSet } from '@/state/nullifierSet'
+import { web3 } from '@/services/web3'
+import { contractCallRetry, numToHex, unpackSignature } from '@/utils/helpers'
+import { recoverSaltedPermit } from '@/utils/EIP712SaltedPermit'
+import { ZERO_ADDRESS } from '@/utils/constants'
+import { getTxProofField, parseDelta } from '@/utils/proofInputs'
+import type { DirectDeposit, TxPayload } from '@/queue/poolTxQueue'
+import type { PoolState } from '@/state/PoolState'
+import { checkAssertion, TxValidationError, checkSize, checkScreener } from './common'
 
 const ZERO = toBN(0)
-
-export class TxValidationError extends Error {
-  name = 'TxValidationError'
-  constructor(message: string) {
-    super(message)
-  }
-}
-
-type OptionError = Error | null
-export async function checkAssertion(f: () => Promise<OptionError> | OptionError) {
-  const err = await f()
-  if (err) {
-    throw err
-  }
-}
-
-export function checkSize(data: string, size: number) {
-  return data.length === size
-}
 
 export async function checkBalance(token: Contract, address: string, minBalance: string) {
   const balance = await contractCallRetry(token, 'balanceOf', [address])
@@ -212,38 +194,6 @@ function checkPoolId(deltaPoolId: BN, contractPoolId: BN) {
   return new TxValidationError(`Incorrect poolId: given ${deltaPoolId}, expected ${contractPoolId}`)
 }
 
-async function checkScreener(address: string, traceId?: string) {
-  if (config.screenerUrl === null || config.screenerToken === null) {
-    return null
-  }
-
-  const ACC_VALIDATION_FAILED = 'Internal account validation failed'
-
-  const headers: Record<string, string> = {
-    'Content-type': 'application/json',
-    'Authorization': `Bearer ${config.screenerToken}`,
-  }
-
-  if (traceId) headers[TRACE_ID] = traceId
-
-  try {
-    const rawResponse = await fetch(config.screenerUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ address }),
-    })
-    const response = await rawResponse.json()
-    if (response.result === true) {
-      return new TxValidationError(ACC_VALIDATION_FAILED)
-    }
-  } catch (e) {
-    logger.error('Request to screener failed', { error: (e as Error).message })
-    return new TxValidationError(ACC_VALIDATION_FAILED)
-  }
-
-  return null
-}
-
 export async function validateTx(
   { txType, rawMemo, txProof, depositSignature }: TxPayload,
   pool: Pool,
@@ -311,23 +261,3 @@ export async function validateTx(
   }
 }
 
-enum DirectDepositStatus {
-  Missing = '0',
-  Pending = '1',
-  Completed = '2',
-  Refunded = '3',
-}
-
-async function checkDirectDepositStatus(nonce: string, poolContract: Contract) {
-  const dd = await contractCallRetry(poolContract, 'directDeposits', [nonce])
-  if (dd.status === DirectDepositStatus.Pending) {
-    return null
-  }
-  throw new Error(`Direct deposit with nonce ${nonce} is not pending`)
-}
-
-export async function validateDirectDeposit(dd: DirectDeposit, pool: Pool) {
-  await checkAssertion(() => checkDirectDepositStatus(dd.nonce, pool.PoolInstance))
-  await checkAssertion(() => checkScreener(dd.sender))
-  await checkAssertion(() => checkScreener(dd.fallbackUser))
-}

@@ -9,7 +9,7 @@ import { createPoolTxWorker } from './workers/poolTxWorker'
 import { createSentTxWorker } from './workers/sentTxWorker'
 import { initializeDomain } from './utils/EIP712SaltedPermit'
 import { redis } from './services/redisClient'
-import { validateTx } from './validateTx'
+import { validateTx } from './validation/tx/validateTx'
 import { TxManager } from './tx/TxManager'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
 

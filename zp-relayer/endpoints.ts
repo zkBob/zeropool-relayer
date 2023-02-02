@@ -10,7 +10,7 @@ import {
   checkSendTransactionsErrors,
   checkTraceId,
   validateBatch,
-} from './validation/validation'
+} from './validation/api/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
 import { TRACE_ID } from './utils/constants'

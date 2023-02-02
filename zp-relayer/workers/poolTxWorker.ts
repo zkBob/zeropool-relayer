@@ -11,9 +11,9 @@ import { buildDirectDeposits, ProcessResult, buildTx } from '@/txProcessor'
 import config from '@/configs/relayerConfig'
 import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
-import { TxValidationError, validateDirectDeposit } from '@/validateTx'
 import type { IPoolWorkerConfig } from './workerTypes'
 import type { Logger } from 'winston'
+import { TxValidationError } from '@/validation/tx/common'
 
 interface HandlerConfig<T extends WorkerTxType> {
   type: T
@@ -123,29 +123,14 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
         const deposits = payload as WorkerTx<WorkerTxType.DirectDeposit>
         jobLogger.info('Received direct deposit', { number: txs.length })
 
-        const validatedDeposits = []
-        for (const dd of deposits) {
-          try {
-            await validateDirectDeposit(dd, pool)
-            validatedDeposits.push(dd)
-          } catch (e) {
-            jobLogger.error('Direct deposit validation failed', {
-              error: (e as Error).message,
-              deposit: dd,
-            })
-          }
-        }
-
-        jobLogger.info('Processing direct deposits', { number: validatedDeposits.length })
-        if (validatedDeposits.length === 0) {
-          jobLogger.warn('Empty direct deposit batch after validation')
+        if (deposits.length === 0) {
           continue
         }
 
         handlerConfig = {
           ...baseConfig,
           type,
-          tx: validatedDeposits,
+          tx: deposits,
           processor: buildDirectDeposits,
         }
       } else if (type === WorkerTxType.Normal) {

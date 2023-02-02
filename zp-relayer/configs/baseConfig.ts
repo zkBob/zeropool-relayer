@@ -12,6 +12,8 @@ const config = {
     .filter(s => s.length > 0)
     .map(s => parseInt(s, 10)),
   eventsProcessingBatchSize: parseInt(process.env.COMMON_EVENTS_PROCESSING_BATCH_SIZE || '10000'),
+  screenerUrl: process.env.COMMON_SCREENER_URL || null,
+  screenerToken: process.env.COMMON_SCREENER_TOKEN || null,
 }
 
 export default config

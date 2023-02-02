@@ -45,8 +45,6 @@ const config = {
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
     .filter(r => r.length > 0),
-  screenerUrl: process.env.RELAYER_SCREENER_URL || null,
-  screenerToken: process.env.RELAYER_SCREENER_TOKEN || null,
 }
 
 export default config

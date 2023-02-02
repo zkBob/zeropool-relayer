@@ -1,28 +1,36 @@
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
+import config from '@/configs/baseConfig'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 
 const serviceKey = 'direct-deposit'
-const lastNonceRedisKey = `${serviceKey}:lastProcessedNonce`
+const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`
 
-export let lastProcessedNonce = 0
+export let lastProcessedBlock = Math.max(config.startBlock - 1, 0)
+export let lastReprocessedBlock: number
 
-export async function getLastProcessedNonce() {
-  const result = await redis.get(lastNonceRedisKey)
-  logger.debug('Last Processed nonce obtained', { fromRedis: result, fromConfig: lastProcessedNonce })
-  lastProcessedNonce = result ? parseInt(result, 10) : lastProcessedNonce
+export async function getLastProcessedBlock() {
+  const result = await redis.get(lastBlockRedisKey)
+  logger.debug('Last Processed block obtained', { fromRedis: result, fromConfig: lastProcessedBlock })
+  lastProcessedBlock = result ? parseInt(result, 10) : lastProcessedBlock
 }
 
-export function updateLastProcessedNonce(lastNonce: number) {
-  lastProcessedNonce = lastNonce
-  return redis.set(lastNonceRedisKey, lastProcessedNonce)
+export function updateLastProcessedBlock(lastBlockNumber: number) {
+  lastProcessedBlock = lastBlockNumber
+  return redis.set(lastBlockRedisKey, lastProcessedBlock)
 }
 
-export function validateDirectDepositEvent(o: Object): o is DirectDeposit {
-  for (const field in ['sender', 'nonce', 'fallbackUser', 'zkAddress', 'deposit']) {
-    if (!(field in o)) {
-      return false
-    }
+export function parseDirectDepositEvent(o: Record<string, any>): DirectDeposit {
+  const dd: DirectDeposit = {
+    sender: o.sender,
+    nonce: o.nonce,
+    fallbackUser: o.fallbackUser,
+    zkAddress: {
+      diversifier: o.zkAddress.diversifier,
+      pk: o.zkAddress.pk,
+    },
+    deposit: o.deposit,
   }
-  return true
+
+  return dd
 }

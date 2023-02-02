@@ -17,7 +17,7 @@ import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
-import { validateTx } from '../../validateTx'
+import { validateTx } from '../../validation/tx/validateTx'
 import { TxManager } from '../../tx/TxManager'
 
 import flow from '../flows/flow_independent_deposits_5.json'
