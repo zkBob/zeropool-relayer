@@ -2,7 +2,7 @@ import { toBN } from 'web3-utils'
 import { Job, Worker } from 'bullmq'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { poolTxQueue, BatchTx, PoolTxResult, DirectDeposit, TxPayload, WorkerTxType } from '@/queue/poolTxQueue'
+import { poolTxQueue, BatchTx, PoolTxResult, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME } from '@/utils/constants'
 import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
 import { pool } from '@/pool'
@@ -15,18 +15,13 @@ import { TxValidationError, validateDirectDeposit } from '@/validateTx'
 import type { IPoolWorkerConfig } from './workerTypes'
 import type { Logger } from 'winston'
 
-interface HandlerConfig {
+interface HandlerConfig<T extends WorkerTxType> {
+  type: T
+  tx: WorkerTx<T>
+  processor: (tx: WorkerTx<T>) => Promise<ProcessResult>
   logger: Logger
   traceId?: string
   jobId: string
-}
-
-function isDirectDeposit(tx: WorkerTxType): tx is DirectDeposit[] {
-  return Array.isArray(tx) && tx.length > 0 && 'sender' in tx[0]
-}
-
-function isNormalTransaction(tx: WorkerTxType): tx is TxPayload {
-  return 'amount' in tx
 }
 
 export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }: IPoolWorkerConfig) {
@@ -37,11 +32,14 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
     concurrency: 1,
   }
 
-  async function handleTx<T extends WorkerTxType>(
-    tx: T,
-    processor: (tx: T) => Promise<ProcessResult>,
-    { logger, traceId, jobId }: HandlerConfig
-  ): Promise<[string, string]> {
+  async function handleTx<T extends WorkerTxType>({
+    type,
+    tx,
+    processor,
+    logger,
+    traceId,
+    jobId,
+  }: HandlerConfig<T>): Promise<[string, string]> {
     const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = await processor(tx)
 
     const gas = config.relayerGasLimit
@@ -88,9 +86,8 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
         truncatedMemo: memo,
         nullifier,
         txConfig,
-        txPayload: tx,
+        txPayload: { transactions: [tx], traceId, type },
         prevAttempts: [[txHash, gasPrice]],
-        traceId,
       },
       {
         delay: config.sentTxDelay,
@@ -106,25 +103,28 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
       throw new Error('Optimistic state overflow')
     }
 
-    const txs = job.data.transactions
-    const traceId = job.data.traceId
+    const { transactions: txs, traceId, type } = job.data
 
     const jobLogger = workerLogger.child({ jobId: job.id, traceId })
     jobLogger.info('Processing...')
     jobLogger.info('Received %s txs', txs.length)
 
     const txHashes: [string, string][] = []
-    const handlerConfig = {
+
+    const baseConfig = {
       logger: jobLogger,
       traceId,
       jobId: job.id as string,
     }
-    for (const payload of txs) {
-      if (isDirectDeposit(payload)) {
+    let handlerConfig: HandlerConfig<WorkerTxType.DirectDeposit> | HandlerConfig<WorkerTxType.Normal>
+
+    for (const payload of job.data.transactions) {
+      if (type === WorkerTxType.DirectDeposit) {
+        const deposits = payload as WorkerTx<WorkerTxType.DirectDeposit>
         jobLogger.info('Received direct deposit', { number: txs.length })
 
-        const validatedDeposits: DirectDeposit[] = []
-        for (const dd of payload) {
+        const validatedDeposits = []
+        for (const dd of deposits) {
           try {
             await validateDirectDeposit(dd, pool)
             validatedDeposits.push(dd)
@@ -142,13 +142,28 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
           continue
         }
 
-        await handleTx(validatedDeposits, buildDirectDeposits, handlerConfig)
-      } else if (isNormalTransaction(payload)) {
-        await validateTx(payload, pool, traceId)
+        handlerConfig = {
+          ...baseConfig,
+          type,
+          tx: validatedDeposits,
+          processor: buildDirectDeposits,
+        }
+      } else if (type === WorkerTxType.Normal) {
+        const tx = payload as WorkerTx<WorkerTxType.Normal>
+        await validateTx(tx, pool, traceId)
 
-        const res = await handleTx(payload, buildTx, handlerConfig)
-        txHashes.push(res)
+        handlerConfig = {
+          ...baseConfig,
+          type,
+          tx,
+          processor: buildTx,
+        }
+      } else {
+        throw new Error(`Unknown tx type: ${type}`)
       }
+
+      const res = await handleTx(handlerConfig)
+      txHashes.push(res)
     }
 
     return txHashes

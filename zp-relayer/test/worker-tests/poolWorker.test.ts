@@ -8,7 +8,7 @@ import { web3 } from './web3'
 import { pool } from '../../pool'
 import config from '../../configs/relayerConfig'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
-import { poolTxQueue, PoolTxResult, BatchTx } from '../../queue/poolTxQueue'
+import { poolTxQueue, PoolTxResult, BatchTx, WorkerTxType } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
@@ -27,8 +27,9 @@ import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 chai.use(chaiAsPromised)
 const expect = chai.expect
 
-async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx, PoolTxResult[]>> {
+async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx<WorkerTxType>, PoolTxResult[]>> {
   const job = await poolTxQueue.add('test', {
+    type: WorkerTxType.Normal,
     transactions: [
       {
         amount: '0',
@@ -113,7 +114,7 @@ describe('poolWorker', () => {
     gasPriceService.stop()
   })
 
-  async function expectJobFinished(job: Job<BatchTx, PoolTxResult[]>) {
+  async function expectJobFinished(job: Job<BatchTx<WorkerTxType>, PoolTxResult[]>) {
     const [[initialHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
     expect(initialHash.length).eq(66)
 

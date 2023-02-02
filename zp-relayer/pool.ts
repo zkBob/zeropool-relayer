@@ -9,7 +9,7 @@ import config from './configs/relayerConfig'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
 import { redis } from './services/redisClient'
-import { poolTxQueue } from './queue/poolTxQueue'
+import { poolTxQueue, WorkerTxType } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
 import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
 import { PoolState } from './state/PoolState'
@@ -125,7 +125,7 @@ class Pool {
         depositSignature,
       }
     })
-    const job = await poolTxQueue.add('tx', { transactions: queueTxs, traceId })
+    const job = await poolTxQueue.add('tx', { type: WorkerTxType.Normal, transactions: queueTxs, traceId })
     logger.debug(`Added poolTxWorker job: ${job.id}`)
     return job.id
   }

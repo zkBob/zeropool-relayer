@@ -107,11 +107,10 @@ async function handleReverted(
     if (!wj?.id) continue
     waitingJobIds.push(wj.id)
 
-    const { txPayload, traceId } = wj.data
+    const { txPayload } = wj.data
     let reschedulePromise: Promise<any>
 
-    const transactions = [txPayload]
-    reschedulePromise = poolTxQueue.add(txHash, { transactions, traceId })
+    reschedulePromise = poolTxQueue.add(txHash, txPayload)
 
     // To not mess up traceId we add each transaction separately
     reschedulePromises.push(
@@ -228,7 +227,7 @@ export async function createSentTxWorker({ redis, mutex, txManager }: ISentWorke
   }
 
   const sentTxWorkerProcessor = async (job: Job<SentTxPayload>, resendNum: number = 1) => {
-    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.traceId, resendNum })
+    const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.txPayload.traceId, resendNum })
 
     jobLogger.info('Verifying job %s', job.data.poolJobId)
     const { prevAttempts, txConfig } = job.data

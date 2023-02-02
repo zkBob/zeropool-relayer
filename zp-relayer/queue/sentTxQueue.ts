@@ -3,7 +3,7 @@ import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { redis } from '@/services/redisClient'
 import type { TransactionConfig } from 'web3-core'
 import type { GasPriceValue } from '@/services/gas-price'
-import type { DirectDeposit, TxPayload } from './poolTxQueue'
+import type { BatchTx, WorkerTxType } from './poolTxQueue'
 
 export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
@@ -14,9 +14,8 @@ export interface SentTxPayload {
   truncatedMemo: string
   txConfig: TransactionConfig
   nullifier?: string
-  txPayload: TxPayload | DirectDeposit[]
+  txPayload: BatchTx<WorkerTxType>
   prevAttempts: SendAttempt[]
-  traceId?: string
 }
 
 export enum SentTxState {

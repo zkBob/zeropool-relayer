@@ -26,10 +26,20 @@ export interface DirectDeposit {
   deposit: string
 }
 
-export type WorkerTxType = TxPayload | DirectDeposit[]
+export enum WorkerTxType {
+  Normal = 'normal',
+  DirectDeposit = 'dd',
+}
 
-export interface BatchTx<WorkerTxType> {
-  transactions: WorkerTxType[]
+export type WorkerTx<T extends WorkerTxType> = T extends WorkerTxType.Normal
+  ? TxPayload
+  : T extends WorkerTxType.DirectDeposit
+  ? DirectDeposit[]
+  : never
+
+export interface BatchTx<T extends WorkerTxType> {
+  type: T
+  transactions: WorkerTx<T>[]
   traceId?: string
 }
 

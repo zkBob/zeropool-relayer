@@ -8,7 +8,7 @@ import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE } from './utils/constants'
 import { numToHex, flattenProof, truncateHexPrefix, encodeProof, truncateMemoTxPrefix } from './utils/helpers'
 import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
 import { pool } from './pool'
-import type { DirectDeposit, TxPayload } from './queue/poolTxQueue'
+import type { WorkerTx, WorkerTxType } from './queue/poolTxQueue'
 
 // @ts-ignore
 // Used only to get `transact` method selector
@@ -81,7 +81,7 @@ export interface ProcessResult {
   nullifier?: string
 }
 
-export async function buildTx(tx: TxPayload): Promise<ProcessResult> {
+export async function buildTx(tx: WorkerTx<WorkerTxType.Normal>): Promise<ProcessResult> {
   const { txType, txProof, rawMemo, depositSignature } = tx
 
   const nullifier = getTxProofField(txProof, 'nullifier')
@@ -108,7 +108,9 @@ export async function buildTx(tx: TxPayload): Promise<ProcessResult> {
   return { data, commitIndex, outCommit, rootAfter, nullifier, memo }
 }
 
-export async function buildDirectDeposits(directDeposits: DirectDeposit[]): Promise<ProcessResult> {
+export async function buildDirectDeposits(
+  directDeposits: WorkerTx<WorkerTxType.DirectDeposit>
+): Promise<ProcessResult> {
   // TODO: get proof + outCommit for all deposits directDeposits
   // Now, just use some random value
   const outCommit = '11469701942666298368112882412133877458305516134926649826543144744382391691533'
