@@ -79,7 +79,6 @@ export class BatchCache<T> {
     // validatedEs.length === batchSize  => batch is full
     //              count  <  es.length  => cache is drained
 
-
     if (es.length === 0) {
       return
     }

@@ -9,12 +9,7 @@ import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
 import { DirectDeposit, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 
-import {
-  lastProcessedBlock,
-  getLastProcessedBlock,
-  updateLastProcessedBlock,
-  parseDirectDepositEvent,
-} from './utils'
+import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock, parseDirectDepositEvent } from './utils'
 import { BatchCache } from './BatchCache'
 import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
 import { getBlockNumber, getEvents } from '@/utils/web3'
@@ -70,10 +65,9 @@ async function watch() {
   const directDeposits: [string, DirectDeposit][] = []
   for (let event of events) {
     const dd = parseDirectDepositEvent(event.returnValues)
-    directDeposits.push([dd.nonce ,dd])
+    directDeposits.push([dd.nonce, dd])
   }
 
-  logger.info('Validated deposit events', { count: directDeposits.length })
   await batch.add(directDeposits)
 
   logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })

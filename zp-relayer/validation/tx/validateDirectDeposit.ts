@@ -1,7 +1,7 @@
 import type { Contract } from 'web3-eth-contract'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { contractCallRetry } from '@/utils/helpers'
-import { checkAssertion, checkScreener } from "./common"
+import { checkAssertion, checkScreener, TxValidationError } from './common'
 
 enum DirectDepositStatus {
   Missing = '0',
@@ -11,24 +11,38 @@ enum DirectDepositStatus {
 }
 
 interface DirectDepositStruct {
-    user: string
-    amount: string
-    deposit: string
-    fee: string
-    timestamp: string
-    status: string
-    diversifier: string
-    pk: string
+  user: string
+  amount: string
+  deposit: string
+  fee: string
+  timestamp: string
+  status: string
+  diversifier: string
+  pk: string
 }
 
 async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Contract) {
-  // const ddFromContract: DirectDepositStruct = await contractCallRetry(poolContract, 'directDeposits', [dd.nonce])
-  // if (ddFromContract.status !== DirectDepositStatus.Pending ||
-  //   ddFromContract.user !== dd.sender ||
-  // ) {
-    return null
-  // }
-  // throw new Error(`Direct deposit with nonce ${dd.nonce} is not pending`)
+  const ddFromContract: DirectDepositStruct = await contractCallRetry(poolContract, 'directDeposits', [dd.nonce])
+  const errPrefix = `Direct deposit ${dd.nonce}`
+
+  if (ddFromContract.status !== DirectDepositStatus.Pending) {
+    throw new TxValidationError(`${errPrefix} is not pending: ${ddFromContract.status})`)
+  }
+
+  if (ddFromContract.user !== dd.fallbackUser) {
+    throw new TxValidationError(
+      `${errPrefix} has incorrect user: expected ${dd.fallbackUser}, actual ${ddFromContract.user})`
+    )
+  }
+
+  if (ddFromContract.deposit !== dd.deposit) {
+    throw new TxValidationError(
+      `${errPrefix} has incorrect amount: expected ${dd.deposit}, actual ${ddFromContract.deposit})`
+    )
+  }
+  // TODO: we can also check other fields to detect inconsistency, but these two should be sufficient
+
+  return null
 }
 
 export async function validateDirectDeposit(dd: DirectDeposit, poolContract: Contract) {

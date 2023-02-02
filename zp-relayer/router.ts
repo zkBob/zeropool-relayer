@@ -39,7 +39,6 @@ export function createRouter() {
     next()
   })
 
-
   router.get('/', endpoints.root)
   router.get('/version', endpoints.relayerVersion)
   router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))

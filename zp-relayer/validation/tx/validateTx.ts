@@ -260,4 +260,3 @@ export async function validateTx(
     await checkAssertion(() => checkScreener(userAddress, traceId))
   }
 }
-
