@@ -6,7 +6,7 @@ import PoolAbi from '@/abi/pool-abi.json'
 import config from '@/configs/watcherConfig'
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
-import { DirectDeposit, poolTxQueue } from '@/queue/poolTxQueue'
+import { DirectDeposit, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 import { contractCallRetry } from '@/utils/helpers'
 
 import {
@@ -24,7 +24,7 @@ const batch = new BatchCache<DirectDeposit>(
   config.directDepositBatchTtl,
   ds => {
     logger.info('Adding direct-deposit events to queue', { count: ds.length })
-    poolTxQueue.add('', { transactions: [ds] }, {})
+    poolTxQueue.add('', { transactions: [ds], type: WorkerTxType.DirectDeposit }, {})
   },
   redis
 )
