@@ -36,6 +36,11 @@ export enum WorkerTxType {
   DirectDeposit = 'dd',
 }
 
+export const WorkerTxTypePriority: Record<WorkerTxType, number> = {
+  [WorkerTxType.Normal]: 1,
+  [WorkerTxType.DirectDeposit]: 2,
+}
+
 export type WorkerTx<T extends WorkerTxType> = T extends WorkerTxType.Normal
   ? TxPayload
   : T extends WorkerTxType.DirectDeposit

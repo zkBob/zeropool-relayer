@@ -7,8 +7,7 @@ import PoolAbi from '@/abi/pool-abi.json'
 import config from '@/configs/watcherConfig'
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
-import { DirectDeposit, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
-
+import { DirectDeposit, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
 import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock, parseDirectDepositEvent } from './utils'
 import { BatchCache } from './BatchCache'
 import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
@@ -35,7 +34,7 @@ const batch = new BatchCache<DirectDeposit>(
         // TODO: traceId
       },
       {
-        // TODO: add priority
+        priority: WorkerTxTypePriority[WorkerTxType.DirectDeposit],
       }
     )
   },
