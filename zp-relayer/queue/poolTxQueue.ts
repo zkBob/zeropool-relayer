@@ -26,6 +26,11 @@ export interface DirectDeposit {
   deposit: string
 }
 
+export interface DirectDepositTxPayload {
+  deposits: DirectDeposit[]
+  txProof?: Proof
+}
+
 export enum WorkerTxType {
   Normal = 'normal',
   DirectDeposit = 'dd',
@@ -34,12 +39,12 @@ export enum WorkerTxType {
 export type WorkerTx<T extends WorkerTxType> = T extends WorkerTxType.Normal
   ? TxPayload
   : T extends WorkerTxType.DirectDeposit
-  ? DirectDeposit[]
+  ? DirectDepositTxPayload
   : never
 
-export interface BatchTx<T extends WorkerTxType> {
+export interface BatchTx<T extends WorkerTxType, M extends boolean = true> {
   type: T
-  transactions: WorkerTx<T>[]
+  transactions: M extends true ? WorkerTx<T>[] : WorkerTx<T>
   traceId?: string
 }
 

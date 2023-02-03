@@ -23,7 +23,21 @@ const batch = new BatchCache<DirectDeposit>(
   config.directDepositBatchTtl,
   ds => {
     logger.info('Adding direct-deposit events to queue', { count: ds.length })
-    poolTxQueue.add('', { transactions: [ds], type: WorkerTxType.DirectDeposit }, {})
+    poolTxQueue.add(
+      '',
+      {
+        transactions: [
+          {
+            deposits: ds,
+          },
+        ],
+        type: WorkerTxType.DirectDeposit,
+        // TODO: traceId
+      },
+      {
+        // TODO: add priority
+      }
+    )
   },
   dd => validateDirectDeposit(dd, PoolInstance),
   redis

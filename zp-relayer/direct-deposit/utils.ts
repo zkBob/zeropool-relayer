@@ -7,7 +7,6 @@ const serviceKey = 'direct-deposit'
 const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`
 
 export let lastProcessedBlock = Math.max(config.startBlock - 1, 0)
-export let lastReprocessedBlock: number
 
 export async function getLastProcessedBlock() {
   const result = await redis.get(lastBlockRedisKey)

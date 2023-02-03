@@ -108,17 +108,20 @@ export async function buildTx(tx: WorkerTx<WorkerTxType.Normal>): Promise<Proces
   return { data, commitIndex, outCommit, rootAfter, nullifier, memo }
 }
 
-export async function buildDirectDeposits(
-  directDeposits: WorkerTx<WorkerTxType.DirectDeposit>
-): Promise<ProcessResult> {
-  // TODO: get proof + outCommit for all deposits directDeposits
-  // Now, just use some random value
+export async function buildDirectDeposits(tx: WorkerTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult> {
+  if (tx.txProof) {
+    // If we already have a proof just verify it
+    // TODO: get proof + outCommit for all deposits directDeposits
+    // Now, just use some random value
+  } else {
+    // Build new proof
+  }
   const outCommit = '11469701942666298368112882412133877458305516134926649826543144744382391691533'
 
   const { treeProof, commitIndex } = await getTreeProof(outCommit)
 
   const rootAfter = treeProof.inputs[1]
-  const indices = directDeposits.map(deposit => deposit.nonce)
+  const indices = tx.deposits.map(d => d.nonce)
 
   const data: string = PoolInstance.methods
     .appendDirectDeposits(

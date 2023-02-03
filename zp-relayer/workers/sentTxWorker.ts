@@ -2,6 +2,7 @@ import type Redis from 'ioredis'
 import { toBN } from 'web3-utils'
 import type { TransactionReceipt, TransactionConfig } from 'web3-core'
 import { Job, Worker } from 'bullmq'
+import { DIRECT_DEPOSIT_REPROCESS_NAME } from '@/utils/constants'
 import config from '@/configs/relayerConfig'
 import { pool } from '@/pool'
 import { web3 } from '@/services/web3'
@@ -11,7 +12,7 @@ import { buildPrefixedMemo, withErrorLog, withLoop, withMutex } from '@/utils/he
 import { OUTPLUSONE, SENT_TX_QUEUE_NAME } from '@/utils/constants'
 import { isGasPriceError, isInsufficientBalanceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
 import { SendAttempt, SentTxPayload, sentTxQueue, SentTxResult, SentTxState } from '@/queue/sentTxQueue'
-import { poolTxQueue } from '@/queue/poolTxQueue'
+import { DirectDepositTxPayload, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 import { getNonce } from '@/utils/web3'
 import type { ISentWorkerConfig } from './workerTypes'
 import type { TxManager } from '@/tx/TxManager'
@@ -110,7 +111,11 @@ async function handleReverted(
     const { txPayload } = wj.data
     let reschedulePromise: Promise<any>
 
-    reschedulePromise = poolTxQueue.add(txHash, txPayload)
+    reschedulePromise = poolTxQueue.add(txHash, {
+      type: txPayload.type,
+      transactions: [txPayload.transactions],
+      traceId: txPayload.traceId,
+    })
 
     // To not mess up traceId we add each transaction separately
     reschedulePromises.push(
@@ -230,11 +235,10 @@ export async function createSentTxWorker({ redis, mutex, txManager }: ISentWorke
     const jobLogger = workerLogger.child({ jobId: job.id, traceId: job.data.txPayload.traceId, resendNum })
 
     jobLogger.info('Verifying job %s', job.data.poolJobId)
-    const { prevAttempts, txConfig } = job.data
+    const { prevAttempts, txConfig, txPayload } = job.data
 
     // Any thrown web3 error will re-trigger re-send loop iteration
     const [tx, shouldReprocess] = await checkMined(prevAttempts, txConfig.nonce as number)
-    // Should always be defined
 
     if (shouldReprocess) {
       // TODO: handle this case later
@@ -260,6 +264,10 @@ export async function createSentTxWorker({ redis, mutex, txManager }: ISentWorke
     if (tx.status) {
       return await handleMined(tx, job.data, jobLogger)
     } else {
+      if (txPayload.type === WorkerTxType.DirectDeposit) {
+        const deposits = (txPayload.transactions as DirectDepositTxPayload).deposits
+        await redis.lpush(DIRECT_DEPOSIT_REPROCESS_NAME, ...deposits.map(d => JSON.stringify(d)))
+      }
       return await handleReverted(tx, job.id as string, redis, jobLogger)
     }
   }

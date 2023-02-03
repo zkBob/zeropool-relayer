@@ -86,7 +86,7 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
         truncatedMemo: memo,
         nullifier,
         txConfig,
-        txPayload: { transactions: [tx], traceId, type },
+        txPayload: { transactions: tx, traceId, type },
         prevAttempts: [[txHash, gasPrice]],
       },
       {
@@ -118,19 +118,19 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
     }
     let handlerConfig: HandlerConfig<WorkerTxType.DirectDeposit> | HandlerConfig<WorkerTxType.Normal>
 
-    for (const payload of job.data.transactions) {
+    for (const payload of txs) {
       if (type === WorkerTxType.DirectDeposit) {
-        const deposits = payload as WorkerTx<WorkerTxType.DirectDeposit>
+        const tx = payload as WorkerTx<WorkerTxType.DirectDeposit>
         jobLogger.info('Received direct deposit', { number: txs.length })
 
-        if (deposits.length === 0) {
+        if (tx.deposits.length === 0) {
           continue
         }
 
         handlerConfig = {
           ...baseConfig,
           type,
-          tx: deposits,
+          tx,
           processor: buildDirectDeposits,
         }
       } else if (type === WorkerTxType.Normal) {

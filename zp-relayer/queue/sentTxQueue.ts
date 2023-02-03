@@ -14,7 +14,7 @@ export interface SentTxPayload {
   truncatedMemo: string
   txConfig: TransactionConfig
   nullifier?: string
-  txPayload: BatchTx<WorkerTxType>
+  txPayload: BatchTx<WorkerTxType, false>
   prevAttempts: SendAttempt[]
 }
 

@@ -1,7 +1,12 @@
 import { logger } from '@/services/appLogger'
+import {
+  DIRECT_DEPOSIT_REPROCESS_INTERVAL,
+  DIRECT_DEPOSIT_REPROCESS_NAME,
+  DIRECT_DEPOSIT_SET_NAME,
+} from '@/utils/constants'
 import type Redis from 'ioredis'
 
-export class BatchCache<T> {
+export class BatchCache<T extends { nonce: string }> {
   private timer: NodeJS.Timeout | null = null
 
   constructor(
@@ -10,8 +15,24 @@ export class BatchCache<T> {
     private cb: (es: T[]) => Promise<void> | void,
     private validate: (e: T) => Promise<void>,
     private redis: Redis,
-    private key: string = 'dd:cache'
-  ) {}
+    private key: string = DIRECT_DEPOSIT_SET_NAME
+  ) {
+    this.watchReprocess()
+  }
+
+  private watchReprocess() {
+    setInterval(async () => {
+      const rawEs = await this.redis.lpop(DIRECT_DEPOSIT_REPROCESS_NAME, this.batchSize)
+      if (!rawEs || rawEs.length === 0) {
+        return
+      }
+      const es: [string, T][] = rawEs.map(rawE => {
+        const e = JSON.parse(rawE)
+        return [e.nonce, e]
+      })
+      await this.add(es)
+    }, DIRECT_DEPOSIT_REPROCESS_INTERVAL)
+  }
 
   private clearTimer() {
     if (this.timer) {
