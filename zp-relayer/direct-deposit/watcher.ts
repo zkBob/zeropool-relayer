@@ -43,13 +43,8 @@ const batch = new BatchCache<DirectDeposit>(
 )
 
 async function init() {
-  try {
-    await getLastProcessedBlock()
-    runWatcher()
-  } catch (e) {
-    logger.error(e)
-    process.exit(1)
-  }
+  await getLastProcessedBlock()
+  runWatcher()
 }
 
 async function getLastBlockToProcess(web3: Web3) {
@@ -88,7 +83,11 @@ async function watch() {
 }
 
 async function runWatcher() {
-  await watch()
+  try {
+    await watch()
+  } catch (e) {
+    logger.error(e)
+  }
 
   setTimeout(() => {
     runWatcher()
