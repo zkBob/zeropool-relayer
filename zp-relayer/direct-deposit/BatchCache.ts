@@ -1,13 +1,15 @@
+import type Redis from 'ioredis'
+import { Mutex } from 'async-mutex'
 import { logger } from '@/services/appLogger'
 import {
   DIRECT_DEPOSIT_REPROCESS_INTERVAL,
   DIRECT_DEPOSIT_REPROCESS_NAME,
   DIRECT_DEPOSIT_SET_NAME,
 } from '@/utils/constants'
-import type Redis from 'ioredis'
 
 export class BatchCache<T extends { nonce: string }> {
   private timer: NodeJS.Timeout | null = null
+  private mutex = new Mutex()
 
   constructor(
     private batchSize: number,
@@ -16,7 +18,10 @@ export class BatchCache<T extends { nonce: string }> {
     private validate: (e: T) => Promise<void>,
     private redis: Redis,
     private key: string = DIRECT_DEPOSIT_SET_NAME
-  ) {
+  ) {}
+
+  async init() {
+    await this.processCache()
     this.watchReprocess()
   }
 
@@ -107,6 +112,28 @@ export class BatchCache<T extends { nonce: string }> {
     await this.cb(es)
   }
 
+  private async processCache() {
+    const count = await this.count()
+
+    // Execute all whole batches
+    if (count >= this.batchSize) {
+      do {
+        await this.execute()
+      } while ((await this.count()) >= this.batchSize)
+
+      // If batch still has less than `batchSize`
+      // elements then update a timer
+      if (count % this.batchSize != 0) {
+        this.setTimer()
+      }
+    } else {
+      // We started a new batch
+      if (this.timer === null) {
+        this.setTimer()
+      }
+    }
+  }
+
   // TODO: could be optimized
   // We don't need to insert `values` in db if `count` + `values.length` > `batchSize`
   // This implementation is simpler and doesn't have any tricky edge cases
@@ -115,20 +142,15 @@ export class BatchCache<T extends { nonce: string }> {
       return
     }
 
-    await this.addToRedis(values)
-    const count = await this.count()
+    // Prevents possible race condition between
+    // `watchReprocess` and explicit `add` call
+    const release = await this.mutex.acquire()
 
-    // Execute all whole batches
-    if (count >= this.batchSize) {
-      do {
-        await this.execute()
-      } while ((await this.count()) >= this.batchSize)
-    }
-
-    // If we created a new batch or overflowed
-    // previous one then start a timer
-    if (count % this.batchSize != 0) {
-      this.setTimer()
+    try {
+      await this.addToRedis(values)
+      await this.processCache()
+    } finally {
+      release()
     }
   }
 }

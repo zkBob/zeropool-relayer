@@ -44,6 +44,7 @@ const batch = new BatchCache<DirectDeposit>(
 
 async function init() {
   await getLastProcessedBlock()
+  await batch.init()
   runWatcher()
 }
 
