@@ -113,24 +113,26 @@ export class BatchCache<T extends { nonce: string }> {
   }
 
   private async processCache() {
-    const count = await this.count()
+    let count = await this.count()
 
-    // Execute all whole batches
-    if (count >= this.batchSize) {
-      do {
-        await this.execute()
-      } while ((await this.count()) >= this.batchSize)
-
-      // If batch still has less than `batchSize`
-      // elements then update a timer
-      if (count % this.batchSize != 0) {
-        this.setTimer()
-      }
-    } else {
-      // We started a new batch
+    if (count < this.batchSize) {
+      // Check if we started a new batch
       if (this.timer === null) {
         this.setTimer()
       }
+      return
+    }
+
+    // Execute all whole batches
+    while (count >= this.batchSize) {
+      await this.execute()
+      count = await this.count()
+    }
+
+    // If batch still has less than `batchSize`
+    // elements then update a timer
+    if (count % this.batchSize != 0) {
+      this.setTimer()
     }
   }
 
