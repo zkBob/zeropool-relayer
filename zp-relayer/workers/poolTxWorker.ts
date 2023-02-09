@@ -14,13 +14,11 @@ import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
 import { TxValidationError } from '@/validation/tx/common'
 import type { IPoolWorkerConfig } from './workerTypes'
-import type { Circuit, IProver } from '@/prover'
 
 interface HandlerConfig<T extends WorkerTxType> {
   type: T
   tx: WorkerTx<T>
-  treeProver: IProver<Circuit.Tree>
-  processor: (tx: WorkerTx<T>, treeProver: IProver<Circuit.Tree>) => Promise<ProcessResult>
+  processResult: ProcessResult
   logger: Logger
   traceId?: string
   jobId: string
@@ -37,13 +35,12 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
   async function handleTx<T extends WorkerTxType>({
     type,
     tx,
-    treeProver,
-    processor,
+    processResult,
     logger,
     traceId,
     jobId,
   }: HandlerConfig<T>): Promise<[string, string]> {
-    const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = await processor(tx, treeProver)
+    const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = processResult
 
     const gas = config.relayerGasLimit
     const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
@@ -117,38 +114,36 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
     const baseConfig = {
       logger: jobLogger,
       traceId,
+      type,
       jobId: job.id as string,
-      treeProver,
     }
-    let handlerConfig: HandlerConfig<WorkerTxType.DirectDeposit> | HandlerConfig<WorkerTxType.Normal>
+    let handlerConfig: HandlerConfig<WorkerTxType>
 
     for (const payload of txs) {
+      let processResult: ProcessResult
       if (type === WorkerTxType.DirectDeposit) {
         const tx = payload as WorkerTx<WorkerTxType.DirectDeposit>
         jobLogger.info('Received direct deposit', { number: txs.length })
 
         if (tx.deposits.length === 0) {
+          logger.warn('Empty direct deposit batch, skipping')
           continue
         }
 
-        handlerConfig = {
-          ...baseConfig,
-          type,
-          tx,
-          processor: buildDirectDeposits,
-        }
+        processResult = await buildDirectDeposits(tx, treeProver, pool.optimisticState)
       } else if (type === WorkerTxType.Normal) {
         const tx = payload as WorkerTx<WorkerTxType.Normal>
         await validateTx(tx, pool, traceId)
 
-        handlerConfig = {
-          ...baseConfig,
-          type,
-          tx,
-          processor: buildTx,
-        }
+        processResult = await buildTx(tx, treeProver, pool.optimisticState)
       } else {
         throw new Error(`Unknown tx type: ${type}`)
+      }
+
+      handlerConfig = {
+        ...baseConfig,
+        tx: payload,
+        processResult,
       }
 
       const res = await handleTx(handlerConfig)

@@ -1,4 +1,5 @@
 import chai from 'chai'
+import { toBN } from 'web3-utils'
 import { v4 } from 'uuid'
 import { Mutex } from 'async-mutex'
 import chaiAsPromised from 'chai-as-promised'
@@ -8,7 +9,7 @@ import { web3 } from './web3'
 import { pool } from '../../pool'
 import config from '../../configs/relayerConfig'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
-import { poolTxQueue, PoolTxResult, BatchTx, WorkerTxType } from '../../queue/poolTxQueue'
+import { poolTxQueue, PoolTxResult, BatchTx, WorkerTxType, DirectDeposit } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
@@ -16,7 +17,16 @@ import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
-import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
+import {
+  approveTokens,
+  disableMining,
+  enableMining,
+  evmRevert,
+  evmSnapshot,
+  mintTokens,
+  newConnection,
+  setBalance,
+} from './utils'
 import { validateTx } from '../../validation/tx/validateTx'
 import { TxManager } from '../../tx/TxManager'
 import { Circuit, IProver, LocalProver } from '../../prover/'
@@ -46,6 +56,18 @@ async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx<Work
   return job
 }
 
+async function submitDirectDepositJob(deposits: DirectDeposit[]) {
+  const job = await poolTxQueue.add('test', {
+    type: WorkerTxType.DirectDeposit,
+    transactions: [
+      {
+        deposits,
+      },
+    ],
+  })
+  return job
+}
+
 describe('poolWorker', () => {
   let poolWorker: Worker
   let sentWorker: Worker
@@ -57,6 +79,7 @@ describe('poolWorker', () => {
   let snapShotId: string
   let eventsInit = false
   let treeProver: IProver<Circuit.Tree>
+  const ddSender = '0x28a8746e75304c0780e011bed21c72cd78cd535e'
 
   beforeEach(async () => {
     snapShotId = await evmSnapshot()
@@ -291,6 +314,44 @@ describe('poolWorker', () => {
 
     await setBalance(config.relayerAddress, oldBalance)
 
+    await expectJobFinished(job)
+  })
+  it('should process direct deposit transaction', async () => {
+    const fee = await pool.PoolInstance.methods.directDepositFee().call()
+    const numDeposits = 16
+    const singleDepositAmount = 2
+    const amount = toBN(fee).muln(numDeposits * singleDepositAmount)
+
+    await mintTokens(ddSender, amount)
+    await approveTokens(ddSender, config.poolAddress, amount)
+
+    const ddFallback = ddSender
+    const diversifier = 'dddddddddddddddddddd' // 10 bytes
+    const pk = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' // 32 bytes
+    for (let i = 0; i < numDeposits; i++) {
+      await pool.PoolInstance.methods
+        .directDeposit(ddFallback, pool.denominator.mul(toBN(fee).muln(singleDepositAmount)), '0x' + diversifier + pk)
+        .send({ from: ddSender })
+    }
+
+    const events = await pool.PoolInstance.getPastEvents('SubmitDirectDeposit', {
+      fromBlock: 0,
+      toBlock: 'latest',
+    })
+    const dds: DirectDeposit[] = events.map(e => {
+      const dd = e.returnValues
+      return {
+        sender: dd.sender,
+        nonce: dd.nonce,
+        fallbackUser: dd.fallbackUser,
+        zkAddress: {
+          diversifier: dd.zkAddress.diversifier,
+          pk: dd.zkAddress.pk,
+        },
+        deposit: dd.deposit,
+      }
+    })
+    const job = await submitDirectDepositJob(dds)
     await expectJobFinished(job)
   })
 })

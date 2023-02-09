@@ -1,13 +1,20 @@
 import Contract from 'web3-eth-contract'
 import { AbiItem, toBN } from 'web3-utils'
 import type { TxType } from 'zp-memo-parser'
-import { SnarkProof, Proof } from 'libzkbob-rs-node'
+import type { SnarkProof } from 'libzkbob-rs-node'
+import type { PoolState } from './state/PoolState'
 import PoolAbi from './abi/pool-abi.json'
 import { logger } from './services/appLogger'
 import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE } from './utils/constants'
-import { numToHex, flattenProof, truncateHexPrefix, encodeProof, truncateMemoTxPrefix } from './utils/helpers'
+import {
+  numToHex,
+  flattenProof,
+  truncateHexPrefix,
+  encodeProof,
+  truncateMemoTxPrefix,
+  buildDirectDepositMemo,
+} from './utils/helpers'
 import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
-import { pool } from './pool'
 import type { WorkerTx, WorkerTxType } from './queue/poolTxQueue'
 import { Circuit, IProver } from './prover/IProver'
 
@@ -64,8 +71,8 @@ function buildTxData(txData: TxData) {
   return data.join('')
 }
 
-async function getTreeProof(outCommit: string, prover: IProver<Circuit.Tree>) {
-  const { pub, sec, commitIndex } = pool.optimisticState.getVirtualTreeProofInputs(outCommit)
+async function getTreeProof(state: PoolState, outCommit: string, prover: IProver<Circuit.Tree>) {
+  const { pub, sec, commitIndex } = state.getVirtualTreeProofInputs(outCommit)
 
   logger.debug(`Proving tree...`)
   const treeProof = await prover.prove(pub, sec)
@@ -84,7 +91,8 @@ export interface ProcessResult {
 
 export async function buildTx(
   tx: WorkerTx<WorkerTxType.Normal>,
-  treeProver: IProver<Circuit.Tree>
+  treeProver: IProver<Circuit.Tree>,
+  state: PoolState
 ): Promise<ProcessResult> {
   const { txType, txProof, rawMemo, depositSignature } = tx
 
@@ -92,7 +100,7 @@ export async function buildTx(
   const outCommit = getTxProofField(txProof, 'out_commit')
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
 
-  const { treeProof, commitIndex } = await getTreeProof(outCommit, treeProver)
+  const { treeProof, commitIndex } = await getTreeProof(state, outCommit, treeProver)
 
   const rootAfter = treeProof.inputs[1]
   const data = buildTxData({
@@ -114,7 +122,8 @@ export async function buildTx(
 
 export async function buildDirectDeposits(
   tx: WorkerTx<WorkerTxType.DirectDeposit>,
-  treeProver: IProver<Circuit.Tree>
+  treeProver: IProver<Circuit.Tree>,
+  state: PoolState
 ): Promise<ProcessResult> {
   if (tx.txProof) {
     // If we already have a proof just verify it
@@ -125,7 +134,7 @@ export async function buildDirectDeposits(
   }
   const outCommit = '11469701942666298368112882412133877458305516134926649826543144744382391691533'
 
-  const { treeProof, commitIndex } = await getTreeProof(outCommit, treeProver)
+  const { treeProof, commitIndex } = await getTreeProof(state, outCommit, treeProver)
 
   const rootAfter = treeProof.inputs[1]
   const indices = tx.deposits.map(d => d.nonce)
@@ -141,8 +150,7 @@ export async function buildDirectDeposits(
     )
     .encodeABI()
 
-  // TODO: add memo constructor after contract upgrade
-  const memo = ''
+  const memo = buildDirectDepositMemo(tx.deposits)
 
   return { data, commitIndex, outCommit, rootAfter, memo }
 }
