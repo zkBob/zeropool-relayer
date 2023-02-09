@@ -11,6 +11,7 @@ import { initializeDomain } from './utils/EIP712SaltedPermit'
 import { redis } from './services/redisClient'
 import { validateTx } from './validation/tx/validateTx'
 import { TxManager } from './tx/TxManager'
+import { Circuit, LocalProver } from './prover'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
 
 export async function init() {
@@ -35,10 +36,12 @@ export async function init() {
     txManager,
   }
 
+  const treeProver = new LocalProver(Circuit.Tree, pool.treeParams)
   const workerPromises = [
     createPoolTxWorker({
       ...baseConfig,
       validateTx,
+      treeProver,
     }),
     createSentTxWorker(baseConfig),
   ]

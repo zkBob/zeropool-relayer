@@ -9,6 +9,7 @@ import { numToHex, flattenProof, truncateHexPrefix, encodeProof, truncateMemoTxP
 import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
 import { pool } from './pool'
 import type { WorkerTx, WorkerTxType } from './queue/poolTxQueue'
+import { Circuit, IProver } from './prover/IProver'
 
 // @ts-ignore
 // Used only to get `transact` method selector
@@ -63,11 +64,11 @@ function buildTxData(txData: TxData) {
   return data.join('')
 }
 
-async function getTreeProof(outCommit: string) {
+async function getTreeProof(outCommit: string, prover: IProver<Circuit.Tree>) {
   const { pub, sec, commitIndex } = pool.optimisticState.getVirtualTreeProofInputs(outCommit)
 
   logger.debug(`Proving tree...`)
-  const treeProof = await Proof.treeAsync(pool.treeParams, pub, sec)
+  const treeProof = await prover.prove(pub, sec)
   logger.debug(`Tree proved`)
   return { treeProof, commitIndex }
 }
@@ -81,14 +82,17 @@ export interface ProcessResult {
   nullifier?: string
 }
 
-export async function buildTx(tx: WorkerTx<WorkerTxType.Normal>): Promise<ProcessResult> {
+export async function buildTx(
+  tx: WorkerTx<WorkerTxType.Normal>,
+  treeProver: IProver<Circuit.Tree>
+): Promise<ProcessResult> {
   const { txType, txProof, rawMemo, depositSignature } = tx
 
   const nullifier = getTxProofField(txProof, 'nullifier')
   const outCommit = getTxProofField(txProof, 'out_commit')
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
 
-  const { treeProof, commitIndex } = await getTreeProof(outCommit)
+  const { treeProof, commitIndex } = await getTreeProof(outCommit, treeProver)
 
   const rootAfter = treeProof.inputs[1]
   const data = buildTxData({
@@ -108,7 +112,10 @@ export async function buildTx(tx: WorkerTx<WorkerTxType.Normal>): Promise<Proces
   return { data, commitIndex, outCommit, rootAfter, nullifier, memo }
 }
 
-export async function buildDirectDeposits(tx: WorkerTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult> {
+export async function buildDirectDeposits(
+  tx: WorkerTx<WorkerTxType.DirectDeposit>,
+  treeProver: IProver<Circuit.Tree>
+): Promise<ProcessResult> {
   if (tx.txProof) {
     // If we already have a proof just verify it
     // TODO: get proof + outCommit for all deposits directDeposits
@@ -118,7 +125,7 @@ export async function buildDirectDeposits(tx: WorkerTx<WorkerTxType.DirectDeposi
   }
   const outCommit = '11469701942666298368112882412133877458305516134926649826543144744382391691533'
 
-  const { treeProof, commitIndex } = await getTreeProof(outCommit)
+  const { treeProof, commitIndex } = await getTreeProof(outCommit, treeProver)
 
   const rootAfter = treeProof.inputs[1]
   const indices = tx.deposits.map(d => d.nonce)

@@ -19,6 +19,7 @@ import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
 import { validateTx } from '../../validation/tx/validateTx'
 import { TxManager } from '../../tx/TxManager'
+import { Circuit, IProver, LocalProver } from '../../prover/'
 
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
@@ -55,6 +56,7 @@ describe('poolWorker', () => {
   let workerMutex: Mutex
   let snapShotId: string
   let eventsInit = false
+  let treeProver: IProver<Circuit.Tree>
 
   beforeEach(async () => {
     snapShotId = await evmSnapshot()
@@ -76,6 +78,8 @@ describe('poolWorker', () => {
 
     workerMutex = new Mutex()
 
+    treeProver = new LocalProver(Circuit.Tree, pool.treeParams)
+
     const baseConfig = {
       mutex: workerMutex,
       redis,
@@ -84,6 +88,7 @@ describe('poolWorker', () => {
     poolWorker = await createPoolTxWorker({
       ...baseConfig,
       validateTx,
+      treeProver,
     })
     sentWorker = await createSentTxWorker(baseConfig)
     sentWorker.run()
@@ -153,6 +158,7 @@ describe('poolWorker', () => {
       redis: newConnection(),
       txManager,
       validateTx: async () => {},
+      treeProver,
     })
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()

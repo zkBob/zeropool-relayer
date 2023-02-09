@@ -1,5 +1,6 @@
-import { toBN } from 'web3-utils'
+import type { Logger } from 'winston'
 import { Job, Worker } from 'bullmq'
+import { toBN } from 'web3-utils'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { poolTxQueue, BatchTx, PoolTxResult, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
@@ -11,20 +12,21 @@ import { buildDirectDeposits, ProcessResult, buildTx } from '@/txProcessor'
 import config from '@/configs/relayerConfig'
 import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
-import type { IPoolWorkerConfig } from './workerTypes'
-import type { Logger } from 'winston'
 import { TxValidationError } from '@/validation/tx/common'
+import type { IPoolWorkerConfig } from './workerTypes'
+import type { Circuit, IProver } from '@/prover'
 
 interface HandlerConfig<T extends WorkerTxType> {
   type: T
   tx: WorkerTx<T>
-  processor: (tx: WorkerTx<T>) => Promise<ProcessResult>
+  treeProver: IProver<Circuit.Tree>
+  processor: (tx: WorkerTx<T>, treeProver: IProver<Circuit.Tree>) => Promise<ProcessResult>
   logger: Logger
   traceId?: string
   jobId: string
 }
 
-export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }: IPoolWorkerConfig) {
+export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, treeProver }: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -35,12 +37,13 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
   async function handleTx<T extends WorkerTxType>({
     type,
     tx,
+    treeProver,
     processor,
     logger,
     traceId,
     jobId,
   }: HandlerConfig<T>): Promise<[string, string]> {
-    const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = await processor(tx)
+    const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = await processor(tx, treeProver)
 
     const gas = config.relayerGasLimit
     const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
@@ -115,6 +118,7 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx }
       logger: jobLogger,
       traceId,
       jobId: job.id as string,
+      treeProver,
     }
     let handlerConfig: HandlerConfig<WorkerTxType.DirectDeposit> | HandlerConfig<WorkerTxType.Normal>
 
