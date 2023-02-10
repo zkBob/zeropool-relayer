@@ -34,6 +34,7 @@ import { Circuit, IProver, LocalProver } from '../../prover/'
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
 import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
+import { Params } from 'libzkbob-rs-node'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -79,6 +80,7 @@ describe('poolWorker', () => {
   let snapShotId: string
   let eventsInit = false
   let treeProver: IProver<Circuit.Tree>
+  const treeParams = Params.fromFile(config.treeUpdateParamsPath as string)
   const ddSender = '0x28a8746e75304c0780e011bed21c72cd78cd535e'
 
   beforeEach(async () => {
@@ -101,7 +103,7 @@ describe('poolWorker', () => {
 
     workerMutex = new Mutex()
 
-    treeProver = new LocalProver(Circuit.Tree, pool.treeParams)
+    treeProver = new LocalProver(Circuit.Tree, treeParams)
 
     const baseConfig = {
       mutex: workerMutex,

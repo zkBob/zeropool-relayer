@@ -14,6 +14,7 @@ import {
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
 import { TRACE_ID } from './utils/constants'
+import { getFileHash } from './utils/helpers'
 
 async function sendTransactions(req: Request, res: Response) {
   validateBatch([
@@ -238,8 +239,11 @@ function getSiblings(req: Request, res: Response) {
   res.json(siblings)
 }
 
-function getParamsHash(type: 'tree' | 'transfer') {
-  const hash = type === 'tree' ? pool.treeParamsHash : pool.transferParamsHash
+function getParamsHash(path: string | null) {
+  let hash: string | null = null
+  if (path) {
+    hash = getFileHash(path)
+  }
   return (req: Request, res: Response) => {
     res.json({ hash })
   }

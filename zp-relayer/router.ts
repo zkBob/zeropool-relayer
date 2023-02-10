@@ -49,8 +49,9 @@ export function createRouter() {
   router.get('/fee', wrapErr(endpoints.getFee))
   router.get('/limits', wrapErr(endpoints.getLimits))
   router.get('/siblings', wrapErr(endpoints.getSiblings))
-  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
-  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
+  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash(config.treeUpdateParamsPath)))
+  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash(config.transferParamsPath)))
+  router.get('/params/hash/direct-deposit', wrapErr(endpoints.getParamsHash(config.directDepositParamsPath)))
 
   // Error handler middleware
   router.use((error: any, req: Request, res: Response, next: NextFunction) => {

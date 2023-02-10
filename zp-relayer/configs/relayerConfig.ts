@@ -3,6 +3,11 @@ import { toBN } from 'web3-utils'
 import type { EstimationType, GasPriceKey } from '../services/gas-price'
 import baseConfig from './baseConfig'
 
+export enum ProverType {
+  Local = 'local',
+  Remote = 'remote',
+}
+
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
 ).address
@@ -23,6 +28,7 @@ const config = {
   maxFaucet: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT_FAUCET as string),
   treeUpdateParamsPath: process.env.RELAYER_TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
   transferParamsPath: process.env.RELAYER_TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
+  directDepositParamsPath: process.env.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH || './params/direct_deposit_params.bin',
   txVKPath: process.env.RELAYER_TX_VK_PATH || './params/transfer_verification_key.json',
   requestLogPath: process.env.RELAYER_REQUEST_LOG_PATH || './zp.log',
   stateDirPath: process.env.RELAYER_STATE_DIR_PATH || './POOL_STATE',
@@ -45,6 +51,8 @@ const config = {
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
     .filter(r => r.length > 0),
+  treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
+  directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
 }
 
 export default config

@@ -1,5 +1,3 @@
-import fs from 'fs'
-import crypto from 'crypto'
 import BN from 'bn.js'
 import PoolAbi from './abi/pool-abi.json'
 import TokenAbi from './abi/token-abi.json'
@@ -11,7 +9,7 @@ import { logger } from './services/appLogger'
 import { redis } from './services/redisClient'
 import { poolTxQueue, WorkerTxType, WorkerTxTypePriority } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
-import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
+import { Helpers, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
 import { PoolState } from './state/PoolState'
 
 import type { TxType } from 'zp-memo-parser'
@@ -67,9 +65,6 @@ export interface LimitsFetch {
 class Pool {
   public PoolInstance: Contract
   public TokenInstance: Contract
-  public treeParams: Params
-  public treeParamsHash: string
-  public transferParamsHash: string
   private txVK: VK
   public state: PoolState
   public optimisticState: PoolState
@@ -81,10 +76,6 @@ class Pool {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
     this.TokenInstance = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
-    this.treeParamsHash = Pool.getHash(config.treeUpdateParamsPath)
-    this.transferParamsHash = Pool.getHash(config.transferParamsPath)
-
-    this.treeParams = Params.fromFile(config.treeUpdateParamsPath)
     const txVK = require(config.txVKPath)
     this.txVK = txVK
 
@@ -95,13 +86,6 @@ class Pool {
   loadState(states: { poolState: PoolState; optimisticState: PoolState }) {
     this.state = states.poolState
     this.optimisticState = states.optimisticState
-  }
-
-  private static getHash(path: string) {
-    const buffer = fs.readFileSync(path)
-    const hash = crypto.createHash('sha256')
-    hash.update(buffer)
-    return hash.digest('hex')
   }
 
   async init() {

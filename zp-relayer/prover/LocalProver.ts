@@ -9,6 +9,8 @@ export class LocalProver<C extends Circuit> implements IProver<C> {
   constructor(circuit: C, private readonly params: Params) {
     if (circuit === Circuit.Tree) {
       this._prove = Proof.treeAsync as InternalProve<C>
+    } else if (circuit === Circuit.DirectDeposit) {
+      this._prove = Proof.delegatedDepositAsync as InternalProve<C>
     } else {
       throw new Error('Unsupported circuit')
     }

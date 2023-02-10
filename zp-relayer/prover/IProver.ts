@@ -1,4 +1,11 @@
-import type { TreePub, TreeSec, Proof } from 'libzkbob-rs-node'
+import type {
+  TreePub,
+  TreeSec,
+  Proof,
+  DelegatedDepositBatchPub,
+  DelegatedDepositBatchSec,
+  Params,
+} from 'libzkbob-rs-node'
 
 // TODO: add support for DD
 export enum Circuit {
@@ -6,7 +13,11 @@ export enum Circuit {
   DirectDeposit = 'direct-deposit',
 }
 
-type ProveInput<C extends Circuit> = C extends Circuit.Tree ? [TreePub, TreeSec] : never
+type ProveInput<C extends Circuit> = C extends Circuit.Tree
+  ? [TreePub, TreeSec]
+  : C extends Circuit.DirectDeposit
+  ? [DelegatedDepositBatchPub, DelegatedDepositBatchSec]
+  : never
 
 export type PubInput<T extends Circuit> = ProveInput<T> extends [infer P, any] ? P : never
 export type SecInput<T extends Circuit> = ProveInput<T> extends [any, infer S] ? S : never

@@ -1,3 +1,5 @@
+import fs from 'fs'
+import crypto from 'crypto'
 import type BN from 'bn.js'
 import type Web3 from 'web3'
 import type { Mutex } from 'async-mutex'
@@ -255,4 +257,11 @@ export function contractCallRetry(contract: Contract, method: string, args: any[
       maxTimeout: 500,
     }
   )
+}
+
+export function getFileHash(path: string) {
+  const buffer = fs.readFileSync(path)
+  const hash = crypto.createHash('sha256')
+  hash.update(buffer)
+  return hash.digest('hex')
 }
