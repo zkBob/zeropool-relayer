@@ -266,6 +266,7 @@ export async function createSentTxWorker({ redis, mutex, txManager }: ISentWorke
     } else {
       if (txPayload.type === WorkerTxType.DirectDeposit) {
         const deposits = (txPayload.transactions as DirectDepositTxPayload).deposits
+        jobLogger.info('Adding reverted direct deposit to reprocess list', { count: deposits.length })
         await redis.lpush(DIRECT_DEPOSIT_REPROCESS_NAME, ...deposits.map(d => JSON.stringify(d)))
       }
       return await handleReverted(tx, job.id as string, redis, jobLogger)

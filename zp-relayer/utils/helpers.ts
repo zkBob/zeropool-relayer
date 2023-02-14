@@ -5,10 +5,9 @@ import type Web3 from 'web3'
 import type { Mutex } from 'async-mutex'
 import type { Contract } from 'web3-eth-contract'
 import type { SnarkProof } from 'libzkbob-rs-node'
-import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { TxType } from 'zp-memo-parser'
 import promiseRetry from 'promise-retry'
-import { padLeft, toBN, bytesToHex } from 'web3-utils'
+import { padLeft, toBN } from 'web3-utils'
 import { logger } from '@/services/appLogger'
 import { isContractCallError } from './web3Errors'
 
@@ -103,23 +102,6 @@ export function encodeProof(p: SnarkProof): string {
 
 export function buildPrefixedMemo(outCommit: string, txHash: string, truncatedMemo: string) {
   return numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
-}
-
-export function buildDirectDepositMemo(deposits: DirectDeposit[]) {
-  let memo = ''
-  const prefix = truncateHexPrefix(bytesToHex([deposits.length, 0, 0, 1]))
-  memo += prefix
-
-  for (const d of deposits) {
-    const fieldMapping: [string, number][] = [
-      [d.nonce, 8], // 4 bytes
-      [d.zkAddress.diversifier, 20], // 10 bytes
-      [d.zkAddress.pk, 64], // 32 bytes
-      [d.deposit, 16], // 8 bytes
-    ]
-    memo += fieldMapping.reduce((acc, [value, size]) => acc + truncateHexPrefix(numToHex(toBN(value), size)), '')
-  }
-  return memo
 }
 
 export async function setIntervalAndRun(f: () => Promise<void> | void, interval: number) {

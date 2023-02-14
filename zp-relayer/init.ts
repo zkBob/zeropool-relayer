@@ -13,6 +13,17 @@ import { validateTx } from './validation/tx/validateTx'
 import { TxManager } from './tx/TxManager'
 import { Circuit, IProver, LocalProver, RemoteProver } from './prover'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
+import { createDirectDepositWorker } from './workers/directDepositWorker'
+
+function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
+  if (type === ProverType.Local) {
+    const params = Params.fromFile(path)
+    return new LocalProver(circuit, params)
+  } else {
+    // TODO: add env url
+    return new RemoteProver('')
+  }
+}
 
 export async function init() {
   await initializeDomain(web3)
@@ -28,36 +39,37 @@ export async function init() {
   const txManager = new TxManager(web3Redundant, config.relayerPrivateKey, gasPriceService)
   await txManager.init()
 
-  const workerMutex = new Mutex()
+  const mutex = new Mutex()
 
   const baseConfig: IWorkerBaseConfig = {
     redis,
-    mutex: workerMutex,
-    txManager,
   }
 
-  let treeProver: IProver<Circuit.Tree>
-  if (config.treeProverType === ProverType.Local) {
-    const params = Params.fromFile(config.treeUpdateParamsPath as string)
-    treeProver = new LocalProver(Circuit.Tree, params)
-  } else {
-    treeProver = new RemoteProver(Circuit.Tree)
-  }
+  const treeProver = buildProver(Circuit.Tree, config.treeProverType, config.treeUpdateParamsPath as string)
 
-  let directDepositProver: IProver<Circuit.DirectDeposit>
-  if (config.directDepositProverType === ProverType.Local) {
-    directDepositProver = new LocalProver(Circuit.DirectDeposit, config.directDepositParamsPath as string)
-  } else {
-    directDepositProver = new RemoteProver(Circuit.DirectDeposit)
-  }
+  const directDepositProver = buildProver(
+    Circuit.DirectDeposit,
+    config.directDepositProverType,
+    config.directDepositParamsPath as string
+  )
 
   const workerPromises = [
     createPoolTxWorker({
       ...baseConfig,
       validateTx,
       treeProver,
+      mutex,
+      txManager,
     }),
-    createSentTxWorker(baseConfig),
+    createSentTxWorker({
+      ...baseConfig,
+      mutex,
+      txManager,
+    }),
+    createDirectDepositWorker({
+      ...baseConfig,
+      directDepositProver,
+    }),
   ]
 
   const workers = await Promise.all(workerPromises)

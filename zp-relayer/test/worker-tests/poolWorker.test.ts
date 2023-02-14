@@ -35,6 +35,8 @@ import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
 import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 import { Params } from 'libzkbob-rs-node'
+import { directDepositQueue } from '../../queue/directDepositQueue'
+import { createDirectDepositWorker } from '../../workers/directDepositWorker'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -58,14 +60,7 @@ async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx<Work
 }
 
 async function submitDirectDepositJob(deposits: DirectDeposit[]) {
-  const job = await poolTxQueue.add('test', {
-    type: WorkerTxType.DirectDeposit,
-    transactions: [
-      {
-        deposits,
-      },
-    ],
-  })
+  const job = await directDepositQueue.add('test', deposits)
   return job
 }
 
@@ -76,11 +71,13 @@ describe('poolWorker', () => {
   let txManager: TxManager
   let poolQueueEvents: QueueEvents
   let sentQueueEvents: QueueEvents
-  let workerMutex: Mutex
+  let directDepositQueueEvents: QueueEvents
+  let mutex: Mutex
   let snapShotId: string
   let eventsInit = false
   let treeProver: IProver<Circuit.Tree>
   const treeParams = Params.fromFile(config.treeUpdateParamsPath as string)
+  const directDepositParams = Params.fromFile(config.directDepositParamsPath as string)
   const ddSender = '0x28a8746e75304c0780e011bed21c72cd78cd535e'
 
   beforeEach(async () => {
@@ -101,32 +98,44 @@ describe('poolWorker', () => {
     txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
     await txManager.init()
 
-    workerMutex = new Mutex()
+    mutex = new Mutex()
 
     treeProver = new LocalProver(Circuit.Tree, treeParams)
+    const directDepositProver = new LocalProver(Circuit.DirectDeposit, directDepositParams)
 
     const baseConfig = {
-      mutex: workerMutex,
       redis,
-      txManager,
     }
     poolWorker = await createPoolTxWorker({
       ...baseConfig,
       validateTx,
       treeProver,
+      mutex,
+      txManager,
     })
-    sentWorker = await createSentTxWorker(baseConfig)
+    sentWorker = await createSentTxWorker({
+      ...baseConfig,
+      mutex,
+      txManager,
+    })
+    const directDepositWorker = await createDirectDepositWorker({
+      ...baseConfig,
+      directDepositProver,
+    })
     sentWorker.run()
     poolWorker.run()
+    directDepositWorker.run()
 
     if (!eventsInit) {
       poolQueueEvents = new QueueEvents(poolWorker.name, { connection: redis })
       sentQueueEvents = new QueueEvents(sentWorker.name, { connection: redis })
+      directDepositQueueEvents = new QueueEvents(directDepositWorker.name, { connection: redis })
       eventsInit = true
     }
 
     await poolWorker.waitUntilReady()
     await sentWorker.waitUntilReady()
+    await directDepositWorker.waitUntilReady()
     await enableMining()
   })
 
@@ -179,7 +188,7 @@ describe('poolWorker', () => {
     await sentWorker.pause()
 
     const mockPoolWorker = await createPoolTxWorker({
-      mutex: workerMutex,
+      mutex,
       redis: newConnection(),
       txManager,
       validateTx: async () => {},
@@ -328,8 +337,8 @@ describe('poolWorker', () => {
     await approveTokens(ddSender, config.poolAddress, amount)
 
     const ddFallback = ddSender
-    const diversifier = 'dddddddddddddddddddd' // 10 bytes
-    const pk = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' // 32 bytes
+    const diversifier = '35e48bf15982533e0b9d' // 10 bytes
+    const pk = '035b80d59edd72ff0eb3fcf7f7968395300e9c5d5b980de1920aa9d1f151191d' // 32 bytes
     for (let i = 0; i < numDeposits; i++) {
       await pool.PoolInstance.methods
         .directDeposit(ddFallback, pool.denominator.mul(toBN(fee).muln(singleDepositAmount)), '0x' + diversifier + pk)
@@ -353,7 +362,18 @@ describe('poolWorker', () => {
         deposit: dd.deposit,
       }
     })
-    const job = await submitDirectDepositJob(dds)
-    await expectJobFinished(job)
+    const ddJob = await submitDirectDepositJob(dds)
+    const [poolJobId, memo] = await ddJob.waitUntilFinished(directDepositQueueEvents)
+    const poolJob = (await poolTxQueue.getJob(poolJobId)) as Job
+    await expectJobFinished(poolJob)
+
+    const contractMemo: string = (
+      await pool.PoolInstance.getPastEvents('Message', {
+        fromBlock: 0,
+        toBlock: 'latest',
+      })
+    ).map(e => e.returnValues.message)[0]
+
+    expect(memo).eq(contractMemo.slice(2))
   })
 })

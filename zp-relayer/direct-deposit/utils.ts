@@ -2,6 +2,7 @@ import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
 import config from '@/configs/baseConfig'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
+import { truncateHexPrefix } from '@/utils/helpers'
 
 const serviceKey = 'direct-deposit'
 const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`
@@ -25,8 +26,8 @@ export function parseDirectDepositEvent(o: Record<string, any>): DirectDeposit {
     nonce: o.nonce,
     fallbackUser: o.fallbackUser,
     zkAddress: {
-      diversifier: o.zkAddress.diversifier,
-      pk: o.zkAddress.pk,
+      diversifier: truncateHexPrefix(o.zkAddress.diversifier),
+      pk: truncateHexPrefix(o.zkAddress.pk),
     },
     deposit: o.deposit,
   }

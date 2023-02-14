@@ -2,16 +2,17 @@
 // https://github.com/omni/tokenbridge/blob/master/oracle/src/watcher.js
 import type Web3 from 'web3'
 import type { AbiItem } from 'web3-utils'
+import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { web3 } from '@/services/web3'
 import PoolAbi from '@/abi/pool-abi.json'
 import config from '@/configs/watcherConfig'
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
-import { DirectDeposit, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
 import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock, parseDirectDepositEvent } from './utils'
 import { BatchCache } from './BatchCache'
 import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
 import { getBlockNumber, getEvents } from '@/utils/web3'
+import { directDepositQueue } from '@/queue/directDepositQueue'
 
 const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
 
@@ -22,21 +23,7 @@ const batch = new BatchCache<DirectDeposit>(
   config.directDepositBatchTtl,
   ds => {
     logger.info('Adding direct-deposit events to queue', { count: ds.length })
-    poolTxQueue.add(
-      '',
-      {
-        transactions: [
-          {
-            deposits: ds,
-          },
-        ],
-        type: WorkerTxType.DirectDeposit,
-        // TODO: traceId
-      },
-      {
-        priority: WorkerTxTypePriority[WorkerTxType.DirectDeposit],
-      }
-    )
+    directDepositQueue.add('', ds)
   },
   dd => validateDirectDeposit(dd, PoolInstance),
   redis

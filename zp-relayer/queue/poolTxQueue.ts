@@ -28,7 +28,9 @@ export interface DirectDeposit {
 
 export interface DirectDepositTxPayload {
   deposits: DirectDeposit[]
-  txProof?: Proof
+  txProof: Proof
+  outCommit: string
+  memo: string
 }
 
 export enum WorkerTxType {

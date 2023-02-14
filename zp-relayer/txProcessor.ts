@@ -1,22 +1,15 @@
 import Contract from 'web3-eth-contract'
 import { AbiItem, toBN } from 'web3-utils'
 import type { TxType } from 'zp-memo-parser'
-import type { SnarkProof } from 'libzkbob-rs-node'
+import { DelegatedDepositsData, SnarkProof } from 'libzkbob-rs-node'
 import type { PoolState } from './state/PoolState'
 import PoolAbi from './abi/pool-abi.json'
 import { logger } from './services/appLogger'
 import { TRANSFER_INDEX_SIZE, ENERGY_SIZE, TOKEN_SIZE } from './utils/constants'
-import {
-  numToHex,
-  flattenProof,
-  truncateHexPrefix,
-  encodeProof,
-  truncateMemoTxPrefix,
-  buildDirectDepositMemo,
-} from './utils/helpers'
+import { numToHex, flattenProof, truncateHexPrefix, encodeProof, truncateMemoTxPrefix } from './utils/helpers'
 import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
-import type { WorkerTx, WorkerTxType } from './queue/poolTxQueue'
-import { Circuit, IProver } from './prover/IProver'
+import type { DirectDeposit, WorkerTx, WorkerTxType } from './queue/poolTxQueue'
+import type { Circuit, IProver } from './prover/IProver'
 
 // @ts-ignore
 // Used only to get `transact` method selector
@@ -80,6 +73,26 @@ async function getTreeProof(state: PoolState, outCommit: string, prover: IProver
   return { treeProof, commitIndex }
 }
 
+export async function getDirectDepositProof(deposits: DirectDeposit[], prover: IProver<Circuit.DirectDeposit>) {
+  const {
+    public: pub,
+    secret: sec,
+    memo,
+    out_commitment_hash: outCommit,
+  } = await DelegatedDepositsData.create(
+    deposits.map(d => {
+      return {
+        id: d.nonce,
+        receiver_d: toBN(d.zkAddress.diversifier).toString(10),
+        receiver_p: toBN(d.zkAddress.pk).toString(10),
+        denominated_amount: d.deposit,
+      }
+    })
+  )
+  const proof = await prover.prove(pub, sec)
+  return { proof, memo, outCommit }
+}
+
 export interface ProcessResult {
   data: string
   commitIndex: number
@@ -125,14 +138,7 @@ export async function buildDirectDeposits(
   treeProver: IProver<Circuit.Tree>,
   state: PoolState
 ): Promise<ProcessResult> {
-  if (tx.txProof) {
-    // If we already have a proof just verify it
-    // TODO: get proof + outCommit for all deposits directDeposits
-    // Now, just use some random value
-  } else {
-    // Build new proof
-  }
-  const outCommit = '11469701942666298368112882412133877458305516134926649826543144744382391691533'
+  const outCommit = tx.outCommit
 
   const { treeProof, commitIndex } = await getTreeProof(state, outCommit, treeProver)
 
@@ -140,17 +146,8 @@ export async function buildDirectDeposits(
   const indices = tx.deposits.map(d => d.nonce)
 
   const data: string = PoolInstance.methods
-    .appendDirectDeposits(
-      rootAfter,
-      indices,
-      outCommit,
-      // TODO: use DD proof here
-      flattenProof(treeProof.proof),
-      flattenProof(treeProof.proof)
-    )
+    .appendDirectDeposits(rootAfter, indices, outCommit, flattenProof(tx.txProof.proof), flattenProof(treeProof.proof))
     .encodeABI()
 
-  const memo = buildDirectDepositMemo(tx.deposits)
-
-  return { data, commitIndex, outCommit, rootAfter, memo }
+  return { data, commitIndex, outCommit, rootAfter, memo: tx.memo }
 }

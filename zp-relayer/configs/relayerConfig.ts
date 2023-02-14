@@ -28,7 +28,7 @@ const config = {
   maxFaucet: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT_FAUCET as string),
   treeUpdateParamsPath: process.env.RELAYER_TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
   transferParamsPath: process.env.RELAYER_TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
-  directDepositParamsPath: process.env.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH || './params/direct_deposit_params.bin',
+  directDepositParamsPath: process.env.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH || './params/delegated_deposit_params.bin',
   txVKPath: process.env.RELAYER_TX_VK_PATH || './params/transfer_verification_key.json',
   requestLogPath: process.env.RELAYER_REQUEST_LOG_PATH || './zp.log',
   stateDirPath: process.env.RELAYER_STATE_DIR_PATH || './POOL_STATE',
