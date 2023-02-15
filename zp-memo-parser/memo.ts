@@ -24,7 +24,11 @@ export interface PermittableDepositTxData extends DefaultTxData {
   holder: Uint8Array
 }
 
-export type TxData = DefaultTxData | WithdrawTxData | PermittableDepositTxData
+export type TxData<T extends TxType> = T extends TxType.WITHDRAWAL
+  ? WithdrawTxData
+  : T extends TxType.PERMITTABLE_DEPOSIT
+  ? PermittableDepositTxData
+  : DefaultTxData
 
 // Size in bytes
 const U256_SIZE = 32
@@ -82,7 +86,7 @@ function getNoteHashes(rawHashes: Buffer, num: number, maxNotes: number): Uint8A
   for (let i = 0; i < num; i++) {
     const start = i * U256_SIZE
     const end = start + U256_SIZE
-    const note_hash = Buffer.from(rawHashes.slice(start, end))
+    const note_hash = Buffer.from(rawHashes.subarray(start, end))
     notes.push(note_hash)
   }
   // Append zero note hashes
@@ -92,7 +96,11 @@ function getNoteHashes(rawHashes: Buffer, num: number, maxNotes: number): Uint8A
   return notes
 }
 
-export function getTxData(data: Buffer, txType: Option<TxType>): TxData {
+function getAddress(data: Buffer, offset: number): Uint8Array {
+  return new Uint8Array(data.subarray(offset, offset + 20))
+}
+
+export function getTxData<T extends TxType>(data: Buffer, txType: Option<T>): TxData<T> {
   function readU64(offset: number) {
     let uint = data.readBigUInt64BE(offset)
     return uint.toString(10)
@@ -103,29 +111,29 @@ export function getTxData(data: Buffer, txType: Option<TxType>): TxData {
   if (txType === TxType.WITHDRAWAL) {
     const nativeAmount = readU64(offset)
     offset += 8
-    const receiver = new Uint8Array(data.slice(offset, offset + 20))
+    const receiver = getAddress(data, offset)
     return {
       fee,
       nativeAmount,
       receiver,
-    }
+    } as TxData<T>
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
     const deadline = readU64(offset)
     offset += 8
-    const holder = new Uint8Array(data.slice(offset, offset + 20))
+    const holder = getAddress(data, offset)
     return {
       fee,
       deadline,
       holder,
-    }
+    } as TxData<T>
   }
-  return { fee }
+  return { fee } as TxData<T>
 }
 
-export function decodeMemo(data: Buffer, txType: Option<TxType>, maxNotes = 127) {
+export function decodeMemo(data: Buffer, maxNotes = 127) {
   const reader = new BinaryReader(data)
   const numItems = new DataView(reader.readFixedArray(4).buffer).getUint32(0, true)
-  const memo: Memo = deserialize(clientBorshSchema(numItems - 1), Memo, data.slice(reader.offset))
+  const memo: Memo = deserialize(clientBorshSchema(numItems - 1), Memo, data.subarray(reader.offset))
   memo.numItems = numItems
   memo.noteHashes = getNoteHashes(memo.rawNoteHashes, numItems - 1, maxNotes)
   memo.rawBuf = data

@@ -22,6 +22,7 @@ const constants = {
     randomize: true,
   },
   TRACE_ID: 'zkbob-support-id' as const,
+  MESSAGE_PREFIX_COMMON_V1: '0000',
 }
 
 export = constants
