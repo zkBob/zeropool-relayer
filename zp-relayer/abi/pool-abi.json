@@ -423,7 +423,13 @@
       }
     ],
     "name": "directDeposit",
-    "outputs": [],
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -470,51 +476,58 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "_index",
         "type": "uint256"
       }
     ],
-    "name": "directDeposits",
+    "name": "getDirectDeposit",
     "outputs": [
       {
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint96",
-        "name": "amount",
-        "type": "uint96"
-      },
-      {
-        "internalType": "uint64",
-        "name": "deposit",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "fee",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint40",
-        "name": "timestamp",
-        "type": "uint40"
-      },
-      {
-        "internalType": "enum ZkBobPool.DirectDepositStatus",
-        "name": "status",
-        "type": "uint8"
-      },
-      {
-        "internalType": "bytes10",
-        "name": "diversifier",
-        "type": "bytes10"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "pk",
-        "type": "bytes32"
+        "components": [
+          {
+            "internalType": "address",
+            "name": "fallbackReceiver",
+            "type": "address"
+          },
+          {
+            "internalType": "uint96",
+            "name": "sent",
+            "type": "uint96"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deposit",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "fee",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint40",
+            "name": "timestamp",
+            "type": "uint40"
+          },
+          {
+            "internalType": "enum IZkBobDirectDeposits.DirectDepositStatus",
+            "name": "status",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes10",
+            "name": "diversifier",
+            "type": "bytes10"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "pk",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct IZkBobDirectDeposits.DirectDeposit",
+        "name": "",
+        "type": "tuple"
       }
     ],
     "stateMutability": "view",
