@@ -327,6 +327,7 @@ describe('poolWorker', () => {
 
     await expectJobFinished(job)
   })
+
   it('should process direct deposit transaction', async () => {
     const fee = await pool.PoolInstance.methods.directDepositFee().call()
     const numDeposits = 16
