@@ -11,8 +11,8 @@ enum DirectDepositStatus {
 }
 
 interface DirectDepositStruct {
-  user: string
-  amount: string
+  fallbackReceiver: string
+  sent: string
   deposit: string
   fee: string
   timestamp: string
@@ -29,9 +29,9 @@ async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Co
     throw new TxValidationError(`${errPrefix} is not pending: ${ddFromContract.status})`)
   }
 
-  if (ddFromContract.user !== dd.fallbackUser) {
+  if (ddFromContract.fallbackReceiver !== dd.fallbackUser) {
     throw new TxValidationError(
-      `${errPrefix} has incorrect user: expected ${dd.fallbackUser}, actual ${ddFromContract.user})`
+      `${errPrefix} has incorrect user: expected ${dd.fallbackUser}, actual ${ddFromContract.fallbackReceiver})`
     )
   }
 
