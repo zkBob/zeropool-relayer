@@ -1,7 +1,10 @@
+import { toBN } from 'web3-utils'
 import type { Contract } from 'web3-eth-contract'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { contractCallRetry } from '@/utils/helpers'
 import { checkAssertion, checkScreener, TxValidationError } from './common'
+
+const SNARK_SCALAR_FIELD = toBN('21888242871839275222246405745257275088548364400416034343698204186575808495617')
 
 enum DirectDepositStatus {
   Missing = '0',
@@ -19,6 +22,13 @@ interface DirectDepositStruct {
   status: string
   diversifier: string
   pk: string
+}
+
+function checkDirectDepositPK(pk: string) {
+  if (toBN(pk).lt(SNARK_SCALAR_FIELD)) {
+    return null
+  }
+  throw new TxValidationError(`Direct deposit has invalid pk: ${pk}`)
 }
 
 async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Contract) {
@@ -46,6 +56,7 @@ async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Co
 }
 
 export async function validateDirectDeposit(dd: DirectDeposit, poolContract: Contract) {
+  await checkAssertion(() => checkDirectDepositPK(dd.zkAddress.pk))
   await checkAssertion(() => checkDirectDepositConsistency(dd, poolContract))
   await checkAssertion(() => checkScreener(dd.sender))
   await checkAssertion(() => checkScreener(dd.fallbackUser))
