@@ -26,8 +26,8 @@ export function parseDirectDepositEvent(o: Record<string, any>): DirectDeposit {
     nonce: o.nonce,
     fallbackUser: o.fallbackUser,
     zkAddress: {
-      diversifier: truncateHexPrefix(o.zkAddress.diversifier),
-      pk: truncateHexPrefix(o.zkAddress.pk),
+      diversifier: o.zkAddress.diversifier,
+      pk: o.zkAddress.pk,
     },
     deposit: o.deposit,
   }

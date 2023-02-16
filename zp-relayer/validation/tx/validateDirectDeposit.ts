@@ -22,7 +22,7 @@ interface DirectDepositStruct {
 }
 
 async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Contract) {
-  const ddFromContract: DirectDepositStruct = await contractCallRetry(poolContract, 'directDeposits', [dd.nonce])
+  const ddFromContract: DirectDepositStruct = await contractCallRetry(poolContract, 'getDirectDeposit', [dd.nonce])
   const errPrefix = `Direct deposit ${dd.nonce}`
 
   if (ddFromContract.status !== DirectDepositStatus.Pending) {
