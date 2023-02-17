@@ -27,7 +27,7 @@ const batch = new BatchCache<DirectDeposit>(
     logger.info('Adding direct-deposit events to queue', { count: ds.length })
     directDepositQueue.add('', ds)
   },
-  dd => validateDirectDeposit(dd, PoolInstance),
+  dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
   redis
 )
 
