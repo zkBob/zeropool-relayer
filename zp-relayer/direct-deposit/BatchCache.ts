@@ -106,10 +106,11 @@ export class BatchCache<T extends { nonce: string }> {
     // validatedEs.length === batchSize  => batch is full
     //              count  <  es.length  => cache is drained
 
-    if (es.length === 0) {
+    if (validatedEs.length === 0) {
+      logger.warn('Empty batch after validation, skipping')
       return
     }
-    await this.cb(es)
+    await this.cb(validatedEs)
   }
 
   private async processCache() {
