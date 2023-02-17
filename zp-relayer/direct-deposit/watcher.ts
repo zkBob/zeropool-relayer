@@ -5,6 +5,7 @@ import type { AbiItem } from 'web3-utils'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { web3 } from '@/services/web3'
 import PoolAbi from '@/abi/pool-abi.json'
+import DirectDepositQueueAbi from '@/abi/direct-deposit-queue-abi.json'
 import config from '@/configs/watcherConfig'
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
@@ -15,6 +16,7 @@ import { getBlockNumber, getEvents } from '@/utils/web3'
 import { directDepositQueue } from '@/queue/directDepositQueue'
 
 const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
+const DirectDepositQueueInstance = new web3.eth.Contract(DirectDepositQueueAbi as AbiItem[])
 
 const eventName = 'SubmitDirectDeposit'
 
@@ -32,6 +34,8 @@ const batch = new BatchCache<DirectDeposit>(
 async function init() {
   await getLastProcessedBlock()
   await batch.init()
+  const queueAddress = await PoolInstance.methods.direct_deposit_queue().call()
+  DirectDepositQueueInstance.options.address = queueAddress
   runWatcher()
 }
 
@@ -52,7 +56,7 @@ async function watch() {
   const rangeEndBlock = fromBlock + config.eventsProcessingBatchSize
   let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
 
-  let events = await getEvents(PoolInstance, eventName, {
+  let events = await getEvents(DirectDepositQueueInstance, eventName, {
     fromBlock,
     toBlock,
   })

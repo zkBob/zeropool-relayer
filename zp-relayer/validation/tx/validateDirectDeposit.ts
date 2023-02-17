@@ -31,8 +31,8 @@ function checkDirectDepositPK(pk: string) {
   throw new TxValidationError(`Direct deposit has invalid pk: ${pk}`)
 }
 
-async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Contract) {
-  const ddFromContract: DirectDepositStruct = await contractCallRetry(poolContract, 'getDirectDeposit', [dd.nonce])
+async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositContract: Contract) {
+  const ddFromContract: DirectDepositStruct = await contractCallRetry(directDepositContract, 'getDirectDeposit', [dd.nonce])
   const errPrefix = `Direct deposit ${dd.nonce}`
 
   if (ddFromContract.status !== DirectDepositStatus.Pending) {
@@ -55,9 +55,9 @@ async function checkDirectDepositConsistency(dd: DirectDeposit, poolContract: Co
   return null
 }
 
-export async function validateDirectDeposit(dd: DirectDeposit, poolContract: Contract) {
+export async function validateDirectDeposit(dd: DirectDeposit, directDepositContract: Contract) {
   await checkAssertion(() => checkDirectDepositPK(dd.zkAddress.pk))
-  await checkAssertion(() => checkDirectDepositConsistency(dd, poolContract))
+  await checkAssertion(() => checkDirectDepositConsistency(dd, directDepositContract))
   await checkAssertion(() => checkScreener(dd.sender))
   await checkAssertion(() => checkScreener(dd.fallbackUser))
 }
