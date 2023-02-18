@@ -74,7 +74,7 @@ export class TxManager {
       }
 
       const { transactionHash, rawTransaction } = await this.web3.eth.accounts.signTransaction(
-        txConfig,
+        updatedTxConfig,
         this.privateKey
       )
       return {
