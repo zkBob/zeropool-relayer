@@ -1,6 +1,7 @@
 import { toBN } from 'web3-utils'
 import type { Contract } from 'web3-eth-contract'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
+import { Helpers } from 'libzkbob-rs-node'
 import { contractCallRetry } from '@/utils/helpers'
 import { checkAssertion, checkScreener, TxValidationError } from './common'
 
@@ -25,14 +26,20 @@ interface DirectDepositStruct {
 }
 
 function checkDirectDepositPK(pk: string) {
-  if (toBN(pk).lt(SNARK_SCALAR_FIELD)) {
-    return null
+  const bnPk = toBN(pk)
+  if (bnPk.gte(SNARK_SCALAR_FIELD)) {
+    throw new TxValidationError(`Direct deposit pk is out of snark scalar field: ${pk}`)
   }
-  throw new TxValidationError(`Direct deposit has invalid pk: ${pk}`)
+  if (!Helpers.isInPrimeSubgroup(Helpers.strToNum(bnPk.toString(10)))) {
+    throw new TxValidationError(`Direct deposit pk is not in prime subgroup: ${pk}`)
+  }
+  return null
 }
 
 async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositContract: Contract) {
-  const ddFromContract: DirectDepositStruct = await contractCallRetry(directDepositContract, 'getDirectDeposit', [dd.nonce])
+  const ddFromContract: DirectDepositStruct = await contractCallRetry(directDepositContract, 'getDirectDeposit', [
+    dd.nonce,
+  ])
   const errPrefix = `Direct deposit ${dd.nonce}`
 
   if (ddFromContract.status !== DirectDepositStatus.Pending) {
