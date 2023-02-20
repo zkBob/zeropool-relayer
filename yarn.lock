@@ -3479,10 +3479,10 @@ libzkbob-rs-node@1.0.0:
   dependencies:
     cargo-cp-artifact "^0.1"
 
-libzkbob-rs-wasm-web@0.8.0:
-  version "0.8.0"
-  resolved "https://registry.yarnpkg.com/libzkbob-rs-wasm-web/-/libzkbob-rs-wasm-web-0.8.0.tgz#b133aa0f1a381567fde082662ce4c4e46ea7aa47"
-  integrity sha512-EIPeDyl2wmpSMx299LnG0UCqg5wy8sr7TqfCdgPDxA8kH5Gu92MF12KOOOx7sfLpoYZ965y7MbkkuUfz5OzVAg==
+libzkbob-rs-wasm-web@1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/libzkbob-rs-wasm-web/-/libzkbob-rs-wasm-web-1.0.0.tgz#74eba1caa2bfc728be8fd1f3161e5089360f2a72"
+  integrity sha512-3xW0BjAZ9NDoNLCwlGHNjg5q1GN7fEpXCVf7+emQxQrt/vey9PNTAQnNIEjWZ/M0Fn52t06Og2P6zgqcGUCz7Q==
 
 lighthouse-logger@^1.0.0:
   version "1.3.0"
