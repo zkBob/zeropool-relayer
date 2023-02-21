@@ -1,17 +1,15 @@
-import './env'
-import fs from 'fs'
-import crypto from 'crypto'
 import BN from 'bn.js'
 import PoolAbi from './abi/pool-abi.json'
+import TokenAbi from './abi/token-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
 import type { Contract } from 'web3-eth-contract'
-import config from './config'
+import config from './configs/relayerConfig'
 import { web3 } from './services/web3'
 import { logger } from './services/appLogger'
 import { redis } from './services/redisClient'
-import { poolTxQueue } from './queue/poolTxQueue'
+import { poolTxQueue, WorkerTxType, WorkerTxTypePriority } from './queue/poolTxQueue'
 import { getBlockNumber, getEvents, getTransaction } from './utils/web3'
-import { Helpers, Params, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
+import { Helpers, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
 import { PoolState } from './state/PoolState'
 
 import type { TxType } from 'zp-memo-parser'
@@ -66,9 +64,7 @@ export interface LimitsFetch {
 
 class Pool {
   public PoolInstance: Contract
-  public treeParams: Params
-  public treeParamsHash: string
-  public transferParamsHash: string
+  public TokenInstance: Contract
   private txVK: VK
   public state: PoolState
   public optimisticState: PoolState
@@ -78,11 +74,8 @@ class Pool {
 
   constructor() {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
+    this.TokenInstance = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
 
-    this.treeParamsHash = Pool.getHash(config.treeUpdateParamsPath)
-    this.transferParamsHash = Pool.getHash(config.transferParamsPath)
-
-    this.treeParams = Params.fromFile(config.treeUpdateParamsPath)
     const txVK = require(config.txVKPath)
     this.txVK = txVK
 
@@ -93,13 +86,6 @@ class Pool {
   loadState(states: { poolState: PoolState; optimisticState: PoolState }) {
     this.state = states.poolState
     this.optimisticState = states.optimisticState
-  }
-
-  private static getHash(path: string) {
-    const buffer = fs.readFileSync(path)
-    const hash = crypto.createHash('sha256')
-    hash.update(buffer)
-    return hash.digest('hex')
   }
 
   async init() {
@@ -123,7 +109,13 @@ class Pool {
         depositSignature,
       }
     })
-    const job = await poolTxQueue.add('tx', { transactions: queueTxs, traceId })
+    const job = await poolTxQueue.add(
+      'tx',
+      { type: WorkerTxType.Normal, transactions: queueTxs, traceId },
+      {
+        priority: WorkerTxTypePriority[WorkerTxType.Normal],
+      }
+    )
     logger.debug(`Added poolTxWorker job: ${job.id}`)
     return job.id
   }
@@ -156,10 +148,13 @@ class Pool {
       missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
     }
 
-    const lastBlockNumber = await this.getLastBlockToProcess()
+    const transactSelector = '0xaf989083'
+    const directDepositSelector = '0x1dc4cb33'
+
+    const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
     let toBlock = startBlock
-    for (let fromBlock = startBlock; toBlock <= lastBlockNumber + 1; fromBlock = toBlock) {
-      toBlock += config.eventsProcessingBatchSize
+    for (let fromBlock = startBlock; toBlock < lastBlockNumber; fromBlock = toBlock) {
+      toBlock = Math.min(toBlock + config.eventsProcessingBatchSize, lastBlockNumber)
       const events = await getEvents(this.PoolInstance, 'Message', {
         fromBlock,
         toBlock: toBlock - 1,
@@ -170,40 +165,58 @@ class Pool {
 
       for (let i = 0; i < events.length; i++) {
         const { returnValues, transactionHash } = events[i]
-        const memoString: string = returnValues.message
-        if (!memoString) {
-          throw new Error('incorrect memo in event')
-        }
-
         const { input } = await getTransaction(web3, transactionHash)
-        const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
-
-        const parser = new PoolCalldataParser(calldata)
-
-        const outCommitRaw = parser.getField('outCommit')
-        const outCommit = web3.utils.hexToNumberString(outCommitRaw)
-
-        const txTypeRaw = parser.getField('txType')
-        const txType = toTxType(txTypeRaw)
-
-        const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
-        const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
-
-        const truncatedMemo = truncateMemoTxPrefix(memoRaw, txType)
-        const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(truncatedMemo)
 
         const newPoolIndex = Number(returnValues.index)
         const prevPoolIndex = newPoolIndex - OUTPLUSONE
         const prevCommitIndex = Math.floor(Number(prevPoolIndex) / OUTPLUSONE)
 
+        let outCommit: string
+        let memo: string
+
+        if (input.startsWith(directDepositSelector)) {
+          // Direct deposit case
+          const res = web3.eth.abi.decodeParameters(
+            [
+              'uint256', // Root after
+              'uint256[]', // Indices
+              'uint256', // Out commit
+              'uint256[8]', // Deposit proof
+              'uint256[8]', // Tree proof
+            ],
+            input.slice(10) // Cut off selector
+          )
+          outCommit = res[2]
+          memo = truncateHexPrefix(returnValues.message || '')
+        } else if (input.startsWith(transactSelector)) {
+          // Normal tx case
+          const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
+
+          const parser = new PoolCalldataParser(calldata)
+
+          const outCommitRaw = parser.getField('outCommit')
+          outCommit = web3.utils.hexToNumberString(outCommitRaw)
+
+          const txTypeRaw = parser.getField('txType')
+          const txType = toTxType(txTypeRaw)
+
+          const memoSize = web3.utils.hexToNumber(parser.getField('memoSize'))
+          const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
+
+          memo = truncateMemoTxPrefix(memoRaw, txType)
+
+          // Save nullifier in confirmed state
+          const nullifier = parser.getField('nullifier')
+          await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
+        } else {
+          throw new Error(`Unknown transaction type: ${input}`)
+        }
+
+        const commitAndMemo = numToHex(toBN(outCommit)).concat(transactionHash.slice(2)).concat(memo)
         for (let state of [this.state, this.optimisticState]) {
           state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
           state.addTx(prevPoolIndex, Buffer.from(commitAndMemo, 'hex'))
         }
-
-        // Save nullifier in confirmed state
-        const nullifier = parser.getField('nullifier')
-        await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
       }
     }
 
@@ -277,5 +290,6 @@ class Pool {
   }
 }
 
-export const pool = new Pool()
+export let pool: Pool = new Pool()
+
 export type { Pool }

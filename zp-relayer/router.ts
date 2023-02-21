@@ -2,8 +2,8 @@ import express, { NextFunction, Request, Response } from 'express'
 import cors from 'cors'
 import endpoints from './endpoints'
 import { logger } from './services/appLogger'
-import { ValidationError } from './validation/validation'
-import config from './config'
+import { ValidationError } from './validation/api/validation'
+import config from './configs/relayerConfig'
 import { TRACE_ID } from './utils/constants'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
@@ -16,51 +16,54 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
   }
 }
 
-const router = express.Router()
+export function createRouter() {
+  const router = express.Router()
 
-router.use(cors())
-router.use(express.urlencoded({ extended: true }))
-router.use(express.json())
-router.use(express.text())
+  router.use(cors())
+  router.use(express.urlencoded({ extended: true }))
+  router.use(express.json())
+  router.use(express.text())
 
-router.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (err) {
-    logger.error('Request error:', err)
-    return res.sendStatus(500)
-  }
-  next()
-})
+  router.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (err) {
+      logger.error('Request error:', err)
+      return res.sendStatus(500)
+    }
+    next()
+  })
 
-router.use((req: Request, res: Response, next: NextFunction) => {
-  if (config.requireTraceId && req.headers[TRACE_ID]) {
-    logger.info('TraceId', { traceId: req.headers[TRACE_ID], path: req.path })
-  }
-  next()
-})
+  router.use((req: Request, res: Response, next: NextFunction) => {
+    if (config.requireTraceId && req.headers[TRACE_ID]) {
+      logger.info('TraceId', { traceId: req.headers[TRACE_ID], path: req.path })
+    }
+    next()
+  })
 
-router.get('/', endpoints.root)
-router.get('/version', endpoints.relayerVersion)
-router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
-router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
-router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
-router.get('/job/:id', wrapErr(endpoints.getJob))
-router.get('/info', wrapErr(endpoints.relayerInfo))
-router.get('/fee', wrapErr(endpoints.getFee))
-router.get('/limits', wrapErr(endpoints.getLimits))
-router.get('/siblings', wrapErr(endpoints.getSiblings))
-router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
-router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
+  router.get('/', endpoints.root)
+  router.get('/version', endpoints.relayerVersion)
+  router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
+  router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
+  router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
+  router.get('/job/:id', wrapErr(endpoints.getJob))
+  router.get('/info', wrapErr(endpoints.relayerInfo))
+  router.get('/fee', wrapErr(endpoints.getFee))
+  router.get('/limits', wrapErr(endpoints.getLimits))
+  router.get('/siblings', wrapErr(endpoints.getSiblings))
+  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash(config.treeUpdateParamsPath)))
+  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash(config.transferParamsPath)))
+  router.get('/params/hash/direct-deposit', wrapErr(endpoints.getParamsHash(config.directDepositParamsPath)))
 
-// Error handler middleware
-router.use((error: any, req: Request, res: Response, next: NextFunction) => {
-  if (error instanceof ValidationError) {
-    const validationErrors = error.validationErrors
-    logger.warn('Validation errors', { errors: validationErrors, path: req.path })
-    res.status(400).json(validationErrors)
-  } else {
-    logger.error('Internal error', { error, path: req.path })
-    res.status(500).send('Internal server error')
-  }
-})
+  // Error handler middleware
+  router.use((error: any, req: Request, res: Response, next: NextFunction) => {
+    if (error instanceof ValidationError) {
+      const validationErrors = error.validationErrors
+      logger.warn('Validation errors', { errors: validationErrors, path: req.path })
+      res.status(400).json(validationErrors)
+    } else {
+      logger.error('Internal error', { error, path: req.path })
+      res.status(500).send('Internal server error')
+    }
+  })
 
-export default router
+  return router
+}

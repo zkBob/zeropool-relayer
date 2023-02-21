@@ -4,7 +4,7 @@ import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { PoolTx } from '@/pool'
 import { TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 

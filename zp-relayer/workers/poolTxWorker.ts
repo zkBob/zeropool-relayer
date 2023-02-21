@@ -1,30 +1,30 @@
-import { toBN, toWei } from 'web3-utils'
+import type { Logger } from 'winston'
 import { Job, Worker } from 'bullmq'
-import { web3, web3Redundant } from '@/services/web3'
+import { toBN } from 'web3-utils'
+import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
-import { poolTxQueue, BatchTx, PoolTxResult, TxPayload } from '@/queue/poolTxQueue'
+import { poolTxQueue, BatchTx, PoolTxResult, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { TX_QUEUE_NAME } from '@/utils/constants'
-import { readNonce, updateNonce } from '@/utils/redisFields'
-import { buildPrefixedMemo, truncateMemoTxPrefix, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
-import { signTransaction, sendTransaction } from '@/tx/signAndSend'
-import { Pool, pool } from '@/pool'
+import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
+import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
-import { processTx } from '@/txProcessor'
-import config from '@/config'
-import { addExtraGasPrice, EstimationType, GasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
-import type { Mutex } from 'async-mutex'
-import { getChainId } from '@/utils/web3'
-import { getTxProofField } from '@/utils/proofInputs'
-import type { Redis } from 'ioredis'
+import { buildDirectDeposits, ProcessResult, buildTx } from '@/txProcessor'
+import config from '@/configs/relayerConfig'
+import { getMaxRequiredGasPrice } from '@/services/gas-price'
 import { isInsufficientBalanceError } from '@/utils/web3Errors'
-import { TxValidationError } from '@/validateTx'
+import { TxValidationError } from '@/validation/tx/common'
+import type { IPoolWorkerConfig } from './workerTypes'
 
-export async function createPoolTxWorker<T extends EstimationType>(
-  gasPrice: GasPrice<T>,
-  validateTx: (tx: TxPayload, pool: Pool, traceId?: string) => Promise<void>,
-  mutex: Mutex,
-  redis: Redis
-) {
+interface HandlerConfig<T extends WorkerTxType> {
+  type: T
+  tx: WorkerTx<T>
+  processResult: ProcessResult
+  logger: Logger
+  traceId?: string
+  jobId: string
+}
+
+export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, treeProver }: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -32,111 +32,128 @@ export async function createPoolTxWorker<T extends EstimationType>(
     concurrency: 1,
   }
 
-  let nonce = await readNonce(true)
-  await updateNonce(nonce)
+  async function handleTx<T extends WorkerTxType>({
+    type,
+    tx,
+    processResult,
+    logger,
+    traceId,
+    jobId,
+  }: HandlerConfig<T>): Promise<[string, string]> {
+    const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = processResult
 
-  const CHAIN_ID = await getChainId(web3)
-  const poolTxWorkerProcessor = async (job: Job<BatchTx, PoolTxResult[]>) => {
+    const gas = config.relayerGasLimit
+    const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
+      data,
+      gas: gas.toString(),
+      to: config.poolAddress,
+    })
+    logger.info('Sending tx', { txHash })
+    try {
+      await txManager.sendTransaction(rawTransaction)
+    } catch (e) {
+      if (isInsufficientBalanceError(e as Error)) {
+        const minimumBalance = gas.mul(toBN(getMaxRequiredGasPrice(gasPrice)))
+        logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+        await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
+        waitForFunds(
+          web3,
+          config.relayerAddress,
+          () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
+          minimumBalance,
+          config.insufficientBalanceCheckTimeout
+        )
+      }
+      logger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
+    }
+
+    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
+
+    pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
+
+    if (nullifier) {
+      logger.debug('Adding nullifier %s to OS', nullifier)
+      await pool.optimisticState.nullifiers.add([nullifier])
+    }
+
+    const sentJob = await sentTxQueue.add(
+      txHash,
+      {
+        poolJobId: jobId,
+        root: rootAfter,
+        outCommit,
+        commitIndex,
+        truncatedMemo: memo,
+        nullifier,
+        txConfig,
+        txPayload: { transactions: tx, traceId, type },
+        prevAttempts: [[txHash, gasPrice]],
+      },
+      {
+        delay: config.sentTxDelay,
+      }
+    )
+    logger.info(`Added sentTxWorker job: ${sentJob.id}`)
+    return [txHash, sentJob.id as string]
+  }
+
+  const poolTxWorkerProcessor = async (job: Job<BatchTx<WorkerTxType>, PoolTxResult[]>) => {
     const sentTxNum = await sentTxQueue.count()
     if (sentTxNum >= config.maxSentQueueSize) {
       throw new Error('Optimistic state overflow')
     }
 
-    const txs = job.data.transactions
-    const traceId = job.data.traceId
+    const { transactions: txs, traceId, type } = job.data
 
     const jobLogger = workerLogger.child({ jobId: job.id, traceId })
     jobLogger.info('Processing...')
     jobLogger.info('Received %s txs', txs.length)
 
     const txHashes: [string, string][] = []
-    for (const tx of txs) {
-      const { gas, amount, rawMemo, txType, txProof } = tx
 
-      await validateTx(tx, pool, traceId)
+    const baseConfig = {
+      logger: jobLogger,
+      traceId,
+      type,
+      jobId: job.id as string,
+    }
+    let handlerConfig: HandlerConfig<WorkerTxType>
 
-      const { data, commitIndex, rootAfter } = await processTx(tx)
+    for (const payload of txs) {
+      let processResult: ProcessResult
+      if (type === WorkerTxType.DirectDeposit) {
+        const tx = payload as WorkerTx<WorkerTxType.DirectDeposit>
+        jobLogger.info('Received direct deposit', { number: txs.length })
 
-      jobLogger.info(`nonce: ${nonce}`)
-
-      const txConfig = {
-        data,
-        nonce,
-        value: toWei(toBN(amount)),
-        gas,
-        to: config.poolAddress,
-        chainId: CHAIN_ID,
-      }
-      const gasPriceValue = await gasPrice.fetchOnce()
-      const gasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceSurplus)
-      const [txHash, rawTransaction] = await signTransaction(
-        web3,
-        {
-          ...txConfig,
-          ...gasPriceWithExtra,
-        },
-        config.relayerPrivateKey
-      )
-      jobLogger.info('Sending tx', { txHash })
-      try {
-        await sendTransaction(web3Redundant, rawTransaction)
-      } catch (e) {
-        if (isInsufficientBalanceError(e as Error)) {
-          const minimumBalance = toBN(gas).mul(toBN(getMaxRequiredGasPrice(gasPriceWithExtra)))
-          jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
-          await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
-          waitForFunds(
-            web3,
-            config.relayerAddress,
-            () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()]),
-            minimumBalance,
-            config.insufficientBalanceCheckTimeout
-          )
-          throw e
+        if (tx.deposits.length === 0) {
+          logger.warn('Empty direct deposit batch, skipping')
+          continue
         }
-        jobLogger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
+
+        processResult = await buildDirectDeposits(tx, treeProver, pool.optimisticState)
+      } else if (type === WorkerTxType.Normal) {
+        const tx = payload as WorkerTx<WorkerTxType.Normal>
+        await validateTx(tx, pool, traceId)
+
+        processResult = await buildTx(tx, treeProver, pool.optimisticState)
+      } else {
+        throw new Error(`Unknown tx type: ${type}`)
       }
 
-      await updateNonce(++nonce)
+      handlerConfig = {
+        ...baseConfig,
+        tx: payload,
+        processResult,
+      }
 
-      const nullifier = getTxProofField(txProof, 'nullifier')
-      const outCommit = getTxProofField(txProof, 'out_commit')
-
-      const truncatedMemo = truncateMemoTxPrefix(rawMemo, txType)
-      const prefixedMemo = buildPrefixedMemo(outCommit, txHash, truncatedMemo)
-
-      pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
-      jobLogger.debug('Adding nullifier %s to OS', nullifier)
-      await pool.optimisticState.nullifiers.add([nullifier])
-
-      const sentJob = await sentTxQueue.add(
-        txHash,
-        {
-          poolJobId: job.id as string,
-          root: rootAfter,
-          outCommit,
-          commitIndex,
-          truncatedMemo,
-          nullifier,
-          txConfig,
-          txPayload: tx,
-          prevAttempts: [[txHash, gasPriceWithExtra]],
-          traceId,
-        },
-        {
-          delay: config.sentTxDelay,
-          priority: nonce,
-        }
-      )
-      jobLogger.info(`Added sentTxWorker job: ${sentJob.id}`)
-
-      txHashes.push([txHash, sentJob.id as string])
+      const res = await handleTx(handlerConfig)
+      txHashes.push(res)
     }
 
     return txHashes
   }
 
-  const poolTxWorker = new Worker<BatchTx, PoolTxResult[]>(
+  const poolTxWorker = new Worker<BatchTx<WorkerTxType>, PoolTxResult[]>(
     TX_QUEUE_NAME,
     job =>
       withErrorLog(

@@ -1,4 +1,5 @@
 import chai from 'chai'
+import { toBN } from 'web3-utils'
 import { v4 } from 'uuid'
 import { Mutex } from 'async-mutex'
 import chaiAsPromised from 'chai-as-promised'
@@ -6,9 +7,9 @@ import { Job, QueueEvents, Worker } from 'bullmq'
 import { TxType } from 'zp-memo-parser'
 import { web3 } from './web3'
 import { pool } from '../../pool'
-import config from '../../config'
+import config from '../../configs/relayerConfig'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
-import { poolTxQueue, PoolTxResult, BatchTx } from '../../queue/poolTxQueue'
+import { poolTxQueue, PoolTxResult, BatchTx, WorkerTxType, DirectDeposit } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
@@ -16,18 +17,33 @@ import { GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
-import { disableMining, enableMining, evmRevert, evmSnapshot, mintTokens, newConnection, setBalance } from './utils'
-import { validateTx } from '../../validateTx'
+import {
+  approveTokens,
+  disableMining,
+  enableMining,
+  evmRevert,
+  evmSnapshot,
+  mintTokens,
+  newConnection,
+  setBalance,
+} from './utils'
+import { validateTx } from '../../validation/tx/validateTx'
+import { TxManager } from '../../tx/TxManager'
+import { Circuit, IProver, LocalProver } from '../../prover/'
 
 import flow from '../flows/flow_independent_deposits_5.json'
 import flowDependentDeposits from '../flows/flow_dependent_deposits_2.json'
 import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
+import { Params } from 'libzkbob-rs-node'
+import { directDepositQueue } from '../../queue/directDepositQueue'
+import { createDirectDepositWorker } from '../../workers/directDepositWorker'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
 
-async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx, PoolTxResult[]>> {
+async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx<WorkerTxType>, PoolTxResult[]>> {
   const job = await poolTxQueue.add('test', {
+    type: WorkerTxType.Normal,
     transactions: [
       {
         amount: '0',
@@ -43,15 +59,26 @@ async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx, Poo
   return job
 }
 
+async function submitDirectDepositJob(deposits: DirectDeposit[]) {
+  const job = await directDepositQueue.add('test', deposits)
+  return job
+}
+
 describe('poolWorker', () => {
   let poolWorker: Worker
   let sentWorker: Worker
   let gasPriceService: GasPrice<'web3'>
+  let txManager: TxManager
   let poolQueueEvents: QueueEvents
   let sentQueueEvents: QueueEvents
-  let workerMutex: Mutex
+  let directDepositQueueEvents: QueueEvents
+  let mutex: Mutex
   let snapShotId: string
   let eventsInit = false
+  let treeProver: IProver<Circuit.Tree>
+  const treeParams = Params.fromFile(config.treeUpdateParamsPath as string)
+  const directDepositParams = Params.fromFile(config.directDepositParamsPath as string)
+  const ddSender = '0x28a8746e75304c0780e011bed21c72cd78cd535e'
 
   beforeEach(async () => {
     snapShotId = await evmSnapshot()
@@ -68,20 +95,47 @@ describe('poolWorker', () => {
     gasPriceService = new GasPrice(web3, 10000, 'web3', {})
     await gasPriceService.start()
 
-    workerMutex = new Mutex()
-    poolWorker = await createPoolTxWorker(gasPriceService, validateTx, workerMutex, redis)
-    sentWorker = await createSentTxWorker(gasPriceService, workerMutex, redis)
+    txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
+    await txManager.init()
+
+    mutex = new Mutex()
+
+    treeProver = new LocalProver(Circuit.Tree, treeParams)
+    const directDepositProver = new LocalProver(Circuit.DirectDeposit, directDepositParams)
+
+    const baseConfig = {
+      redis,
+    }
+    poolWorker = await createPoolTxWorker({
+      ...baseConfig,
+      validateTx,
+      treeProver,
+      mutex,
+      txManager,
+    })
+    sentWorker = await createSentTxWorker({
+      ...baseConfig,
+      mutex,
+      txManager,
+    })
+    const directDepositWorker = await createDirectDepositWorker({
+      ...baseConfig,
+      directDepositProver,
+    })
     sentWorker.run()
     poolWorker.run()
+    directDepositWorker.run()
 
     if (!eventsInit) {
       poolQueueEvents = new QueueEvents(poolWorker.name, { connection: redis })
       sentQueueEvents = new QueueEvents(sentWorker.name, { connection: redis })
+      directDepositQueueEvents = new QueueEvents(directDepositWorker.name, { connection: redis })
       eventsInit = true
     }
 
     await poolWorker.waitUntilReady()
     await sentWorker.waitUntilReady()
+    await directDepositWorker.waitUntilReady()
     await enableMining()
   })
 
@@ -99,7 +153,7 @@ describe('poolWorker', () => {
     gasPriceService.stop()
   })
 
-  async function expectJobFinished(job: Job<BatchTx, PoolTxResult[]>) {
+  async function expectJobFinished(job: Job<BatchTx<WorkerTxType>, PoolTxResult[]>) {
     const [[initialHash, sentId]] = await job.waitUntilFinished(poolQueueEvents)
     expect(initialHash.length).eq(66)
 
@@ -133,7 +187,13 @@ describe('poolWorker', () => {
     await mintTokens(deposit.txTypeData.from as string, parseInt(deposit.txTypeData.amount))
     await sentWorker.pause()
 
-    const mockPoolWorker = await createPoolTxWorker(gasPriceService, async () => {}, workerMutex, newConnection())
+    const mockPoolWorker = await createPoolTxWorker({
+      mutex,
+      redis: newConnection(),
+      txManager,
+      validateTx: async () => {},
+      treeProver,
+    })
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()
 
@@ -255,18 +315,66 @@ describe('poolWorker', () => {
     await setBalance(config.relayerAddress, '0x0')
 
     // @ts-ignore
-    const failJob = await submitJob(deposit)
-    await expect(failJob.waitUntilFinished(poolQueueEvents)).rejectedWith('Insufficient funds for gas * price + value')
-
-    // @ts-ignore
     const job = await submitJob(deposit)
+    await job.waitUntilFinished(poolQueueEvents)
 
-    expect(await poolTxQueue.count()).eq(1)
+    expect(await poolTxQueue.count()).eq(0)
+    expect(await sentTxQueue.count()).eq(1)
     expect(await poolTxQueue.isPaused()).eq(true)
     expect(await sentTxQueue.isPaused()).eq(true)
 
     await setBalance(config.relayerAddress, oldBalance)
 
     await expectJobFinished(job)
+  })
+
+  it('should process direct deposit transaction', async () => {
+    const fee = await pool.PoolInstance.methods.directDepositFee().call()
+    const numDeposits = 16
+    const singleDepositAmount = 2
+    const amount = toBN(fee).muln(numDeposits * singleDepositAmount)
+
+    await mintTokens(ddSender, amount)
+    await approveTokens(ddSender, config.poolAddress, amount)
+
+    const ddFallback = ddSender
+    const diversifier = '35e48bf15982533e0b9d' // 10 bytes
+    const pk = '035b80d59edd72ff0eb3fcf7f7968395300e9c5d5b980de1920aa9d1f151191d' // 32 bytes
+    for (let i = 0; i < numDeposits; i++) {
+      await pool.PoolInstance.methods
+        .directDeposit(ddFallback, pool.denominator.mul(toBN(fee).muln(singleDepositAmount)), '0x' + diversifier + pk)
+        .send({ from: ddSender })
+    }
+
+    const events = await pool.PoolInstance.getPastEvents('SubmitDirectDeposit', {
+      fromBlock: 0,
+      toBlock: 'latest',
+    })
+    const dds: DirectDeposit[] = events.map(e => {
+      const dd = e.returnValues
+      return {
+        sender: dd.sender,
+        nonce: dd.nonce,
+        fallbackUser: dd.fallbackUser,
+        zkAddress: {
+          diversifier: dd.zkAddress.diversifier,
+          pk: dd.zkAddress.pk,
+        },
+        deposit: dd.deposit,
+      }
+    })
+    const ddJob = await submitDirectDepositJob(dds)
+    const [poolJobId, memo] = await ddJob.waitUntilFinished(directDepositQueueEvents)
+    const poolJob = (await poolTxQueue.getJob(poolJobId)) as Job
+    await expectJobFinished(poolJob)
+
+    const contractMemo: string = (
+      await pool.PoolInstance.getPastEvents('Message', {
+        fromBlock: 0,
+        toBlock: 'latest',
+      })
+    ).map(e => e.returnValues.message)[0]
+
+    expect(memo).eq(contractMemo.slice(2))
   })
 })

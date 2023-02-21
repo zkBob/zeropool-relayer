@@ -1,9 +1,9 @@
 import { Queue } from 'bullmq'
-import { redis } from '@/services/redisClient'
 import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
+import { redis } from '@/services/redisClient'
 import type { TransactionConfig } from 'web3-core'
-import { GasPriceValue } from '@/services/gas-price'
-import type { TxPayload } from './poolTxQueue'
+import type { GasPriceValue } from '@/services/gas-price'
+import type { BatchTx, WorkerTxType } from './poolTxQueue'
 
 export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
@@ -13,10 +13,9 @@ export interface SentTxPayload {
   commitIndex: number
   truncatedMemo: string
   txConfig: TransactionConfig
-  nullifier: string
-  txPayload: TxPayload
+  nullifier?: string
+  txPayload: BatchTx<WorkerTxType, false>
   prevAttempts: SendAttempt[]
-  traceId?: string
 }
 
 export enum SentTxState {

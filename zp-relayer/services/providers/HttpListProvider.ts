@@ -22,12 +22,12 @@ export default class HttpListProvider extends BaseHttpProvider {
   latestBlock: number
   syncStateCheckerIntervalId?: NodeJS.Timer
 
-  constructor(urls: string[], options: Partial<ProviderOptions> = {}) {
+  constructor(urls: string[], options: Partial<ProviderOptions> = {}, jsonRpcErrorCodes: number[]) {
     if (!urls || !urls.length) {
       throw new TypeError(`Invalid URLs: '${urls}'`)
     }
 
-    super(urls[0], options)
+    super(urls[0], options, jsonRpcErrorCodes)
     this.currentIndex = 0
     this.lastTimeUsedPrimary = 0
     this.latestBlock = 0

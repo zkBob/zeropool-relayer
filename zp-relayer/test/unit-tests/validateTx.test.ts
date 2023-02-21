@@ -1,6 +1,6 @@
 import { expect } from 'chai'
 import { toBN } from 'web3-utils'
-import { checkDeadline } from '../../validateTx'
+import { checkDeadline } from '../../validation/tx/validateTx'
 
 describe('Validation', () => {
   it('correctly checks deadline', () => {

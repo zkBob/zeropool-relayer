@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { pool, PoolTx } from './pool'
 import { poolTxQueue } from './queue/poolTxQueue'
-import config from './config'
+import config from './configs/relayerConfig'
 import {
   checkGetLimits,
   checkGetSiblings,
@@ -10,10 +10,11 @@ import {
   checkSendTransactionsErrors,
   checkTraceId,
   validateBatch,
-} from './validation/validation'
+} from './validation/api/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
 import { TRACE_ID } from './utils/constants'
+import { getFileHash } from './utils/helpers'
 
 async function sendTransactions(req: Request, res: Response) {
   validateBatch([
@@ -238,8 +239,11 @@ function getSiblings(req: Request, res: Response) {
   res.json(siblings)
 }
 
-function getParamsHash(type: 'tree' | 'transfer') {
-  const hash = type === 'tree' ? pool.treeParamsHash : pool.transferParamsHash
+function getParamsHash(path: string | null) {
+  let hash: string | null = null
+  if (path) {
+    hash = getFileHash(path)
+  }
   return (req: Request, res: Response) => {
     res.json({ hash })
   }
