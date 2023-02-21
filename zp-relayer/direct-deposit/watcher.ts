@@ -41,7 +41,7 @@ async function init() {
 
 async function getLastBlockToProcess(web3: Web3) {
   const lastBlockNumber = await getBlockNumber(web3)
-  return lastBlockNumber
+  return lastBlockNumber - config.blockConfirmations
 }
 
 async function watch() {
