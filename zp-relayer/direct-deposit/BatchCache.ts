@@ -116,14 +116,6 @@ export class BatchCache<T extends { nonce: string }> {
   private async processCache() {
     let count = await this.count()
 
-    if (count < this.batchSize) {
-      // Check if we started a new batch
-      if (this.timer === null) {
-        this.setTimer()
-      }
-      return
-    }
-
     // Execute all whole batches
     while (count >= this.batchSize) {
       await this.execute()
@@ -132,7 +124,7 @@ export class BatchCache<T extends { nonce: string }> {
 
     // If batch still has less than `batchSize`
     // elements then update a timer
-    if (count % this.batchSize != 0) {
+    if (count % this.batchSize != 0 && this.timer === null) {
       this.setTimer()
     }
   }
