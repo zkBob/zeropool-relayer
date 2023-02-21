@@ -1,10 +1,11 @@
 import express, { NextFunction, Request, Response } from 'express'
 import cors from 'cors'
+import semver from 'semver'
 import endpoints from './endpoints'
 import { logger } from './services/appLogger'
 import { ValidationError } from './validation/api/validation'
 import config from './configs/relayerConfig'
-import { TRACE_ID } from './utils/constants'
+import { HEADER_LIBJS, HEADER_TRACE_ID, LIBJS_MIN_VERSION } from './utils/constants'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -33,9 +34,23 @@ export function createRouter() {
   })
 
   router.use((req: Request, res: Response, next: NextFunction) => {
-    if (config.requireTraceId && req.headers[TRACE_ID]) {
-      logger.info('TraceId', { traceId: req.headers[TRACE_ID], path: req.path })
+    const traceId = req.headers[HEADER_TRACE_ID]
+    if (config.requireTraceId && traceId) {
+      logger.info('TraceId', { traceId, path: req.path })
     }
+
+    const libJsVersion = req.headers[HEADER_LIBJS] as string
+    let isValidVersion = false
+    try {
+      isValidVersion = semver.gte(libJsVersion, LIBJS_MIN_VERSION)
+    } catch (e) {
+      logger.warn('Invalid libjs version header', { libJsVersion })
+    }
+
+    if (!isValidVersion) {
+      throw new ValidationError([{ path: HEADER_LIBJS, message: `Minimum supported version: ${LIBJS_MIN_VERSION}` }])
+    }
+
     next()
   })
 

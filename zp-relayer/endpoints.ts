@@ -13,7 +13,7 @@ import {
 } from './validation/api/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import type { Queue } from 'bullmq'
-import { TRACE_ID } from './utils/constants'
+import { HEADER_TRACE_ID } from './utils/constants'
 import { getFileHash } from './utils/helpers'
 
 async function sendTransactions(req: Request, res: Response) {
@@ -23,7 +23,7 @@ async function sendTransactions(req: Request, res: Response) {
   ])
 
   const rawTxs = req.body as PoolTx[]
-  const traceId = req.headers[TRACE_ID] as string
+  const traceId = req.headers[HEADER_TRACE_ID] as string
 
   const txs = rawTxs.map(tx => {
     const { proof, memo, txType, depositSignature } = tx

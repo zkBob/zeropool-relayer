@@ -2,7 +2,6 @@ import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
 import config from '@/configs/baseConfig'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
-import { truncateHexPrefix } from '@/utils/helpers'
 
 const serviceKey = 'direct-deposit'
 const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`
