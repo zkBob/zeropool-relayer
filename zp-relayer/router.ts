@@ -1,10 +1,11 @@
 import express, { NextFunction, Request, Response } from 'express'
 import cors from 'cors'
+import semver from 'semver'
 import endpoints from './endpoints'
 import { logger } from './services/appLogger'
-import { ValidationError } from './validation/validation'
-import config from './config'
-import { TRACE_ID } from './utils/constants'
+import { ValidationError } from './validation/api/validation'
+import config from './configs/relayerConfig'
+import { HEADER_LIBJS, HEADER_TRACE_ID, LIBJS_MIN_VERSION } from './utils/constants'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -16,51 +17,70 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
   }
 }
 
-const router = express.Router()
+export function createRouter() {
+  const router = express.Router()
 
-router.use(cors())
-router.use(express.urlencoded({ extended: true }))
-router.use(express.json())
-router.use(express.text())
+  router.use(cors())
+  router.use(express.urlencoded({ extended: true }))
+  router.use(express.json())
+  router.use(express.text())
 
-router.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (err) {
-    logger.error('Request error:', err)
-    return res.sendStatus(500)
-  }
-  next()
-})
+  router.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (err) {
+      logger.error('Request error:', err)
+      return res.sendStatus(500)
+    }
+    next()
+  })
 
-router.use((req: Request, res: Response, next: NextFunction) => {
-  if (config.requireTraceId && req.headers[TRACE_ID]) {
-    logger.info('TraceId', { traceId: req.headers[TRACE_ID], path: req.path })
-  }
-  next()
-})
+  router.use((req: Request, res: Response, next: NextFunction) => {
+    const traceId = req.headers[HEADER_TRACE_ID]
+    if (config.requireTraceId && traceId) {
+      logger.info('TraceId', { traceId, path: req.path })
+    }
 
-router.get('/', endpoints.root)
-router.get('/version', endpoints.relayerVersion)
-router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
-router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
-router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
-router.get('/job/:id', wrapErr(endpoints.getJob))
-router.get('/info', wrapErr(endpoints.relayerInfo))
-router.get('/fee', wrapErr(endpoints.getFee))
-router.get('/limits', wrapErr(endpoints.getLimits))
-router.get('/siblings', wrapErr(endpoints.getSiblings))
-router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash('tree')))
-router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash('transfer')))
+    if (config.requireLibJsVersion) {
+      const libJsVersion = req.headers[HEADER_LIBJS] as string
+      let isValidVersion = false
+      try {
+        isValidVersion = semver.gte(libJsVersion, LIBJS_MIN_VERSION)
+      } catch (e) {
+        logger.warn('Invalid libjs version header', { libJsVersion })
+      }
 
-// Error handler middleware
-router.use((error: any, req: Request, res: Response) => {
-  if (error instanceof ValidationError) {
-    const validationErrors = error.validationErrors
-    logger.warn('Validation errors', { errors: validationErrors, path: req.path })
-    res.status(400).json(validationErrors)
-  } else {
-    logger.error('Internal error', { error, path: req.path })
-    res.status(500).send('Internal server error')
-  }
-})
+      if (!isValidVersion) {
+        throw new ValidationError([{ path: HEADER_LIBJS, message: `Minimum supported version: ${LIBJS_MIN_VERSION}` }])
+      }
+    }
 
-export default router
+    next()
+  })
+
+  router.get('/', endpoints.root)
+  router.get('/version', endpoints.relayerVersion)
+  router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
+  router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
+  router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
+  router.get('/job/:id', wrapErr(endpoints.getJob))
+  router.get('/info', wrapErr(endpoints.relayerInfo))
+  router.get('/fee', wrapErr(endpoints.getFee))
+  router.get('/limits', wrapErr(endpoints.getLimits))
+  router.get('/siblings', wrapErr(endpoints.getSiblings))
+  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash(config.treeUpdateParamsPath)))
+  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash(config.transferParamsPath)))
+  router.get('/params/hash/direct-deposit', wrapErr(endpoints.getParamsHash(config.directDepositParamsPath)))
+
+  // Error handler middleware
+  router.use((error: any, req: Request, res: Response, next: NextFunction) => {
+    if (error instanceof ValidationError) {
+      const validationErrors = error.validationErrors
+      logger.warn('Validation errors', { errors: validationErrors, path: req.path })
+      res.status(400).json(validationErrors)
+    } else {
+      logger.error('Internal error', { error, path: req.path })
+      res.status(500).send('Internal server error')
+    }
+  })
+
+  return router
+}

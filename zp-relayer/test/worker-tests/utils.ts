@@ -1,11 +1,11 @@
 import type { HttpProvider } from 'web3-core'
+import type BN from 'bn.js'
 import Redis from 'ioredis'
-import { web3 } from './web3'
 import { toBN } from 'web3-utils'
+import { web3 } from './web3'
 import TokenAbi from '../abi/token-abi.json'
 
-export const token = new web3.eth.Contract(TokenAbi as any, '0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab')
-const denominator = toBN(1000000000)
+export const token = new web3.eth.Contract(TokenAbi as any, process.env.RELAYER_TOKEN_ADDRESS)
 const minter = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1'
 
 function callRpcMethod(method: string, params: any[] = []) {
@@ -25,10 +25,21 @@ function callRpcMethod(method: string, params: any[] = []) {
   })
 }
 
-export async function mintTokens(to: string, amount: number) {
+export async function mintTokens(to: string, amount: number | BN, denominator = toBN(1000000000)) {
+  if (typeof amount === 'number') amount = toBN(amount)
+
   await token.methods
-    .mint(to, denominator.muln(amount))
+    .mint(to, denominator.mul(amount))
     .send({ from: minter })
+    .once('transactionHash', () => mineBlock())
+}
+
+export async function approveTokens(from: string, to: string, amount: number | BN, denominator = toBN(1000000000)) {
+  if (typeof amount === 'number') amount = toBN(amount)
+
+  await token.methods
+    .approve(to, denominator.mul(amount))
+    .send({ from })
     .once('transactionHash', () => mineBlock())
 }
 

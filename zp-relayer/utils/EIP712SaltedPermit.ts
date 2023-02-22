@@ -1,4 +1,4 @@
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 import { recoverTypedSignature, SignTypedDataVersion } from '@metamask/eth-sig-util'
 import Web3 from 'web3'
 import TokenAbi from '@/abi/token-abi.json'

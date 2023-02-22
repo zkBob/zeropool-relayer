@@ -13,7 +13,7 @@ export async function newAccount() {
   const sk = Array.from({ length: 10 }, () => Math.floor(Math.random() * 100))
   const stateId = sk.toString()
   const state = await UserState.init(stateId)
-  const zkAccount = UserAccount.fromSeed(Uint8Array.from(sk), state)
+  const zkAccount = UserAccount.fromSeed(Uint8Array.from(sk), 0n, state)
   return zkAccount
 }
 

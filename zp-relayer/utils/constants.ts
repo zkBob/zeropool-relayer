@@ -4,6 +4,10 @@ const constants = {
   FALLBACK_RPC_URL_SWITCH_TIMEOUT: 60 * 60 * 1000,
   TX_QUEUE_NAME: 'tx',
   SENT_TX_QUEUE_NAME: 'sent',
+  DIRECT_DEPOSIT_QUEUE_NAME: 'dd-prove',
+  DIRECT_DEPOSIT_SET_NAME: 'dd:cache',
+  DIRECT_DEPOSIT_REPROCESS_NAME: 'dd:reprocess',
+  DIRECT_DEPOSIT_REPROCESS_INTERVAL: 60 * 1000,
   OUTPLUSONE: Constants.OUT + 1,
   TRANSFER_INDEX_SIZE: 12,
   ENERGY_SIZE: 28,
@@ -17,7 +21,10 @@ const constants = {
     maxTimeout: 60000,
     randomize: true,
   },
-  TRACE_ID: 'zkbob-support-id' as const,
+  MESSAGE_PREFIX_COMMON_V1: '0000',
+  HEADER_TRACE_ID: 'zkbob-support-id' as const,
+  HEADER_LIBJS: 'zkbob-libjs-version' as const,
+  LIBJS_MIN_VERSION: '2.0.0',
 }
 
 export = constants

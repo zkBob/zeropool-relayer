@@ -1,8 +1,9 @@
 import BN from 'bn.js'
 import type Web3 from 'web3'
+import type { TransactionConfig } from 'web3-core'
 import { toWei, toBN } from 'web3-utils'
 import BigNumber from 'bignumber.js'
-import config from '@/config'
+import config from '@/configs/relayerConfig'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
 import { GasPriceOracle } from 'gas-price-oracle'
@@ -36,6 +37,19 @@ function isLegacyGasPrice(gp: GasPriceValue): gp is LegacyGasPrice {
 
 function isEIP1559GasPrice(gp: GasPriceValue): gp is EIP1559GasPrice {
   return 'maxFeePerGas' in gp && 'maxPriorityFeePerGas' in gp
+}
+
+export function getGasPriceValue(tx: TransactionConfig): GasPriceValue | null {
+  if ('gasPrice' in tx) {
+    return { gasPrice: tx.gasPrice as string }
+  }
+  if ('maxFeePerGas' in tx && 'maxPriorityFeePerGas' in tx) {
+    return {
+      maxFeePerGas: tx.maxFeePerGas as string,
+      maxPriorityFeePerGas: tx.maxPriorityFeePerGas as string,
+    }
+  }
+  return null
 }
 
 export function getMaxRequiredGasPrice(gp: GasPriceValue): string {

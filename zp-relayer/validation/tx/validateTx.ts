@@ -1,45 +1,25 @@
 import BN from 'bn.js'
-import { toBN, AbiItem } from 'web3-utils'
-import { TxType, TxData, WithdrawTxData, PermittableDepositTxData, getTxData } from 'zp-memo-parser'
+import { toBN } from 'web3-utils'
+import type { Contract } from 'web3-eth-contract'
+import { TxType, TxData, getTxData } from 'zp-memo-parser'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
-import { logger } from './services/appLogger'
-import config from './config'
-import type { Limits, Pool } from './pool'
-import type { NullifierSet } from './state/nullifierSet'
-import TokenAbi from './abi/token-abi.json'
-import { web3 } from './services/web3'
-import { contractCallRetry, numToHex, unpackSignature } from './utils/helpers'
-import { recoverSaltedPermit } from './utils/EIP712SaltedPermit'
-import { ZERO_ADDRESS, TRACE_ID } from './utils/constants'
-import { TxPayload } from './queue/poolTxQueue'
-import { getTxProofField, parseDelta } from './utils/proofInputs'
-import type { PoolState } from './state/PoolState'
-
-const tokenContract = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
+import { logger } from '@/services/appLogger'
+import config from '@/configs/relayerConfig'
+import type { Limits, Pool } from '@/pool'
+import type { NullifierSet } from '@/state/nullifierSet'
+import { web3 } from '@/services/web3'
+import { contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
+import { recoverSaltedPermit } from '@/utils/EIP712SaltedPermit'
+import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1 } from '@/utils/constants'
+import { getTxProofField, parseDelta } from '@/utils/proofInputs'
+import type { TxPayload } from '@/queue/poolTxQueue'
+import type { PoolState } from '@/state/PoolState'
+import { checkAssertion, TxValidationError, checkSize, checkScreener } from './common'
 
 const ZERO = toBN(0)
 
-export class TxValidationError extends Error {
-  name = 'TxValidationError'
-  constructor(message: string) {
-    super(message)
-  }
-}
-
-type OptionError = Error | null
-export async function checkAssertion(f: () => Promise<OptionError> | OptionError) {
-  const err = await f()
-  if (err) {
-    throw err
-  }
-}
-
-export function checkSize(data: string, size: number) {
-  return data.length === size
-}
-
-export async function checkBalance(address: string, minBalance: string) {
-  const balance = await contractCallRetry(tokenContract, 'balanceOf', [address])
+export async function checkBalance(token: Contract, address: string, minBalance: string) {
+  const balance = await contractCallRetry(token, 'balanceOf', [address])
   const res = toBN(balance).gte(toBN(minBalance))
   if (!res) {
     return new TxValidationError('Not enough balance for deposit')
@@ -114,7 +94,6 @@ export function checkNonZeroWithdrawAddress(address: string) {
  * @param threshold "window" added to current relayer time, in seconds
  */
 export function checkDeadline(signedDeadline: BN, threshold: number) {
-  logger.debug(`Deadline: ${signedDeadline}`)
   // Check native amount (relayer faucet)
   const currentTimestamp = new BN(Math.floor(Date.now() / 1000))
   if (signedDeadline <= currentTimestamp.addn(threshold)) {
@@ -145,18 +124,19 @@ export function checkLimits(limits: Limits, amount: BN) {
   return null
 }
 
-async function checkDepositEnoughBalance(address: string, requiredTokenAmount: BN) {
+async function checkDepositEnoughBalance(token: Contract, address: string, requiredTokenAmount: BN) {
   if (requiredTokenAmount.lte(toBN(0))) {
     throw new TxValidationError('Requested balance check for token amount <= 0')
   }
 
-  return checkBalance(address, requiredTokenAmount.toString(10))
+  return checkBalance(token, address, requiredTokenAmount.toString(10))
 }
 
-async function getRecoveredAddress(
-  txType: TxType,
+async function getRecoveredAddress<T extends TxType>(
+  txType: T,
   proofNullifier: string,
-  txData: TxData,
+  txData: TxData<T>,
+  tokenContract: Contract,
   tokenAmount: BN,
   depositSignature: string | null
 ) {
@@ -172,7 +152,7 @@ async function getRecoveredAddress(
   if (txType === TxType.DEPOSIT) {
     recoveredAddress = web3.eth.accounts.recover(nullifier, sig)
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
-    const { deadline, holder } = txData as PermittableDepositTxData
+    const { deadline, holder } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
     const owner = web3.utils.toChecksumAddress(web3.utils.bytesToHex(Array.from(holder)))
     const spender = web3.utils.toChecksumAddress(config.poolAddress as string)
     const nonce = await contractCallRetry(tokenContract, 'nonces', [owner])
@@ -214,36 +194,12 @@ function checkPoolId(deltaPoolId: BN, contractPoolId: BN) {
   return new TxValidationError(`Incorrect poolId: given ${deltaPoolId}, expected ${contractPoolId}`)
 }
 
-async function checkScreener(address: string, traceId?: string) {
-  if (config.screenerUrl === null || config.screenerToken === null) {
+function checkMemoPrefix(memo: string, txType: TxType) {
+  const numItemsSuffix = truncateMemoTxPrefix(memo, txType).substring(4, 8)
+  if (numItemsSuffix === MESSAGE_PREFIX_COMMON_V1) {
     return null
   }
-
-  const ACC_VALIDATION_FAILED = 'Internal account validation failed'
-
-  const headers: Record<string, string> = {
-    'Content-type': 'application/json',
-    'Authorization': `Bearer ${config.screenerToken}`,
-  }
-
-  if (traceId) headers[TRACE_ID] = traceId
-
-  try {
-    const rawResponse = await fetch(config.screenerUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ address }),
-    })
-    const response = await rawResponse.json()
-    if (response.result === true) {
-      return new TxValidationError(ACC_VALIDATION_FAILED)
-    }
-  } catch (e) {
-    logger.error('Request to screener failed', { error: (e as Error).message })
-    return new TxValidationError(ACC_VALIDATION_FAILED)
-  }
-
-  return null
+  return new TxValidationError(`Memo prefix is incorrect: ${numItemsSuffix}`)
 }
 
 export async function validateTx(
@@ -251,6 +207,8 @@ export async function validateTx(
   pool: Pool,
   traceId?: string
 ) {
+  await checkAssertion(() => checkMemoPrefix(rawMemo, txType))
+
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
@@ -280,23 +238,30 @@ export async function validateTx(
   let userAddress = ZERO_ADDRESS
 
   if (txType === TxType.WITHDRAWAL) {
-    const { nativeAmount, receiver } = txData as WithdrawTxData
+    const { nativeAmount, receiver } = txData as TxData<TxType.WITHDRAWAL>
     userAddress = web3.utils.bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
     await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
     await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
-    userAddress = await getRecoveredAddress(txType, nullifier, txData, requiredTokenAmount, depositSignature)
+    userAddress = await getRecoveredAddress(
+      txType,
+      nullifier,
+      txData,
+      pool.TokenInstance,
+      requiredTokenAmount,
+      depositSignature
+    )
     logger.info('Deposit address: %s', userAddress)
-    await checkAssertion(() => checkDepositEnoughBalance(userAddress, requiredTokenAmount))
+    await checkAssertion(() => checkDepositEnoughBalance(pool.TokenInstance, userAddress, requiredTokenAmount))
   }
 
   const limits = await pool.getLimitsFor(userAddress)
   await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
 
   if (txType === TxType.PERMITTABLE_DEPOSIT) {
-    const { deadline } = txData as PermittableDepositTxData
+    const { deadline } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
     logger.info('Deadline: %s', deadline)
     await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdInitial))
   }

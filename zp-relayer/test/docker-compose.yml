@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   anvil:
-    image: ghcr.io/foundry-rs/foundry:nightly-70f4fb55fa87e0e980f7f9fcccc5429bb1a48dbe
+    image: ghcr.io/foundry-rs/foundry:nightly-08d4315330b041cba67e44c65e0fc187fef54422
     ports:
       - 8545:8545
     entrypoint: >

@@ -1,5 +1,5 @@
 export const config = {
-  tokenAddress: '0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab',
-  poolAddress: '0xe982E462b094850F12AF94d21D470e21bE9D0E9C',
+  tokenAddress: '0xCfEB869F69431e42cdB54A4F4f105C19C080A601',
+  poolAddress: '0x9b1f7F645351AF3631a656421eD2e40f2802E6c0',
   chainId: 31337,
 }

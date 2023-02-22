@@ -1,12 +1,14 @@
-import type Web3 from 'web3'
-import type { Contract } from 'web3-eth-contract'
+import fs from 'fs'
+import crypto from 'crypto'
 import type BN from 'bn.js'
-import { padLeft, toBN } from 'web3-utils'
-import { logger } from '@/services/appLogger'
+import type Web3 from 'web3'
+import type { Mutex } from 'async-mutex'
+import type { Contract } from 'web3-eth-contract'
 import type { SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
-import type { Mutex } from 'async-mutex'
 import promiseRetry from 'promise-retry'
+import { padLeft, toBN } from 'web3-utils'
+import { logger } from '@/services/appLogger'
 import { isContractCallError } from './web3Errors'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
@@ -85,9 +87,12 @@ export function unpackSignature(packedSign: string) {
   return sig
 }
 
-export function flattenProof(p: SnarkProof): string {
-  return [p.a, p.b.flat(), p.c]
-    .flat()
+export function flattenProof(p: SnarkProof): string[] {
+  return [p.a, p.b, p.c].flat(2)
+}
+
+export function encodeProof(p: SnarkProof): string {
+  return flattenProof(p)
     .map(n => {
       const hex = numToHex(toBN(n))
       return hex
@@ -234,4 +239,11 @@ export function contractCallRetry(contract: Contract, method: string, args: any[
       maxTimeout: 500,
     }
   )
+}
+
+export function getFileHash(path: string) {
+  const buffer = fs.readFileSync(path)
+  const hash = crypto.createHash('sha256')
+  hash.update(buffer)
+  return hash.digest('hex')
 }
