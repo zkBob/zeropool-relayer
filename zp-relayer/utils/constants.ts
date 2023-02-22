@@ -21,8 +21,10 @@ const constants = {
     maxTimeout: 60000,
     randomize: true,
   },
-  TRACE_ID: 'zkbob-support-id' as const,
   MESSAGE_PREFIX_COMMON_V1: '0000',
+  HEADER_TRACE_ID: 'zkbob-support-id' as const,
+  HEADER_LIBJS: 'zkbob-libjs-version' as const,
+  LIBJS_MIN_VERSION: '2.0.0',
 }
 
 export = constants

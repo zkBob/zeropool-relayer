@@ -1,6 +1,6 @@
 import config from '@/configs/baseConfig'
 import { logger } from '@/services/appLogger'
-import { TRACE_ID } from '@/utils/constants'
+import { HEADER_TRACE_ID } from '@/utils/constants'
 
 export class TxValidationError extends Error {
   name = 'TxValidationError'
@@ -33,7 +33,7 @@ export async function checkScreener(address: string, traceId?: string) {
     'Authorization': `Bearer ${config.screenerToken}`,
   }
 
-  if (traceId) headers[TRACE_ID] = traceId
+  if (traceId) headers[HEADER_TRACE_ID] = traceId
 
   try {
     const rawResponse = await fetch(config.screenerUrl, {

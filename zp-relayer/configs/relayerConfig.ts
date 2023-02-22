@@ -47,6 +47,7 @@ const config = {
   insufficientBalanceCheckTimeout: parseInt(process.env.RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT || '60000'),
   permitDeadlineThresholdInitial: parseInt(process.env.RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),
   requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
+  requireLibJsVersion: process.env.RELAYER_REQUIRE_LIBJS_VERSION === 'true',
   logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
