@@ -48,7 +48,10 @@ export class BatchCache<T extends { nonce: string }> {
 
   private setTimer() {
     this.clearTimer()
-    this.timer = setTimeout(() => this.execute(), this.ttl)
+    this.timer = setTimeout(() => {
+      logger.info('BatchCache timer expired, processing...')
+      this.execute()
+    }, this.ttl)
   }
 
   private addToRedis(values: [string, T][]) {
@@ -78,9 +81,11 @@ export class BatchCache<T extends { nonce: string }> {
     const validatedEs: T[] = []
     let es: T[] = []
     let count: number
+    logger.info('Assembling new batch...')
     do {
       count = this.batchSize - validatedEs.length
       es = await this.take(count)
+      logger.info('Retrieved entries from cache', { count: es.length })
 
       const validatedResults = await Promise.allSettled(
         es.map(async e => {
@@ -110,6 +115,7 @@ export class BatchCache<T extends { nonce: string }> {
       logger.warn('Empty batch after validation, skipping')
       return
     }
+    logger.info('Executing batch', { count: validatedEs.length })
     await this.cb(validatedEs)
   }
 
