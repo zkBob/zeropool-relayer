@@ -5,6 +5,7 @@ These environment variables are required for all services.
 | name | description | value |
 | - | - | - |
 | COMMON_LOG_LEVEL | Log level | Winston log level |
+| COMMON_COLORIZE_LOGS | If set to `true`, log levels will be colorized when printed to stdout. | boolean |
 | COMMON_POOL_ADDRESS | Address of the pool contract | hexadecimal prefixed with "0x" |
 | COMMON_START_BLOCK | The block number used to start searching for events when the relayer/watcher instance is run for the first time | integer |
 | COMMON_REDIS_URL | Url to redis instance | URL |
@@ -56,5 +57,5 @@ These environment variables are required for all services.
 | name | description | value |
 | - | - | - |
 | WATCHER_EVENT_POLLING_INTERVAL | The interval in milliseconds used to request the RPC node for new blocks. | integer |
-| WATCHER_DIRECT_DEPOSIT_BATCH_SIZE | Maximum size of a single direct deposit batch. Defaults to `16`. | integer |
-| WATCHER_DIRECT_DEPOSIT_BATCH_TTL | Maximum TTL in milliseconds for a new direct deposit batch. After this time batch will be submitted to the queue, even if it has less than `DIRECT_DEPOSIT_BATCH_SIZE` elements. Defaults to `3600000` (1 hour) | integer |
+| DIRECT_DEPOSIT_BATCH_SIZE | Maximum size of a single direct deposit batch. Defaults to `16`. | integer |
+| DIRECT_DEPOSIT_BATCH_TTL | Maximum TTL in milliseconds for a new direct deposit batch. After this time batch will be submitted to the queue, even if it has less than `DIRECT_DEPOSIT_BATCH_SIZE` elements. Defaults to `3600000` (1 hour) | integer |
