@@ -1,6 +1,7 @@
 const config = {
   poolAddress: process.env.COMMON_POOL_ADDRESS as string,
   startBlock: parseInt(process.env.COMMON_START_BLOCK || '0'),
+  colorizeLogs: process.env.COMMON_COLORIZE_LOGS === 'true',
   logLevel: process.env.COMMON_LOG_LEVEL || 'debug',
   redisUrl: process.env.COMMON_REDIS_URL as string,
   rpcUrls: (process.env.COMMON_RPC_URL as string).split(' ').filter(url => url.length > 0),

@@ -4,27 +4,27 @@ import { logger } from '@/services/appLogger'
 
 export async function getNonce(web3: Web3, address: string) {
   try {
-    logger.debug(`Getting transaction count for ${address}`)
+    logger.debug('Getting transaction count', { address })
     const transactionCount = await web3.eth.getTransactionCount(address)
-    logger.debug(`Transaction count obtained for ${address}: ${transactionCount}`)
+    logger.debug('Transaction count obtained', { address, transactionCount})
     return transactionCount
   } catch (e) {
     if (e instanceof Error) logger.error(e.message)
-    throw new Error(`Nonce cannot be obtained`)
+    throw new Error('Nonce cannot be obtained')
   }
 }
 
 export async function getEvents(contract: Contract, event: string, options: PastEventOptions) {
   try {
     const contractAddress = contract.options.address
-    logger.info('%o, Getting past events', {
+    logger.info('Getting past events', {
       contractAddress,
       event,
       fromBlock: options.fromBlock,
       toBlock: options.toBlock,
     })
     const pastEvents = await contract.getPastEvents(event, options)
-    logger.debug('%o, Past events obtained', {
+    logger.debug('Past events obtained', {
       contractAddress,
       event,
       count: pastEvents.length,
@@ -36,15 +36,15 @@ export async function getEvents(contract: Contract, event: string, options: Past
   }
 }
 
-export async function getTransaction(web3: Web3, hash: string) {
+export async function getTransaction(web3: Web3, txHash: string) {
   try {
-    logger.info(`Getting tx ${hash}`)
-    const tx = await web3.eth.getTransaction(hash)
-    logger.debug(`Got tx ${hash}`)
+    logger.info('Getting tx', { txHash })
+    const tx = await web3.eth.getTransaction(txHash)
+    logger.debug('Got tx', { txHash })
     return tx
   } catch (e) {
     if (e instanceof Error) logger.error(e.message)
-    throw new Error(`${hash} tx cannot be obtained`)
+    throw new Error(`${txHash} tx cannot be obtained`)
   }
 }
 
@@ -52,7 +52,7 @@ export async function getChainId(web3: Web3) {
   try {
     logger.debug('Getting chain id')
     const chainId = await web3.eth.getChainId()
-    logger.debug(`Chain id obtained ${chainId}`)
+    logger.debug('Chain id obtained', { chainId })
     return chainId
   } catch (e) {
     if (e instanceof Error) logger.error(e.message)
@@ -64,7 +64,7 @@ export async function getBlockNumber(web3: Web3) {
   try {
     logger.debug('Getting block number')
     const blockNumber = await web3.eth.getBlockNumber()
-    logger.debug('Block number obtained %d', blockNumber)
+    logger.debug('Block number obtained', { blockNumber })
     return blockNumber
   } catch (e) {
     if (e instanceof Error) logger.error(e.message)
