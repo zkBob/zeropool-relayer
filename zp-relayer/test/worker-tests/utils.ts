@@ -3,9 +3,71 @@ import type BN from 'bn.js'
 import Redis from 'ioredis'
 import { toBN } from 'web3-utils'
 import { web3 } from './web3'
-import TokenAbi from '../abi/token-abi.json'
 
-export const token = new web3.eth.Contract(TokenAbi as any, process.env.RELAYER_TOKEN_ADDRESS)
+export const token = new web3.eth.Contract(
+  [
+    {
+      inputs: [
+        {
+          internalType: 'address',
+          name: '_to',
+          type: 'address',
+        },
+        {
+          internalType: 'uint256',
+          name: '_amount',
+          type: 'uint256',
+        },
+      ],
+      name: 'mint',
+      outputs: [],
+      type: 'function',
+    },
+    {
+      inputs: [
+        {
+          internalType: 'address',
+          name: 'spender',
+          type: 'address',
+        },
+        {
+          internalType: 'uint256',
+          name: 'amount',
+          type: 'uint256',
+        },
+      ],
+      name: 'approve',
+      outputs: [
+        {
+          internalType: 'bool',
+          name: '',
+          type: 'bool',
+        },
+      ],
+      type: 'function',
+    },
+    {
+      inputs: [
+        {
+          internalType: 'address',
+          name: 'account',
+          type: 'address',
+        },
+      ],
+      name: 'balanceOf',
+      outputs: [
+        {
+          internalType: 'uint256',
+          name: '_balance',
+          type: 'uint256',
+        },
+      ],
+      type: 'function',
+    },
+  ],
+  process.env.RELAYER_TOKEN_ADDRESS
+)
+
 const minter = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1'
 
 function callRpcMethod(method: string, params: any[] = []) {
