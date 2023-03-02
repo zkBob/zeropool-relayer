@@ -5,6 +5,7 @@ import { TxType } from 'zp-memo-parser'
 import type { PoolTx } from '@/pool'
 import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
 import config from '@/configs/relayerConfig'
+import { logger } from '@/services/appLogger'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
@@ -186,3 +187,44 @@ export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)
 export const checkTraceId = checkErrors(AjvTraceIdSchema)
+
+async function fetchSafe(url: string) {
+  const r = await fetch(url)
+  if (!r.ok) {
+    throw new Error(`HTTP status code: ${r.status}`)
+  }
+  return r
+}
+
+export async function validateCountryIP(ip: string) {
+  if (config.blockedCountries.length === 0) return null
+
+  const apis = [
+    fetchSafe(`https://ipapi.co/${ip}/country`).then(res => res.text()),
+    fetchSafe(`https://api.country.is/${ip}`)
+      .then(res => res.json())
+      .then(data => data.country),
+  ]
+  const country: string = await Promise.any(apis).catch(e => {
+    const errors = (e as AggregateError).errors
+    logger.error('Failed to fetch country by ip', errors)
+    throw new ValidationError([
+      {
+        path: 'ip',
+        message: 'Could not validate user IP',
+      },
+    ])
+  })
+
+  if (config.blockedCountries.includes(country)) {
+    logger.warn('Restricted country', { ip, country })
+    throw new ValidationError([
+      {
+        path: 'ip',
+        message: `Country ${country} is restricted`,
+      },
+    ])
+  }
+
+  return null
+}

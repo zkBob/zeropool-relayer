@@ -52,6 +52,7 @@ const config = {
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
     .filter(r => r.length > 0),
+  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '').split(' ').filter(r => r.length > 0),
   treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
   directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
 }

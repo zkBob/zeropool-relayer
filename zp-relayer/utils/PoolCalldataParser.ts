@@ -18,6 +18,6 @@ export class PoolCalldataParser {
   getField(f: Field, defaultSize?: number) {
     let { start, size } = this.fields[f]
     size = defaultSize || size
-    return '0x' + this.calldata.slice(start, start + size).toString('hex')
+    return '0x' + this.calldata.subarray(start, start + size).toString('hex')
   }
 }
