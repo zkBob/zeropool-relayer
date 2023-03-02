@@ -65,6 +65,7 @@ const config = {
       }
       return exists
     }),
+  trustProxy: process.env.RELAYER_EXPRESS_TRUST_PROXY === 'true',
   treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
   directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
 }
