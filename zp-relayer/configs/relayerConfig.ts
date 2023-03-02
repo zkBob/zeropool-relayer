@@ -1,7 +1,9 @@
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
-import type { EstimationType, GasPriceKey } from '../services/gas-price'
+import type { EstimationType, GasPriceKey } from '@/services/gas-price'
 import baseConfig from './baseConfig'
+import { countryCodes } from '@/utils/countryCodes'
+import { logger } from '@/services/appLogger'
 
 export enum ProverType {
   Local = 'local',
@@ -52,7 +54,17 @@ const config = {
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
     .filter(r => r.length > 0),
-  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '').split(' ').filter(r => r.length > 0),
+  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '')
+    .split(' ')
+    .filter(c => {
+      if (c.length === 0) return false
+
+      const exists = countryCodes.has(c)
+      if (!exists) {
+        logger.error(`Country code ${c} is not valid, skipping`)
+      }
+      return exists
+    }),
   treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
   directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
 }
