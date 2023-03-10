@@ -32,7 +32,7 @@ async function checkMarked(redis: Redis, id: string) {
 
 async function clearOptimisticState() {
   logger.info('Rollback optimistic state...')
-  pool.optimisticState.rollbackTo(pool.state)
+  pool.optimisticState.rollbackTo(pool.state.getNextIndex())
   logger.info('Clearing optimistic nullifiers...')
   await pool.optimisticState.nullifiers.clear()
 

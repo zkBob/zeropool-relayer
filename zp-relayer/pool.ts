@@ -14,6 +14,7 @@ import { PoolState } from './state/PoolState'
 
 import type { TxType } from 'zp-memo-parser'
 import { contractCallRetry, numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
+import { Range } from '@/utils/Range'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
 import { OUTPLUSONE } from './utils/constants'
 
@@ -126,41 +127,46 @@ class Pool {
   }
 
   async syncState(startBlock: number) {
-    logger.debug('Syncing state; starting from block %d', startBlock)
-
     const localIndex = this.state.getNextIndex()
     const localRoot = this.state.getMerkleRoot()
 
     const contractIndex = await this.getContractIndex()
     const contractRoot = await this.getContractMerkleRoot(contractIndex)
 
-    logger.debug(`LOCAL ROOT: ${localRoot}; LOCAL INDEX: ${localIndex}`)
-    logger.debug(`CONTRACT ROOT: ${contractRoot}; CONTRACT INDEX: ${contractIndex}`)
+    logger.info('State summary', {
+      localIndex,
+      localRoot,
+      contractIndex,
+      contractRoot,
+    })
+
+    // Rollback state if it is ahead of the contract
+    if (contractIndex < localIndex) {
+      logger.info('Rolling back state to index %d', contractIndex)
+      this.state.rollbackTo(contractIndex)
+    }
 
     if (contractRoot === localRoot && contractIndex === localIndex) {
       logger.info('State is ok, no need to resync')
       return
     }
 
-    const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
-    const missedIndices = Array(numTxs)
-    for (let i = 0; i < numTxs; i++) {
-      missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
-    }
+    logger.debug('Syncing state; starting from block %d', startBlock)
 
     const transactSelector = '0xaf989083'
     const directDepositSelector = '0x1dc4cb33'
 
-    const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
-    let toBlock = startBlock
-    for (let fromBlock = startBlock; toBlock < lastBlockNumber; fromBlock = toBlock) {
-      toBlock = Math.min(toBlock + config.eventsProcessingBatchSize, lastBlockNumber)
+    const lastBlockNumber = await this.getLastBlockToProcess()
+    const range = new Range({
+      start: startBlock,
+      end: lastBlockNumber,
+      step: config.eventsProcessingBatchSize - 1,
+    })
+
+    for (const [fromBlock, toBlock] of range) {
       const events = await getEvents(this.PoolInstance, 'Message', {
         fromBlock,
-        toBlock: toBlock - 1,
-        filter: {
-          index: missedIndices,
-        },
+        toBlock,
       })
 
       for (let i = 0; i < events.length; i++) {

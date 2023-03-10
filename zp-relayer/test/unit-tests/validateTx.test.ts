@@ -4,7 +4,7 @@ import { checkDeadline } from '../../validation/tx/validateTx'
 
 describe('Validation', () => {
   it('correctly checks deadline', () => {
-    // curent time + 10 sec
+    // current time + 10 sec
     const signedDeadline = toBN(Math.floor(Date.now() / 1000) + 10)
 
     expect(checkDeadline(signedDeadline, 7)).to.be.null
