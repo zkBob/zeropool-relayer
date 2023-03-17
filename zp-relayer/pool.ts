@@ -210,10 +210,6 @@ class Pool {
           const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
 
           memo = truncateMemoTxPrefix(memoRaw, txType)
-
-          // Save nullifier in confirmed state
-          const nullifier = parser.getField('nullifier')
-          await this.state.nullifiers.add([web3.utils.hexToNumberString(nullifier)])
         } else {
           throw new Error(`Unknown transaction type: ${input}`)
         }

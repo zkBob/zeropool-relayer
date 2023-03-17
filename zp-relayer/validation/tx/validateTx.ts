@@ -39,10 +39,22 @@ export function checkProof(txProof: Proof, verify: (p: SnarkProof, i: Array<stri
   return null
 }
 
-export async function checkNullifier(nullifier: string, nullifierSet: NullifierSet) {
+export async function checkNullifier(nullifier: string, nullifierSet: NullifierSet, contractFallback?: Contract) {
   const inSet = await nullifierSet.isInSet(nullifier)
-  if (inSet === 0) return null
-  return new TxValidationError(`Doublespend detected in ${nullifierSet.name}`)
+  if (inSet === 1) {
+    return new TxValidationError(`Doublespend detected in ${nullifierSet.name}`)
+  }
+
+  if (contractFallback) {
+    const inContract = await contractCallRetry(contractFallback, 'nullifiers', [nullifier])
+    if (!toBN(inContract).eq(ZERO)) {
+      logger.info('Saving nullifier to redis...', {nullifier})
+      await nullifierSet.add([nullifier])
+      return new TxValidationError(`Doublespend detected in fallback contract`)
+    }
+  }
+
+  return null
 }
 
 export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
@@ -226,7 +238,8 @@ export async function validateTx(
 
   await checkAssertion(() => checkPoolId(delta.poolId, pool.poolId))
   await checkAssertion(() => checkRoot(delta.transferIndex, root, pool.optimisticState))
-  await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
+  await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers, pool.PoolInstance))
+  // For optimistic nullifiers we don't need to check the contract fallback
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
   await checkAssertion(() => checkFee(fee))
