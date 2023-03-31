@@ -6,7 +6,7 @@ export async function getNonce(web3: Web3, address: string) {
   try {
     logger.debug('Getting transaction count', { address })
     const transactionCount = await web3.eth.getTransactionCount(address)
-    logger.debug('Transaction count obtained', { address, transactionCount})
+    logger.debug('Transaction count obtained', { address, transactionCount })
     return transactionCount
   } catch (e) {
     if (e instanceof Error) logger.error(e.message)

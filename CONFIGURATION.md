@@ -51,6 +51,8 @@ These environment variables are required for all services.
 | RELAYER_LOG_HEADER_BLACKLIST | List of space separated HTTP headers which will be suppressed in request logs. E.g. `content-length content-type` | string(s) |
 | RELAYER_SCREENER_URL | Screener service URL | URL |
 | RELAYER_SCREENER_TOKEN | Authorization token for screener service | string |
+| RELAYER_BLOCKED_COUNTRIES | A list of country codes delimited by spaces | string|
+| RELAYER_EXPRESS_TRUST_PROXY | If set to `true`, then `trust proxy` express setting will be enabled. Defaults to `false` | boolean |
 
 ## Watcher
 

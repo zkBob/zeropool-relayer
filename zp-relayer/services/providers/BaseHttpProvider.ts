@@ -1,4 +1,3 @@
-import fetch from 'node-fetch'
 import { HttpProvider } from 'web3-core'
 import type { OperationOptions } from 'retry'
 
@@ -33,7 +32,7 @@ export default abstract class BaseHttpProvider implements HttpProvider {
       },
       method: 'POST',
       body: JSON.stringify(payload),
-      timeout: options.requestTimeout,
+      signal: AbortSignal.timeout(options.requestTimeout),
     })
 
     if (!rawResponse.ok) {

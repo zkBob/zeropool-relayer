@@ -8,6 +8,10 @@ import { init } from './init'
 init().then(() => {
   const app = express()
 
+  if (config.trustProxy) {
+    app.set('trust proxy', true)
+  }
+
   app.use(createPersistentLoggerMiddleware(config.requestLogPath))
   app.use(createConsoleLoggerMiddleware())
 

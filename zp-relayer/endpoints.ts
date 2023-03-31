@@ -3,6 +3,7 @@ import { pool, PoolTx } from './pool'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './configs/relayerConfig'
 import {
+  validateCountryIP,
   checkGetLimits,
   checkGetSiblings,
   checkGetTransactionsV2,
@@ -21,6 +22,8 @@ async function sendTransactions(req: Request, res: Response) {
     [checkTraceId, req.headers],
     [checkSendTransactionsErrors, req.body],
   ])
+
+  await validateCountryIP(req.ip)
 
   const rawTxs = req.body as PoolTx[]
   const traceId = req.headers[HEADER_TRACE_ID] as string
