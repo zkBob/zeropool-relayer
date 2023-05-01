@@ -24,7 +24,14 @@ interface HandlerConfig<T extends WorkerTxType> {
   jobId: string
 }
 
-export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, treeProver }: IPoolWorkerConfig) {
+export async function createPoolTxWorker({
+  redis,
+  mutex,
+  txManager,
+  validateTx,
+  treeProver,
+  feeManager,
+}: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -43,11 +50,15 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
     const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = processResult
 
     const gas = config.relayerGasLimit
-    const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
-      data,
-      gas: gas.toString(),
-      to: config.poolAddress,
-    })
+    const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx(
+      {
+        data,
+        gas: gas.toString(),
+        to: config.poolAddress,
+      },
+      // XXX: Assumed that gasPrice was updated during fee validation
+      { shouldUpdateGasPrice: false }
+    )
     logger.info('Sending tx', { txHash })
     try {
       await txManager.sendTransaction(rawTransaction)
@@ -133,7 +144,13 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
         processResult = await buildDirectDeposits(tx, treeProver, pool.optimisticState)
       } else if (type === WorkerTxType.Normal) {
         const tx = payload as WorkerTx<WorkerTxType.Normal>
-        await validateTx(tx, pool, traceId)
+
+        const requiredFee = await feeManager.estimateFee({
+          gasLimit: config.relayerGasLimit,
+        })
+        const denominatedFee = requiredFee.div(pool.denominator)
+
+        await validateTx(tx, pool, denominatedFee, traceId)
 
         processResult = await buildTx(tx, treeProver, pool.optimisticState)
       } else {

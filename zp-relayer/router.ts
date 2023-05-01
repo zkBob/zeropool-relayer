@@ -6,6 +6,11 @@ import { logger } from './services/appLogger'
 import { ValidationError } from './validation/api/validation'
 import config from './configs/relayerConfig'
 import { HEADER_LIBJS, HEADER_TRACE_ID, LIBJS_MIN_VERSION } from './utils/constants'
+import type { FeeManager } from './services/fee'
+
+interface IRouterConfig {
+  feeManager: FeeManager
+}
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -17,7 +22,7 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
   }
 }
 
-export function createRouter() {
+export function createRouter({ feeManager }: IRouterConfig) {
   const router = express.Router()
 
   router.use(cors())
@@ -63,12 +68,13 @@ export function createRouter() {
   router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
   router.get('/job/:id', wrapErr(endpoints.getJob))
   router.get('/info', wrapErr(endpoints.relayerInfo))
-  router.get('/fee', wrapErr(endpoints.getFee))
+  router.get('/fee', wrapErr(endpoints.getStaticFee))
+  router.get('/fee/v2', wrapErr(endpoints.getDynamicFeeBuilder(feeManager)))
   router.get('/limits', wrapErr(endpoints.getLimits))
   router.get('/siblings', wrapErr(endpoints.getSiblings))
-  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash(config.treeUpdateParamsPath)))
-  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash(config.transferParamsPath)))
-  router.get('/params/hash/direct-deposit', wrapErr(endpoints.getParamsHash(config.directDepositParamsPath)))
+  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHashBuilder(config.treeUpdateParamsPath)))
+  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHashBuilder(config.transferParamsPath)))
+  router.get('/params/hash/direct-deposit', wrapErr(endpoints.getParamsHashBuilder(config.directDepositParamsPath)))
 
   // Error handler middleware
   router.use((error: any, req: Request, res: Response, next: NextFunction) => {

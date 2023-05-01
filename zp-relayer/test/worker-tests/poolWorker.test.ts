@@ -1,4 +1,5 @@
 import chai from 'chai'
+import type BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import { v4 } from 'uuid'
 import { Mutex } from 'async-mutex'
@@ -14,7 +15,7 @@ import { poolTxQueue, PoolTxResult, BatchTx, WorkerTxType, DirectDeposit } from 
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
-import { GasPrice } from '../../services/gas-price'
+import { EstimationType, GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
@@ -38,6 +39,7 @@ import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 import { Params } from 'libzkbob-rs-node'
 import { directDepositQueue } from '../../queue/directDepositQueue'
 import { createDirectDepositWorker } from '../../workers/directDepositWorker'
+import { FeeManager, DefaultFeeManager } from '../../services/fee'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -48,7 +50,6 @@ async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx<Work
     transactions: [
       {
         amount: '0',
-        gas: '2000000',
         txProof: item.proof,
         txType: item.txType,
         rawMemo: item.transactionData.memo,
@@ -68,8 +69,9 @@ async function submitDirectDepositJob(deposits: DirectDeposit[]) {
 describe('poolWorker', () => {
   let poolWorker: Worker
   let sentWorker: Worker
-  let gasPriceService: GasPrice<'web3'>
+  let gasPriceService: GasPrice<EstimationType.Web3>
   let txManager: TxManager
+  let feeManager: FeeManager
   let poolQueueEvents: QueueEvents
   let sentQueueEvents: QueueEvents
   let directDepositQueueEvents: QueueEvents
@@ -93,8 +95,13 @@ describe('poolWorker', () => {
     await pool.init()
     await initializeDomain(web3)
 
-    gasPriceService = new GasPrice(web3, 10000, 'web3', {})
+    gasPriceService = new GasPrice(web3, { gasPrice: config.gasPriceFallback }, 10000, EstimationType.Web3, {})
     await gasPriceService.start()
+
+    const mockPriceFeed = {
+      convert: (amounts: BN[]) => Promise.resolve(amounts.map(() => toBN(0))),
+    }
+    feeManager = new DefaultFeeManager(gasPriceService, mockPriceFeed, toBN(1))
 
     txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
     await txManager.init()
@@ -113,6 +120,7 @@ describe('poolWorker', () => {
       treeProver,
       mutex,
       txManager,
+      feeManager,
     })
     sentWorker = await createSentTxWorker({
       ...baseConfig,
@@ -194,6 +202,7 @@ describe('poolWorker', () => {
       txManager,
       validateTx: async () => {},
       treeProver,
+      feeManager,
     })
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()

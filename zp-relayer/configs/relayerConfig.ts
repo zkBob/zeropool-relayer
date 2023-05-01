@@ -1,14 +1,12 @@
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
-import type { EstimationType, GasPriceKey } from '@/services/gas-price'
 import baseConfig from './baseConfig'
+import { FeeManagerType } from '@/services/fee'
+import { PriceFeedType } from '@/services/price-feed'
+import type { EstimationType, GasPriceKey } from '@/services/gas-price'
+import { ProverType } from '@/prover'
 import { countryCodes } from '@/utils/countryCodes'
 import { logger } from '@/services/appLogger'
-
-export enum ProverType {
-  Local = 'local',
-  Remote = 'remote',
-}
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -54,20 +52,23 @@ const config = {
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
     .filter(r => r.length > 0),
-  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '')
-    .split(' ')
-    .filter(c => {
-      if (c.length === 0) return false
+  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '').split(' ').filter(c => {
+    if (c.length === 0) return false
 
-      const exists = countryCodes.has(c)
-      if (!exists) {
-        logger.error(`Country code ${c} is not valid, skipping`)
-      }
-      return exists
-    }),
+    const exists = countryCodes.has(c)
+    if (!exists) {
+      logger.error(`Country code ${c} is not valid, skipping`)
+    }
+    return exists
+  }),
   trustProxy: process.env.RELAYER_EXPRESS_TRUST_PROXY === 'true',
   treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
   directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
+  feeManagerType: (process.env.RELAYER_FEE_MANAGER_TYPE || FeeManagerType.Default) as FeeManagerType,
+  feeScalingFactor: toBN(process.env.RELAYER_FEE_SCALING_FACTOR || '100'),
+  priceFeedType: (process.env.RELAYER_PRICE_FEED_TYPE || PriceFeedType.OneInch) as PriceFeedType,
+  priceFeedContractAddress: process.env.RELAYER_PRICE_FEED_CONTRACT_ADDRESS || null,
+  priceFeedBaseTokenAddress: process.env.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS || null,
 }
 
 export default config

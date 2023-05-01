@@ -150,7 +150,7 @@ async function handleResend(
     gasPrice,
     txHash,
     rawTransaction,
-  } = await txManager.prepareTx(txConfig, jobLogger, true)
+  } = await txManager.prepareTx(txConfig, { isResend: true }, jobLogger)
 
   job.data.prevAttempts.push([txHash, gasPrice])
   jobLogger.info('Re-send tx', { txHash })

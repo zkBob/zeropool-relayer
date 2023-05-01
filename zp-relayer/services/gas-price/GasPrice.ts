@@ -1,22 +1,19 @@
 import BN from 'bn.js'
 import type Web3 from 'web3'
 import type { TransactionConfig } from 'web3-core'
-import { toWei, toBN } from 'web3-utils'
+import { AbiItem, toWei, toBN } from 'web3-utils'
 import BigNumber from 'bignumber.js'
-import config from '@/configs/relayerConfig'
-import { setIntervalAndRun } from '@/utils/helpers'
+import constants from '@/utils/constants'
+import { contractCallRetry, setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
 import { GasPriceOracle } from 'gas-price-oracle'
 import { logger } from '@/services/appLogger'
+import OracleAbi from '@/abi/op-oracle.json'
 import {
   EstimationType,
   FetchFunc,
   EstimationOptions,
   GasPriceValue,
-  EstimationEIP1559,
-  EstimationOracle,
-  EstimationPolygonGSV2,
-  EstimationWeb3,
   PolygonGSV2Response,
   PolygonGSV2GasPriceKey,
   GasPriceKey,
@@ -118,11 +115,7 @@ function addExtraGas(gas: BN, extraPercentage: number, maxGasLimit: string | und
   }
 }
 
-export function addExtraGasPrice(
-  gp: GasPriceValue,
-  factor = config.minGasPriceBumpFactor,
-  maxFeeLimit: BN | null = config.maxFeeLimit
-): GasPriceValue {
+export function addExtraGasPrice(gp: GasPriceValue, factor: number, maxFeeLimit: BN | null): GasPriceValue {
   if (factor === 0) return gp
 
   const maxGasPrice = maxFeeLimit?.toString()
@@ -144,15 +137,21 @@ export function addExtraGasPrice(
 export class GasPrice<ET extends EstimationType> {
   private fetchGasPriceInterval: NodeJS.Timeout | null = null
   private cachedGasPrice: GasPriceValue
+  private readonly defaultGasPrice: GasPriceValue
   private updateInterval: number
   private fetchGasPrice: FetchFunc<ET>
   private options: EstimationOptions<ET>
   private web3: Web3
 
-  static defaultGasPrice = { gasPrice: config.gasPriceFallback }
-
-  constructor(web3: Web3, updateInterval: number, estimationType: ET, options: EstimationOptions<ET>) {
-    this.cachedGasPrice = GasPrice.defaultGasPrice
+  constructor(
+    web3: Web3,
+    fallbackGasPrice: GasPriceValue,
+    updateInterval: number,
+    estimationType: ET,
+    options: EstimationOptions<ET>
+  ) {
+    this.defaultGasPrice = fallbackGasPrice
+    this.cachedGasPrice = this.defaultGasPrice
     this.updateInterval = updateInterval
     this.web3 = web3
     this.fetchGasPrice = this.getFetchFunc(estimationType)
@@ -162,20 +161,23 @@ export class GasPrice<ET extends EstimationType> {
   async start() {
     if (this.fetchGasPriceInterval) clearInterval(this.fetchGasPriceInterval)
 
-    this.fetchGasPriceInterval = await setIntervalAndRun(async () => {
-      this.cachedGasPrice = await this.fetchOnce()
+    this.fetchGasPriceInterval = await setIntervalAndRun(() => {
+      this.fetchOnce()
     }, this.updateInterval)
   }
 
-  async fetchOnce() {
+  async fetchOnce(shouldUpdateCache = true) {
     let gasPrice
     try {
       gasPrice = await this.fetchGasPrice(this.options)
     } catch (e) {
       logger.warn('Failed to fetch gasPrice %s; using previous value', (e as Error).message)
-      gasPrice = chooseGasPriceOptions(GasPrice.defaultGasPrice, this.cachedGasPrice)
+      gasPrice = chooseGasPriceOptions(this.defaultGasPrice, this.cachedGasPrice)
     }
-    logger.info('Updated gasPrice: %o', gasPrice)
+    if (shouldUpdateCache) {
+      this.setGasPrice(gasPrice)
+      logger.info('Updated gasPrice: %o', gasPrice)
+    }
     return gasPrice
   }
 
@@ -191,17 +193,18 @@ export class GasPrice<ET extends EstimationType> {
     return this.cachedGasPrice
   }
 
-  private getFetchFunc(estimationType: EstimationType): FetchFunc<EstimationType> {
+  private getFetchFunc(estimationType: ET): FetchFunc<ET> {
     const funcs: Record<EstimationType, FetchFunc<EstimationType>> = {
-      'web3': this.fetchWeb3,
-      'eip1559-gas-estimation': this.fetchEIP1559,
-      'gas-price-oracle': this.fetchGasPriceOracle,
-      'polygon-gasstation-v2': this.fetchPolygonGasStationV2,
+      [EstimationType.Web3]: this.fetchWeb3,
+      [EstimationType.EIP1559]: this.fetchEIP1559,
+      [EstimationType.Oracle]: this.fetchGasPriceOracle,
+      [EstimationType.PolygonGSV2]: this.fetchPolygonGasStationV2,
+      [EstimationType.OptimismOracle]: this.fetchOptimismOracle,
     }
     return funcs[estimationType]
   }
 
-  private fetchEIP1559: FetchFunc<EstimationEIP1559> = async () => {
+  private fetchEIP1559: FetchFunc<EstimationType.EIP1559> = async () => {
     // @ts-ignore
     const options = await estimateFees(this.web3)
     const res = {
@@ -211,19 +214,19 @@ export class GasPrice<ET extends EstimationType> {
     return res
   }
 
-  private fetchWeb3: FetchFunc<EstimationWeb3> = async () => {
+  private fetchWeb3: FetchFunc<EstimationType.Web3> = async () => {
     const gasPrice = await this.web3.eth.getGasPrice()
     return { gasPrice }
   }
 
-  private fetchGasPriceOracle: FetchFunc<EstimationOracle> = async options => {
+  private fetchGasPriceOracle: FetchFunc<EstimationType.Oracle> = async options => {
     const gasPriceOracle = new GasPriceOracle()
     const json = await gasPriceOracle.legacy.fetchGasPricesOffChain()
     const gasPrice = GasPrice.normalizeGasPrice(json[options.speedType], options.factor)
     return { gasPrice }
   }
 
-  private fetchPolygonGasStationV2: FetchFunc<EstimationPolygonGSV2> = async options => {
+  private fetchPolygonGasStationV2: FetchFunc<EstimationType.PolygonGSV2> = async options => {
     const response = await fetch('https://gasstation-mainnet.matic.network/v2')
     const json: PolygonGSV2Response = await response.json()
     const speedType = polygonGasPriceKeyMapping[options.speedType]
@@ -245,6 +248,12 @@ export class GasPrice<ET extends EstimationType> {
     }
 
     return gasPriceOptions
+  }
+
+  private fetchOptimismOracle: FetchFunc<EstimationType.OptimismOracle> = async () => {
+    const oracle = new this.web3.eth.Contract(OracleAbi as AbiItem[], constants.OP_GAS_ORACLE_ADDRESS)
+    const gasPrice = await contractCallRetry(oracle, 'gasPrice')
+    return { gasPrice }
   }
 
   static normalizeGasPrice(rawGasPrice: number, factor = 1) {

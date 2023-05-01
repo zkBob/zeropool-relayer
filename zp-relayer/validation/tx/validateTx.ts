@@ -15,6 +15,7 @@ import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
 import { checkAssertion, TxValidationError, checkSize, checkScreener } from './common'
+import { EstimationType, GasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
 
 const ZERO = toBN(0)
 
@@ -74,9 +75,12 @@ export function checkNativeAmount(nativeAmount: BN | null) {
   return null
 }
 
-export function checkFee(fee: BN) {
-  logger.debug(`Fee: ${fee}`)
-  if (fee.lt(config.relayerFee)) {
+export function checkFee(userFee: BN, requiredFee: BN) {
+  logger.debug('Fee', {
+    userFee: userFee.toString(),
+    requiredFee: requiredFee.toString(),
+  })
+  if (userFee.lt(requiredFee)) {
     return new TxValidationError('Fee too low')
   }
   return null
@@ -205,6 +209,7 @@ function checkMemoPrefix(memo: string, txType: TxType) {
 export async function validateTx(
   { txType, rawMemo, txProof, depositSignature }: TxPayload,
   pool: Pool,
+  requiredFee: BN,
   traceId?: string
 ) {
   await checkAssertion(() => checkMemoPrefix(rawMemo, txType))
@@ -229,7 +234,7 @@ export async function validateTx(
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
-  await checkAssertion(() => checkFee(fee))
+  await checkAssertion(() => checkFee(fee, requiredFee))
   await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
   const tokenAmountWithFee = delta.tokenAmount.add(fee)
