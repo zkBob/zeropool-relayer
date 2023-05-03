@@ -21,6 +21,12 @@ class OptimismUserFeeOptions implements IUserFeeOptions {
     return this
   }
 
+  denominate(denominator: BN): this {
+    this.fee = this.fee.div(denominator)
+    this.oneByteFee = this.oneByteFee.div(denominator)
+    return this
+  }
+
   async convert(priceFeed: IPriceFeed) {
     const [fee, oneByteFee] = await priceFeed.convert([this.fee, this.oneByteFee])
     this.fee = fee

@@ -219,7 +219,8 @@ function getDynamicFeeBuilder(feeManager: FeeManager) {
   return async (req: Request, res: Response) => {
     validateBatch([[checkTraceId, req.headers]])
 
-    const fees = await feeManager.getFees({ gasLimit: config.relayerGasLimit })
+    const feeOptions = await feeManager.getFees({ gasLimit: config.relayerGasLimit })
+    const fees = feeOptions.denominate(pool.denominator).getObject()
 
     res.json(fees)
   }

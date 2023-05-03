@@ -14,12 +14,13 @@ export interface IGetFeesParams {
 
 export interface IUserFeeOptions {
   applyFactor(factor: BN): this
+  denominate(denominator: BN): this
   convert(priceFeed: IPriceFeed): Promise<this>
   getObject(): Record<string, string>
 }
 
 export interface IFeeEstimate extends IUserFeeOptions {
-  get(): BN
+  getEstimate(): BN
 }
 
 export class DefaultUserFeeOptions implements IUserFeeOptions {
@@ -27,6 +28,11 @@ export class DefaultUserFeeOptions implements IUserFeeOptions {
 
   applyFactor(factor: BN) {
     this.fee = this.fee.mul(factor).divn(100)
+    return this
+  }
+
+  denominate(denominator: BN): this {
+    this.fee = this.fee.div(denominator)
     return this
   }
 
@@ -44,7 +50,7 @@ export class DefaultUserFeeOptions implements IUserFeeOptions {
 }
 
 export class DefaultFeeEstimate extends DefaultUserFeeOptions implements IFeeEstimate {
-  get() {
+  getEstimate() {
     return this.fee
   }
 }
