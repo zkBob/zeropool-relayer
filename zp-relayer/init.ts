@@ -17,7 +17,7 @@ import { Circuit, IProver, LocalProver, ProverType, RemoteProver } from './prove
 import { FeeManagerType, FeeManager, DefaultFeeManager, OptimismFeeManager } from './services/fee'
 import type { IPriceFeed } from './services/price-feed/IPriceFeed'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
-import { OneInchPriceFeed, PriceFeedType } from './services/price-feed'
+import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from './services/price-feed'
 
 function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
   if (type === ProverType.Local) {
@@ -53,6 +53,8 @@ function buildPriceFeed(type: PriceFeedType, web3: Web3): IPriceFeed {
       poolTokenAddress: config.tokenAddress,
       customBaseTokenAddress: config.priceFeedBaseTokenAddress,
     })
+  } else if (type === PriceFeedType.Native) {
+    return new NativePriceFeed()
   } else {
     throw new Error('Unsupported price feed')
   }
