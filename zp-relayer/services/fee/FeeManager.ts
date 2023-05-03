@@ -12,25 +12,80 @@ export interface IGetFeesParams {
   gasLimit: BN
 }
 
-export interface IFeeOptions {
-  fee: string
+export interface IUserFeeOptions {
+  applyFactor(factor: BN): this
+  convert(priceFeed: IPriceFeed): Promise<this>
+  getObject(): Record<string, string>
+}
+
+export interface IFeeEstimate extends IUserFeeOptions {
+  get(): BN
+}
+
+export class DefaultUserFeeOptions implements IUserFeeOptions {
+  constructor(protected fee: BN) {}
+
+  applyFactor(factor: BN) {
+    this.fee = this.fee.mul(factor).divn(100)
+    return this
+  }
+
+  async convert(priceFeed: IPriceFeed) {
+    const [fee] = await priceFeed.convert([this.fee])
+    this.fee = fee
+    return this
+  }
+
+  getObject() {
+    return {
+      fee: this.fee.toString(10),
+    }
+  }
+}
+
+export class DefaultFeeEstimate extends DefaultUserFeeOptions implements IFeeEstimate {
+  get() {
+    return this.fee
+  }
+}
+
+export interface IFeeManagerConfig {
+  gasPrice: GasPrice<EstimationType>
+  priceFeed: IPriceFeed
+  scaleFactor: BN
+  marginFactor: BN
 }
 
 export abstract class FeeManager {
-  constructor(protected gasPrice: GasPrice<EstimationType>, protected priceFeed: IPriceFeed, private scaleFactor: BN) {}
+  constructor(protected config: IFeeManagerConfig) {}
 
   protected async estimateExecutionFee(gasLimit: BN): Promise<BN> {
-    const gasPrice = await this.gasPrice.fetchOnce()
+    const gasPrice = await this.config.gasPrice.fetchOnce()
     return toBN(getMaxRequiredGasPrice(gasPrice)).mul(gasLimit)
   }
 
-  protected applyScaleFactor(fee: BN): BN {
-    return fee.mul(this.scaleFactor).divn(100)
+  private async convertAndScale<T extends IUserFeeOptions>(baseFee: T) {
+    const fees = await baseFee.convert(this.config.priceFeed)
+    const scaledFees = fees.applyFactor(this.config.scaleFactor)
+    return scaledFees
+  }
+
+  async estimateFee(params: IFeeEstimateParams): Promise<IFeeEstimate> {
+    const baseFee = await this._estimateFee(params)
+    const fee = await this.convertAndScale(baseFee)
+    const marginedFee = fee.applyFactor(this.config.marginFactor)
+    return marginedFee
+  }
+
+  async getFees(params: IGetFeesParams): Promise<IUserFeeOptions> {
+    const baseFees = await this._getFees(params)
+    const fees = await this.convertAndScale(baseFees)
+    return fees
   }
 
   // Should be used for tx fee validation
-  abstract estimateFee(params: IFeeEstimateParams): Promise<BN>
+  protected abstract _estimateFee(params: IFeeEstimateParams): Promise<IFeeEstimate>
 
   // Should provide fee estimations for users
-  abstract getFees(params: IGetFeesParams): Promise<IFeeOptions>
+  protected abstract _getFees(params: IGetFeesParams): Promise<IUserFeeOptions>
 }

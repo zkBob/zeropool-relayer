@@ -65,6 +65,7 @@ const config = {
   treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
   directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
   feeManagerType: (process.env.RELAYER_FEE_MANAGER_TYPE || FeeManagerType.Default) as FeeManagerType,
+  feeMarginFactor: toBN(process.env.RELAYER_FEE_MARGIN_FACTOR || '100'),
   feeScalingFactor: toBN(process.env.RELAYER_FEE_SCALING_FACTOR || '100'),
   priceFeedType: (process.env.RELAYER_PRICE_FEED_TYPE || PriceFeedType.OneInch) as PriceFeedType,
   priceFeedContractAddress: process.env.RELAYER_PRICE_FEED_CONTRACT_ADDRESS || null,

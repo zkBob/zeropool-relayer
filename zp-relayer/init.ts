@@ -37,10 +37,16 @@ function buildFeeManager(
   gasPrice: GasPrice<EstimationType>,
   web3: Web3
 ): FeeManager {
+  const managerConfig = {
+    gasPrice,
+    priceFeed,
+    scaleFactor: config.feeScalingFactor,
+    marginFactor: config.feeMarginFactor,
+  }
   if (type === FeeManagerType.Default) {
-    return new DefaultFeeManager(gasPrice, priceFeed, config.feeScalingFactor)
+    return new DefaultFeeManager(managerConfig)
   } else if (type === FeeManagerType.Optimism) {
-    return new OptimismFeeManager(web3, gasPrice, priceFeed, config.feeScalingFactor)
+    return new OptimismFeeManager(managerConfig, web3)
   } else {
     throw new Error('Unsupported fee manager')
   }

@@ -54,7 +54,8 @@ These environment variables are required for all services.
 | RELAYER_BLOCKED_COUNTRIES | A list of country codes delimited by spaces | string|
 | RELAYER_EXPRESS_TRUST_PROXY | If set to `true`, then `trust proxy` express setting will be enabled. Defaults to `false` | boolean |
 | RELAYER_FEE_MANAGER_TYPE | Fee manager that will be used for fee estimations | FeeManagerType |
-| RELAYER_FEE_SCALING_FACTOR | Scaling factor (in percent) used to adjust fee validation. Defaults to 100. | number |
+| RELAYER_FEE_MARGIN_FACTOR | Margin factor (in percent) that is used to adjust fee estimations during validation. Defaults to 100. | number |
+| RELAYER_FEE_SCALING_FACTOR | Scaling factor (in percent) that is used to adjust both exposed user fees and fee estimations during validation. Defaults to 100. | number |
 | RELAYER_PRICE_FEED_TYPE | Price feed type that will be used for rate conversions. | PriceFeedType |
 | RELAYER_PRICE_FEED_CONTRACT_ADDRESS | Price feed contract address. | address |
 | RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS | Base token that will be used for rate conversions. | address |

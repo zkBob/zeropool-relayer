@@ -148,7 +148,7 @@ export async function createPoolTxWorker({
         const requiredFee = await feeManager.estimateFee({
           gasLimit: config.relayerGasLimit,
         })
-        const denominatedFee = requiredFee.div(pool.denominator)
+        const denominatedFee = requiredFee.get().div(pool.denominator)
 
         await validateTx(tx, pool, denominatedFee, traceId)
 

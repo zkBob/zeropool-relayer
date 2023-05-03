@@ -101,7 +101,13 @@ describe('poolWorker', () => {
     const mockPriceFeed = {
       convert: (amounts: BN[]) => Promise.resolve(amounts.map(() => toBN(0))),
     }
-    feeManager = new DefaultFeeManager(gasPriceService, mockPriceFeed, toBN(1))
+    const managerConfig = {
+      gasPrice: gasPriceService,
+      priceFeed: mockPriceFeed,
+      scaleFactor: toBN(1),
+      marginFactor: toBN(1),
+    }
+    feeManager = new DefaultFeeManager(managerConfig)
 
     txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
     await txManager.init()
