@@ -4,7 +4,7 @@ import { toBN } from 'web3-utils'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { poolTxQueue, BatchTx, PoolTxResult, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
-import { TX_QUEUE_NAME } from '@/utils/constants'
+import { TX_QUEUE_NAME, MOCK_CALLDATA } from '@/utils/constants'
 import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
@@ -147,6 +147,7 @@ export async function createPoolTxWorker({
 
         const requiredFee = await feeManager.estimateFee({
           gasLimit: config.relayerGasLimit,
+          data: MOCK_CALLDATA + tx.rawMemo,
         })
         const denominatedFee = requiredFee.denominate(pool.denominator).getEstimate()
 

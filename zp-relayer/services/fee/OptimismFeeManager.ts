@@ -1,15 +1,20 @@
 import type Web3 from 'web3'
 import type BN from 'bn.js'
 import type { Contract } from 'web3-eth-contract'
-import { OP_GAS_ORACLE_ADDRESS } from '@/utils/constants'
+import { OP_GAS_ORACLE_ADDRESS, MOCK_CALLDATA } from '@/utils/constants'
 import { AbiItem, toBN } from 'web3-utils'
 import OracleAbi from '@/abi/op-oracle.json'
 import { contractCallRetry } from '@/utils/helpers'
-import { BASE_CALLDATA_SIZE } from '@/utils/constants'
-import { FeeManager, DefaultFeeEstimate, IFeeEstimateParams, IFeeManagerConfig, IUserFeeOptions } from './FeeManager'
+import {
+  FeeManager,
+  DefaultFeeEstimate,
+  IFeeEstimateParams,
+  IFeeManagerConfig,
+  IUserFeeOptions,
+  IGetFeesParams,
+} from './FeeManager'
 import { IPriceFeed } from '../price-feed'
 
-const MOCK_CALLDATA = '0x' + 'ff'.repeat(BASE_CALLDATA_SIZE)
 const ONE_BYTE_GAS = 16
 
 class OptimismUserFeeOptions implements IUserFeeOptions {
@@ -50,7 +55,7 @@ export class OptimismFeeManager extends FeeManager {
     this.oracle = new web3.eth.Contract(OracleAbi as AbiItem[], OP_GAS_ORACLE_ADDRESS)
   }
 
-  async _estimateFee({ gasLimit, data = MOCK_CALLDATA }: IFeeEstimateParams) {
+  async _estimateFee({ gasLimit, data }: IFeeEstimateParams) {
     const l2Fee = await this.estimateExecutionFee(gasLimit)
     const l1Fee = await contractCallRetry(this.oracle, 'getL1Fee', [data]).then(toBN)
 
@@ -59,7 +64,7 @@ export class OptimismFeeManager extends FeeManager {
     return new DefaultFeeEstimate(fee)
   }
 
-  async _getFees({ gasLimit }: IFeeEstimateParams): Promise<OptimismUserFeeOptions> {
+  async _getFees({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
     const l2fee = await this.estimateExecutionFee(gasLimit)
 
     // TODO: cache

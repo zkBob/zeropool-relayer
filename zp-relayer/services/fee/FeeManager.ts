@@ -4,7 +4,7 @@ import { GasPrice, EstimationType, getMaxRequiredGasPrice } from '../gas-price'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
 
 export interface IFeeEstimateParams {
-  data?: string
+  data: string
   gasLimit: BN
 }
 
