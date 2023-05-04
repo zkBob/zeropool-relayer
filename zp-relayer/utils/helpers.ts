@@ -229,6 +229,7 @@ export function contractCallRetry(contract: Contract, method: string, args: any[
           logger.warn('Retrying failed contract call', { method, args })
           retry(e)
         } else {
+          logger.debug('Unknown contract call error', { method, args, error: e })
           throw e
         }
       }
