@@ -167,7 +167,7 @@ export function withLoop<F extends (i: number) => any>(
         }
 
         if (isSuppressed) {
-          logger.warn('%s', err.message)
+          logger.info('%s', err.message)
         } else {
           logger.error('Found error %s', err.message)
         }
