@@ -13,7 +13,6 @@
   "workspaces": [
     "zp-memo-parser",
     "zp-relayer",
-    "test-e2e",
     "test-flow-generator"
   ],
   "scripts": {

@@ -1,23 +1,16 @@
 version: '3.8'
 
 services:
-  ganache:
-    image: trufflesuite/ganache-cli
-    command: >
-      --deterministic
-      --gasLimit 20000000
-      --allowUnlimitedContractSize
-      --networkId 1337
-      --chainId 1337
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:nightly-08d4315330b041cba67e44c65e0fc187fef54422
     ports:
       - 8545:8545
+    entrypoint: >
+      anvil
+      --host 0.0.0.0
+      -m "myth like bonus scare over problem client lizard pioneer submit female collect"
   contracts:
     image: lok52/zp-contracts:latest
-  verifier:
-    image: lok52/verifier:latest
-    build:
-      context: ./docker
-      dockerfile: Dockerfile.verifier
   redis:
     command: [redis-server, --appendonly, 'yes']
     image: redis:6.2.6
