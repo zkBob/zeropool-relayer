@@ -3,13 +3,11 @@ import { toBN } from 'web3-utils'
 import { GasPrice, EstimationType, getMaxRequiredGasPrice } from '../gas-price'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
 
-export interface IFeeEstimateParams {
-  data: string
-  gasLimit: BN
-}
-
 export interface IGetFeesParams {
   gasLimit: BN
+}
+export interface IFeeEstimateParams extends IGetFeesParams {
+  memo: string
 }
 
 export interface IUserFeeOptions {
@@ -17,10 +15,6 @@ export interface IUserFeeOptions {
   denominate(denominator: BN): this
   convert(priceFeed: IPriceFeed): Promise<this>
   getObject(): Record<string, string>
-}
-
-export interface IFeeEstimate extends IUserFeeOptions {
-  getEstimate(): BN
 }
 
 export class DefaultUserFeeOptions implements IUserFeeOptions {
@@ -49,7 +43,7 @@ export class DefaultUserFeeOptions implements IUserFeeOptions {
   }
 }
 
-export class DefaultFeeEstimate extends DefaultUserFeeOptions implements IFeeEstimate {
+export class FeeEstimate extends DefaultUserFeeOptions {
   getEstimate() {
     return this.fee
   }
@@ -65,6 +59,8 @@ export interface IFeeManagerConfig {
 export abstract class FeeManager {
   constructor(protected config: IFeeManagerConfig) {}
 
+  abstract init(): Promise<void>
+
   protected async estimateExecutionFee(gasLimit: BN): Promise<BN> {
     const gasPrice = await this.config.gasPrice.fetchOnce()
     return toBN(getMaxRequiredGasPrice(gasPrice)).mul(gasLimit)
@@ -76,21 +72,21 @@ export abstract class FeeManager {
     return scaledFees
   }
 
-  async estimateFee(params: IFeeEstimateParams): Promise<IFeeEstimate> {
-    const baseFee = await this._estimateFee(params)
-    const fee = await this.convertAndScale(baseFee)
-    const marginedFee = fee.applyFactor(this.config.marginFactor)
+  async estimateFee(params: IFeeEstimateParams): Promise<FeeEstimate> {
+    const fees = await this.getFees(params)
+    const estimatedFee = await this._estimateFee(params, fees)
+    const marginedFee = estimatedFee.applyFactor(this.config.marginFactor)
     return marginedFee
   }
 
   async getFees(params: IGetFeesParams): Promise<IUserFeeOptions> {
-    const baseFees = await this._getFees(params)
-    const fees = await this.convertAndScale(baseFees)
-    return fees
+    const feeOptions = await this._getFees(params)
+    const convertedFees = await this.convertAndScale(feeOptions)
+    return convertedFees
   }
 
   // Should be used for tx fee validation
-  protected abstract _estimateFee(params: IFeeEstimateParams): Promise<IFeeEstimate>
+  protected abstract _estimateFee(params: IFeeEstimateParams, fees: IUserFeeOptions): Promise<FeeEstimate>
 
   // Should provide fee estimations for users
   protected abstract _getFees(params: IGetFeesParams): Promise<IUserFeeOptions>

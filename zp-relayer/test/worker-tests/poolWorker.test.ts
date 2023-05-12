@@ -108,6 +108,7 @@ describe('poolWorker', () => {
       marginFactor: toBN(1),
     }
     feeManager = new DefaultFeeManager(managerConfig)
+    await feeManager.init()
 
     txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
     await txManager.init()

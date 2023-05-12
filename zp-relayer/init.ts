@@ -102,6 +102,7 @@ export async function init() {
 
   const priceFeed = buildPriceFeed(config.priceFeedType, web3)
   const feeManager = buildFeeManager(config.feeManagerType, priceFeed, gasPriceService, web3)
+  await feeManager.init()
 
   const workerPromises = [
     createPoolTxWorker({
