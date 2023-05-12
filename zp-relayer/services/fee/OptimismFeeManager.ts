@@ -92,7 +92,7 @@ export class OptimismFeeManager extends FeeManager {
   }
 
   async _getFees({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
-    const l2fee = await this.estimateExecutionFee(gasLimit)
+    const l2Fee = await this.estimateExecutionFee(gasLimit)
 
     // TODO: cache
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
@@ -100,7 +100,7 @@ export class OptimismFeeManager extends FeeManager {
 
     const l1Fee = this.getL1Fee(MOCK_CALLDATA, l1BaseFee)
 
-    const fee = l1Fee.add(l2fee)
+    const fee = l1Fee.add(l2Fee)
 
     return new OptimismUserFeeOptions(fee, oneByteFee)
   }
