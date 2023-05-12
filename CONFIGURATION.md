@@ -25,7 +25,7 @@ These environment variables are required for all services.
 | RELAYER_ADDRESS_PRIVATE_KEY | Private key to sign pool transactions | hexadecimal prefixed with "0x" |
 | RELAYER_GAS_LIMIT | Gas limit for pool transactions | integer |
 | RELAYER_FEE | Minimal accepted relayer fee (in tokens) | integer |
-| RELAYER_MAX_NATIVE_AMOUNT_FAUCET | Maximal amount of faucet value (in ETH) | integer |
+| RELAYER_MAX_NATIVE_AMOUNT | Maximal amount of pool's tokens which can be converted to native in one withdrawal transaction. Defaults to 0. | integer |
 | RELAYER_TREE_UPDATE_PARAMS_PATH | Local path to tree update circuit parameters | string |
 | RELAYER_TRANSFER_PARAMS_PATH | Local path to transfer circuit parameters | string |
 | RELAYER_TX_VK_PATH | Local path to transaction circuit verification key | string |

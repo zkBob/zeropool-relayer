@@ -65,10 +65,9 @@ export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmo
   return null
 }
 
-export function checkNativeAmount(nativeAmount: BN | null) {
+export function checkNativeAmount(nativeAmount: BN | null, withdrawalAmount: BN) {
   logger.debug(`Native amount: ${nativeAmount}`)
-  // Check native amount (relayer faucet)
-  if (nativeAmount && nativeAmount > config.maxFaucet) {
+  if (nativeAmount && (nativeAmount > config.maxNativeAmount || nativeAmount > withdrawalAmount)) {
     return new TxValidationError('Native amount too high')
   }
   return null
@@ -242,7 +241,7 @@ export async function validateTx(
     userAddress = web3.utils.bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
     await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
-    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
+    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount), tokenAmountWithFee))
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
     userAddress = await getRecoveredAddress(

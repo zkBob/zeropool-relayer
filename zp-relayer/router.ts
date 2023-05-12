@@ -65,6 +65,7 @@ export function createRouter() {
   router.get('/info', wrapErr(endpoints.relayerInfo))
   router.get('/fee', wrapErr(endpoints.getFee))
   router.get('/limits', wrapErr(endpoints.getLimits))
+  router.get('/maxNativeAmount', wrapErr(endpoints.getMaxNativeAmount))
   router.get('/siblings', wrapErr(endpoints.getSiblings))
   router.get('/params/hash/tree', wrapErr(endpoints.getParamsHash(config.treeUpdateParamsPath)))
   router.get('/params/hash/tx', wrapErr(endpoints.getParamsHash(config.transferParamsPath)))
