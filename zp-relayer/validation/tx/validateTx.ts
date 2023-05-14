@@ -67,7 +67,7 @@ export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmo
 
 export function checkNativeAmount(nativeAmount: BN | null, withdrawalAmount: BN) {
   logger.debug(`Native amount: ${nativeAmount}`)
-  if (nativeAmount && (nativeAmount > config.maxNativeAmount || nativeAmount > withdrawalAmount)) {
+  if (nativeAmount && (nativeAmount.gt(config.maxNativeAmount) || nativeAmount.gt(withdrawalAmount))) {
     return new TxValidationError('Native amount too high')
   }
   return null
