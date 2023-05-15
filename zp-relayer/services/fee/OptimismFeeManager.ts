@@ -65,7 +65,7 @@ export class OptimismFeeManager extends FeeManager {
     this.scalar = await contractCallRetry(this.oracle, 'scalar').then(toBN)
   }
 
-  private getL1GasUsed(data: string) {
+  private getL1GasUsed(data: string): BN {
     const byteToGas = (byte: number) => (byte === 0 ? ZERO_BYTE_GAS : NZERO_BYTE_GAS)
     const bytes = hexToBytes(data)
     const l1GasUsed = bytes.reduce((acc, byte) => acc + byteToGas(byte), 0)
@@ -73,7 +73,7 @@ export class OptimismFeeManager extends FeeManager {
   }
 
   // Mimics OP gas price oracle algorithm
-  private getL1Fee(data: string, l1BaseFee: BN) {
+  private getL1Fee(data: string, l1BaseFee: BN): BN {
     const l1GasUsed = this.getL1GasUsed(data)
     const l1Fee = l1GasUsed.mul(l1BaseFee)
     const divisor = toBN(10).pow(this.decimals)
@@ -82,26 +82,28 @@ export class OptimismFeeManager extends FeeManager {
     return scaled
   }
 
-  async _estimateFee({ memo }: IFeeEstimateParams, feeOptions: OptimismUserFeeOptions) {
+  async _estimateFee({ extraData }: IFeeEstimateParams, feeOptions: OptimismUserFeeOptions) {
     const { baseFee, oneByteFee } = feeOptions.getObject()
 
-    const additionalDataFee = this.getL1Fee(memo, toBN(oneByteFee))
-    const fee = toBN(baseFee).add(additionalDataFee)
+    const unscaledL1Fee = this.getL1Fee(MOCK_CALLDATA + extraData, toBN(oneByteFee))
+
+    // Because oneByteFee = l1BaseFee * NZERO_BYTE_GAS, we need to divide the estimation
+    // We do it here to get a more accurate result
+    const l1Fee = unscaledL1Fee.divn(NZERO_BYTE_GAS)
+
+    const fee = toBN(baseFee).add(l1Fee)
 
     return new FeeEstimate(fee)
   }
 
   async _getFees({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
-    const l2Fee = await this.estimateExecutionFee(gasLimit)
+    const baseFee = await this.estimateExecutionFee(gasLimit)
 
     // TODO: cache
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
+    // Use an upper bound for the oneByteFee
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
 
-    const l1Fee = this.getL1Fee(MOCK_CALLDATA, l1BaseFee)
-
-    const fee = l1Fee.add(l2Fee)
-
-    return new OptimismUserFeeOptions(fee, oneByteFee)
+    return new OptimismUserFeeOptions(baseFee, oneByteFee)
   }
 }

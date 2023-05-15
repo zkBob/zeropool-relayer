@@ -7,7 +7,7 @@ export interface IGetFeesParams {
   gasLimit: BN
 }
 export interface IFeeEstimateParams extends IGetFeesParams {
-  memo: string
+  extraData: string
 }
 
 export interface IUserFeeOptions {
