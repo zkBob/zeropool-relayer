@@ -147,7 +147,7 @@ export async function createPoolTxWorker({
 
         const requiredFee = await feeManager.estimateFee({
           gasLimit: config.relayerGasLimit,
-          extraData: tx.rawMemo,
+          extraData: tx.rawMemo + (tx.depositSignature || ''),
         })
         const denominatedFee = requiredFee.denominate(pool.denominator).getEstimate()
 
