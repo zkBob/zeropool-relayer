@@ -1,8 +1,10 @@
 export * from './FeeManager'
-export * from './DefaultFeeManager'
+export * from './StaticFeeManager'
+export * from './DynamicFeeManager'
 export * from './OptimismFeeManager'
 
 export enum FeeManagerType {
-  Default = 'default',
+  Static = 'static',
+  Dynamic = 'Dynamic',
   Optimism = 'optimism',
 }

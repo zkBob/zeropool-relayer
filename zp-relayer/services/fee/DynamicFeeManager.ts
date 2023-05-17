@@ -1,3 +1,4 @@
+import { toBN } from 'web3-utils'
 import {
   FeeManager,
   FeeEstimate,
@@ -6,10 +7,10 @@ import {
   IGetFeesParams,
   IFeeManagerConfig,
 } from './FeeManager'
-import { toBN } from 'web3-utils'
+import type { EstimationType, GasPrice } from '../gas-price'
 
-export class DefaultFeeManager extends FeeManager {
-  constructor(config: IFeeManagerConfig) {
+export class DynamicFeeManager extends FeeManager {
+  constructor(config: IFeeManagerConfig, private gasPrice: GasPrice<EstimationType>) {
     super(config)
   }
 
@@ -21,7 +22,7 @@ export class DefaultFeeManager extends FeeManager {
   }
 
   async _getFees({ gasLimit }: IGetFeesParams) {
-    const baseFee = await this.estimateExecutionFee(gasLimit)
+    const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
     return new DefaultUserFeeOptions(baseFee)
   }
 }

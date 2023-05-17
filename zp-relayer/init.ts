@@ -14,7 +14,7 @@ import { redis } from './services/redisClient'
 import { validateTx } from './validation/tx/validateTx'
 import { TxManager } from './tx/TxManager'
 import { Circuit, IProver, LocalProver, ProverType, RemoteProver } from './prover'
-import { FeeManagerType, FeeManager, DefaultFeeManager, OptimismFeeManager } from './services/fee'
+import { FeeManagerType, FeeManager, StaticFeeManager, DynamicFeeManager, OptimismFeeManager } from './services/fee'
 import type { IPriceFeed } from './services/price-feed/IPriceFeed'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
 import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from './services/price-feed'
@@ -38,15 +38,18 @@ function buildFeeManager(
   web3: Web3
 ): FeeManager {
   const managerConfig = {
-    gasPrice,
     priceFeed,
     scaleFactor: config.feeScalingFactor,
     marginFactor: config.feeMarginFactor,
   }
-  if (type === FeeManagerType.Default) {
-    return new DefaultFeeManager(managerConfig)
+  if (type === FeeManagerType.Static) {
+    if (config.relayerFee === null) throw new Error('Static relayer fee is not set')
+    return new StaticFeeManager(managerConfig, config.relayerFee)
+  }
+  if (type === FeeManagerType.Dynamic) {
+    return new DynamicFeeManager(managerConfig, gasPrice)
   } else if (type === FeeManagerType.Optimism) {
-    return new OptimismFeeManager(managerConfig, web3)
+    return new OptimismFeeManager(managerConfig, gasPrice, web3)
   } else {
     throw new Error('Unsupported fee manager')
   }

@@ -206,16 +206,7 @@ function relayerInfo(req: Request, res: Response) {
   })
 }
 
-// NOTE: Will be deprecated
-function getStaticFee(req: Request, res: Response) {
-  validateBatch([[checkTraceId, req.headers]])
-
-  res.json({
-    fee: config.relayerFee.toString(10),
-  })
-}
-
-function getDynamicFeeBuilder(feeManager: FeeManager) {
+function getFeeBuilder(feeManager: FeeManager) {
   return async (req: Request, res: Response) => {
     validateBatch([[checkTraceId, req.headers]])
 
@@ -282,8 +273,7 @@ export default {
   getTransactionsV2,
   getJob,
   relayerInfo,
-  getStaticFee,
-  getDynamicFeeBuilder,
+  getFeeBuilder,
   getLimits,
   getSiblings,
   getParamsHashBuilder,

@@ -13,7 +13,8 @@ import {
   IUserFeeOptions,
   IGetFeesParams,
 } from './FeeManager'
-import { IPriceFeed } from '../price-feed'
+import type { IPriceFeed } from '../price-feed'
+import type { EstimationType, GasPrice } from '../gas-price'
 
 const ZERO_BYTE_GAS = 4
 const NZERO_BYTE_GAS = 16
@@ -54,7 +55,7 @@ export class OptimismFeeManager extends FeeManager {
   private decimals!: BN
   private scalar!: BN
 
-  constructor(config: IFeeManagerConfig, web3: Web3) {
+  constructor(config: IFeeManagerConfig, private gasPrice: GasPrice<EstimationType>, web3: Web3) {
     super(config)
     this.oracle = new web3.eth.Contract(OracleAbi as AbiItem[], OP_GAS_ORACLE_ADDRESS)
   }
@@ -97,7 +98,7 @@ export class OptimismFeeManager extends FeeManager {
   }
 
   async _getFees({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
-    const baseFee = await this.estimateExecutionFee(gasLimit)
+    const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
 
     // TODO: cache
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)

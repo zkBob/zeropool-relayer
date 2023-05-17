@@ -1,7 +1,7 @@
 import type BN from 'bn.js'
 import { toBN } from 'web3-utils'
-import { GasPrice, EstimationType, getMaxRequiredGasPrice } from '../gas-price'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
+import { GasPrice, EstimationType, getMaxRequiredGasPrice } from '../gas-price'
 
 export interface IGetFeesParams {
   gasLimit: BN
@@ -50,7 +50,6 @@ export class FeeEstimate extends DefaultUserFeeOptions {
 }
 
 export interface IFeeManagerConfig {
-  gasPrice: GasPrice<EstimationType>
   priceFeed: IPriceFeed
   scaleFactor: BN
   marginFactor: BN
@@ -61,9 +60,9 @@ export abstract class FeeManager {
 
   abstract init(): Promise<void>
 
-  protected async estimateExecutionFee(gasLimit: BN): Promise<BN> {
-    const gasPrice = await this.config.gasPrice.fetchOnce()
-    return toBN(getMaxRequiredGasPrice(gasPrice)).mul(gasLimit)
+  static async estimateExecutionFee(gasPrice: GasPrice<EstimationType>, gasLimit: BN): Promise<BN> {
+    const price = await gasPrice.fetchOnce()
+    return toBN(getMaxRequiredGasPrice(price)).mul(gasLimit)
   }
 
   private async convertAndScale<T extends IUserFeeOptions>(baseFee: T) {
