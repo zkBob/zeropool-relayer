@@ -17,6 +17,12 @@ export async function checkAssertion(f: () => Promise<OptionError> | OptionError
   }
 }
 
+export function checkCondition(condition: boolean, message: string = '') {
+  if (!condition) {
+    throw new TxValidationError(message)
+  }
+}
+
 export function checkSize(data: string, size: number) {
   return data.length === size
 }

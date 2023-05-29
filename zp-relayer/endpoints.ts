@@ -232,6 +232,14 @@ async function getLimits(req: Request, res: Response) {
   res.json(limitsFetch)
 }
 
+function getMaxNativeAmount(req: Request, res: Response) {
+  validateBatch([[checkTraceId, req.headers]])
+
+  res.json({
+    maxNativeAmount: config.maxNativeAmount.toString(10),
+  })
+}
+
 function getSiblings(req: Request, res: Response) {
   validateBatch([
     [checkTraceId, req.headers],
@@ -278,6 +286,7 @@ export default {
   relayerInfo,
   getFee,
   getLimits,
+  getMaxNativeAmount,
   getSiblings,
   getParamsHash,
   relayerVersion,

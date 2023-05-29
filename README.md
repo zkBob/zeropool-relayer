@@ -155,6 +155,8 @@ Note, that requests to all endpoints (except `/`, `/info`, `/params/hash/tree`, 
     }
     ```
 
+- `/maxNativeAmount` - returns maximum amount of pool's tokens (already denominated) that can be swapped to native tokens in one withdrawal transaction.
+
 - `/params/hash/tree` - hash of pool tree proving parameters.
 
 - `/params/hash/tx` - hash of pool transaction proving parameters.
