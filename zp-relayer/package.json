@@ -28,7 +28,7 @@
     "express-winston": "4.2.0",
     "gas-price-oracle": "0.5.1",
     "ioredis": "5.2.4",
-    "libzkbob-rs-node": "1.0.0",
+    "libzkbob-rs-node": "1.1.0",
     "promise-retry": "^2.0.1",
     "semver": "7.3.8",
     "web3": "1.7.4",

@@ -17,7 +17,7 @@ import { createDirectDepositWorker } from './workers/directDepositWorker'
 
 function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
   if (type === ProverType.Local) {
-    const params = Params.fromFile(path)
+    const params = Params.fromFile(path, true)
     return new LocalProver(circuit, params)
   } else {
     // TODO: add env url
