@@ -5,7 +5,7 @@ import { createConsoleLoggerMiddleware, createPersistentLoggerMiddleware } from 
 import config from './configs/relayerConfig'
 import { init } from './init'
 
-init().then(() => {
+init().then(({ feeManager }) => {
   const app = express()
 
   if (config.trustProxy) {
@@ -15,7 +15,7 @@ init().then(() => {
   app.use(createPersistentLoggerMiddleware(config.requestLogPath))
   app.use(createConsoleLoggerMiddleware())
 
-  app.use(createRouter())
+  app.use(createRouter({ feeManager }))
   const PORT = config.port
   app.listen(PORT, () => logger.info(`Started relayer on port ${PORT}`))
 })

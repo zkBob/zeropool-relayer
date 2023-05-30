@@ -16,6 +16,7 @@ import {
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import { HEADER_TRACE_ID } from './utils/constants'
 import { getFileHash } from './utils/helpers'
+import type { FeeManager } from './services/fee'
 
 async function sendTransactions(req: Request, res: Response) {
   validateBatch([
@@ -205,12 +206,15 @@ function relayerInfo(req: Request, res: Response) {
   })
 }
 
-function getFee(req: Request, res: Response) {
-  validateBatch([[checkTraceId, req.headers]])
+function getFeeBuilder(feeManager: FeeManager) {
+  return async (req: Request, res: Response) => {
+    validateBatch([[checkTraceId, req.headers]])
 
-  res.json({
-    fee: config.relayerFee.toString(10),
-  })
+    const feeOptions = await feeManager.getFees({ gasLimit: config.relayerGasLimit })
+    const fees = feeOptions.denominate(pool.denominator).getObject()
+
+    res.json(fees)
+  }
 }
 
 async function getLimits(req: Request, res: Response) {
@@ -257,7 +261,7 @@ function getSiblings(req: Request, res: Response) {
   res.json(siblings)
 }
 
-function getParamsHash(path: string | null) {
+function getParamsHashBuilder(path: string | null) {
   let hash: string | null = null
   if (path) {
     hash = getFileHash(path)
@@ -284,11 +288,11 @@ export default {
   getTransactionsV2,
   getJob,
   relayerInfo,
-  getFee,
+  getFeeBuilder,
   getLimits,
   getMaxNativeAmount,
   getSiblings,
-  getParamsHash,
+  getParamsHashBuilder,
   relayerVersion,
   root,
 }
