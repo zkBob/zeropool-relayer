@@ -5,6 +5,6 @@ export * from './OptimismFeeManager'
 
 export enum FeeManagerType {
   Static = 'static',
-  Dynamic = 'Dynamic',
+  Dynamic = 'dynamic',
   Optimism = 'optimism',
 }
