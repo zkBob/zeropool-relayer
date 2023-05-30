@@ -3460,10 +3460,10 @@ libzeropool-rs-wasm-bundler@0.3.8:
   resolved "https://registry.yarnpkg.com/libzeropool-rs-wasm-bundler/-/libzeropool-rs-wasm-bundler-0.3.8.tgz#2b55628a741f4bd0f776d87365c22ed0da63ba6c"
   integrity sha512-b+W6M/gyeaoKZ4LJC2ThtZmXHVOoEtsa3foPezAyfdgbsyNGDHbSMBcqoTIXVHkP6ul7BKxjOP3xvfi3F6klTg==
 
-libzkbob-rs-node@1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/libzkbob-rs-node/-/libzkbob-rs-node-1.0.0.tgz#a65582e2aca8fc8f90e9c501facf5da16709f14a"
-  integrity sha512-WiIAON2Fe+oakYBgh1ajjG9NQkQFZPTAWc2hvs3BEkw8ezgjkkvh1/yZ8ap8QQE2PAm/rSqsAPuQgj7160Ulvg==
+libzkbob-rs-node@1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/libzkbob-rs-node/-/libzkbob-rs-node-1.1.0.tgz#b2b8054c4210a608379537f4d27b5c799b0e4f78"
+  integrity sha512-SKb0NEA4bi4x9fmuJNaKLWeLq5gyPjrHi1XEbviGECihucMp9RbNT+qRkCdFHhOcsQ1nnrlRvujWUhuO63vJ/Q==
   dependencies:
     cargo-cp-artifact "^0.1"
 

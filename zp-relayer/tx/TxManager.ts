@@ -67,7 +67,7 @@ export class TxManager {
         }
         const [oldGasPrice, updatedGasPrice] = await this.updateAndBumpGasPrice(txConfig, newGasPriceWithExtra)
         newGasPrice = updatedGasPrice
-        tLogger.warn('Updating gasPrice: %o -> %o', oldGasPrice, newGasPrice)
+        tLogger.info('Updating tx gasPrice: %o -> %o', oldGasPrice, newGasPrice)
       } else {
         tLogger.info('Nonce', { nonce: this.nonce })
         newGasPrice = newGasPriceWithExtra

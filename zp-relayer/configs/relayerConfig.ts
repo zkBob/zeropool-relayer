@@ -25,7 +25,7 @@ const config = {
   tokenAddress: process.env.RELAYER_TOKEN_ADDRESS as string,
   relayerGasLimit: toBN(process.env.RELAYER_GAS_LIMIT as string),
   relayerFee: process.env.RELAYER_FEE ? toBN(process.env.RELAYER_FEE) : null,
-  maxFaucet: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT_FAUCET as string),
+  maxNativeAmount: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT || '0'),
   treeUpdateParamsPath: process.env.RELAYER_TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
   transferParamsPath: process.env.RELAYER_TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
   directDepositParamsPath: process.env.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH || './params/delegated_deposit_params.bin',

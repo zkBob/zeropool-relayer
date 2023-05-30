@@ -70,6 +70,7 @@ export function createRouter({ feeManager }: IRouterConfig) {
   router.get('/info', wrapErr(endpoints.relayerInfo))
   router.get('/fee', wrapErr(endpoints.getFeeBuilder(feeManager)))
   router.get('/limits', wrapErr(endpoints.getLimits))
+  router.get('/maxNativeAmount', wrapErr(endpoints.getMaxNativeAmount))
   router.get('/siblings', wrapErr(endpoints.getSiblings))
   router.get('/params/hash/tree', wrapErr(endpoints.getParamsHashBuilder(config.treeUpdateParamsPath)))
   router.get('/params/hash/tx', wrapErr(endpoints.getParamsHashBuilder(config.transferParamsPath)))

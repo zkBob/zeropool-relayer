@@ -1,5 +1,6 @@
+import type { Queue } from 'bullmq'
 import { Request, Response } from 'express'
-import { pool, PoolTx } from './pool'
+import { LimitsFetch, pool, PoolTx } from './pool'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './configs/relayerConfig'
 import {
@@ -13,7 +14,6 @@ import {
   validateBatch,
 } from './validation/api/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
-import type { Queue } from 'bullmq'
 import { HEADER_TRACE_ID } from './utils/constants'
 import { getFileHash } from './utils/helpers'
 import type { FeeManager } from './services/fee'
@@ -224,9 +224,24 @@ async function getLimits(req: Request, res: Response) {
   ])
 
   const address = req.query.address as unknown as string
-  const limits = await pool.getLimitsFor(address)
-  const limitsFetch = pool.processLimits(limits)
+
+  let limitsFetch: LimitsFetch
+  try {
+    const limits = await pool.getLimitsFor(address)
+    limitsFetch = pool.processLimits(limits)
+  } catch (e) {
+    throw new Error(`Error while fetching limits for ${address}`)
+  }
+
   res.json(limitsFetch)
+}
+
+function getMaxNativeAmount(req: Request, res: Response) {
+  validateBatch([[checkTraceId, req.headers]])
+
+  res.json({
+    maxNativeAmount: config.maxNativeAmount.toString(10),
+  })
 }
 
 function getSiblings(req: Request, res: Response) {
@@ -275,6 +290,7 @@ export default {
   relayerInfo,
   getFeeBuilder,
   getLimits,
+  getMaxNativeAmount,
   getSiblings,
   getParamsHashBuilder,
   relayerVersion,

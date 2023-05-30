@@ -75,7 +75,7 @@ export async function createPoolTxWorker({
           config.insufficientBalanceCheckTimeout
         )
       }
-      logger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
+      logger.warn('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
     }
 
     const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)

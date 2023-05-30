@@ -79,8 +79,8 @@ describe('poolWorker', () => {
   let snapShotId: string
   let eventsInit = false
   let treeProver: IProver<Circuit.Tree>
-  const treeParams = Params.fromFile(config.treeUpdateParamsPath as string)
-  const directDepositParams = Params.fromFile(config.directDepositParamsPath as string)
+  const treeParams = Params.fromFile(config.treeUpdateParamsPath as string, true)
+  const directDepositParams = Params.fromFile(config.directDepositParamsPath as string, true)
   const ddSender = '0x28a8746e75304c0780e011bed21c72cd78cd535e'
 
   beforeEach(async () => {
