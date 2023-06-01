@@ -21,7 +21,7 @@ import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from './services/pri
 
 function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
   if (type === ProverType.Local) {
-    const params = Params.fromFile(path, true)
+    const params = Params.fromFile(path, config.precomputeParams)
     return new LocalProver(circuit, params)
   } else if (type === ProverType.Remote) {
     // TODO: test relayer with remote prover
