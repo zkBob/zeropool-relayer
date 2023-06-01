@@ -70,6 +70,7 @@ const config = {
   priceFeedType: (process.env.RELAYER_PRICE_FEED_TYPE || PriceFeedType.Native) as PriceFeedType,
   priceFeedContractAddress: process.env.RELAYER_PRICE_FEED_CONTRACT_ADDRESS || null,
   priceFeedBaseTokenAddress: process.env.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS || null,
+  precomputeParams: process.env.RELAYER_PRECOMPUTE_PARAMS === 'true',
 }
 
 export default config
