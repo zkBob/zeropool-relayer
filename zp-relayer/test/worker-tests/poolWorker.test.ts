@@ -39,7 +39,7 @@ import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 import { Params } from 'libzkbob-rs-node'
 import { directDepositQueue } from '../../queue/directDepositQueue'
 import { createDirectDepositWorker } from '../../workers/directDepositWorker'
-import { FeeManager, DefaultFeeManager } from '../../services/fee'
+import { DynamicFeeManager, FeeManager } from '../../services/fee'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -106,9 +106,11 @@ describe('poolWorker', () => {
       priceFeed: mockPriceFeed,
       scaleFactor: toBN(1),
       marginFactor: toBN(1),
+      updateInterval: config.feeManagerUpdateInterval,
+      defaultFeeOptionsParams: { gasLimit: config.relayerGasLimit },
     }
-    feeManager = new DefaultFeeManager(managerConfig)
-    await feeManager.init()
+    feeManager = new DynamicFeeManager(managerConfig, gasPriceService)
+    await feeManager.start()
 
     txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
     await txManager.init()

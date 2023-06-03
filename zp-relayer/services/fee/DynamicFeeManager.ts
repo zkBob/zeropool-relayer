@@ -21,7 +21,7 @@ export class DynamicFeeManager extends FeeManager {
     return new FeeEstimate(toBN(fee))
   }
 
-  async _getFees({ gasLimit }: IGetFeesParams) {
+  async _fetchFeeOptions({ gasLimit }: IGetFeesParams) {
     const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
     return new DefaultUserFeeOptions(baseFee)
   }

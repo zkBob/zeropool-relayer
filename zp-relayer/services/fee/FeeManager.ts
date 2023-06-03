@@ -2,6 +2,8 @@ import type BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
 import { GasPrice, EstimationType, getMaxRequiredGasPrice } from '../gas-price'
+import { setIntervalAndRun } from '@/utils/helpers'
+import { logger } from '../appLogger'
 
 export interface IGetFeesParams {
   gasLimit: BN
@@ -53,12 +55,32 @@ export interface IFeeManagerConfig {
   priceFeed: IPriceFeed
   scaleFactor: BN
   marginFactor: BN
+  updateInterval: number
+  defaultFeeOptionsParams: IGetFeesParams
 }
 
 export abstract class FeeManager {
+  private cachedFeeOptions: IUserFeeOptions | null = null
+  private updateFeeOptionsInterval: NodeJS.Timeout | null = null
+
   constructor(protected config: IFeeManagerConfig) {}
 
-  abstract init(): Promise<void>
+  protected abstract init(): Promise<void>
+
+  async start() {
+    await this.init()
+
+    if (this.updateFeeOptionsInterval) clearInterval(this.updateFeeOptionsInterval)
+
+    this.updateFeeOptionsInterval = await setIntervalAndRun(async () => {
+      const feeOptions = await this.fetchFeeOptions(this.config.defaultFeeOptionsParams)
+      logger.debug('Updating cached fee options', {
+        old: this.cachedFeeOptions?.getObject(),
+        new: feeOptions.getObject(),
+      })
+      this.cachedFeeOptions = feeOptions
+    }, this.config.updateInterval)
+  }
 
   static async estimateExecutionFee(gasPrice: GasPrice<EstimationType>, gasLimit: BN): Promise<BN> {
     const price = await gasPrice.fetchOnce()
@@ -72,21 +94,27 @@ export abstract class FeeManager {
   }
 
   async estimateFee(params: IFeeEstimateParams): Promise<FeeEstimate> {
-    const fees = await this.getFees(params)
+    const fees = await this.getFeeOptions(params, false)
     const estimatedFee = await this._estimateFee(params, fees)
     const marginedFee = estimatedFee.applyFactor(this.config.marginFactor)
     return marginedFee
   }
 
-  async getFees(params: IGetFeesParams): Promise<IUserFeeOptions> {
-    const feeOptions = await this._getFees(params)
+  async fetchFeeOptions(params: IGetFeesParams): Promise<IUserFeeOptions> {
+    const feeOptions = await this._fetchFeeOptions(params)
     const convertedFees = await this.convertAndScale(feeOptions)
+
     return convertedFees
+  }
+
+  async getFeeOptions(params: IGetFeesParams, useCached = true): Promise<IUserFeeOptions> {
+    if (useCached && this.cachedFeeOptions) return this.cachedFeeOptions
+    return this.fetchFeeOptions(params)
   }
 
   // Should be used for tx fee validation
   protected abstract _estimateFee(params: IFeeEstimateParams, fees: IUserFeeOptions): Promise<FeeEstimate>
 
   // Should provide fee estimations for users
-  protected abstract _getFees(params: IGetFeesParams): Promise<IUserFeeOptions>
+  protected abstract _fetchFeeOptions(params: IGetFeesParams): Promise<IUserFeeOptions>
 }

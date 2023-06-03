@@ -97,7 +97,7 @@ export class OptimismFeeManager extends FeeManager {
     return new FeeEstimate(fee)
   }
 
-  async _getFees({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
+  async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
     const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
 
     // TODO: cache
