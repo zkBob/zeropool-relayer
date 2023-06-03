@@ -109,7 +109,15 @@ export abstract class FeeManager {
 
   async getFeeOptions(params: IGetFeesParams, useCached = true): Promise<IUserFeeOptions> {
     if (useCached && this.cachedFeeOptions) return this.cachedFeeOptions
-    return this.fetchFeeOptions(params)
+    let feeOptions: IUserFeeOptions
+    try {
+      feeOptions = await this.fetchFeeOptions(params)
+    } catch (e) {
+      logger.error('Failed to fetch fee options', e)
+      if (!this.cachedFeeOptions) throw e
+      feeOptions = this.cachedFeeOptions
+    }
+    return feeOptions
   }
 
   // Should be used for tx fee validation
