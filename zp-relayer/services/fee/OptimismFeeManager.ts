@@ -43,7 +43,7 @@ class OptimismUserFeeOptions implements IUserFeeOptions {
 
   getObject() {
     return {
-      baseFee: this.baseFee.toString(10),
+      fee: this.baseFee.toString(10),
       oneByteFee: this.oneByteFee.toString(10),
     }
   }
@@ -84,7 +84,7 @@ export class OptimismFeeManager extends FeeManager {
   }
 
   async _estimateFee({ extraData }: IFeeEstimateParams, feeOptions: OptimismUserFeeOptions) {
-    const { baseFee, oneByteFee } = feeOptions.getObject()
+    const { fee: baseFee, oneByteFee } = feeOptions.getObject()
 
     const unscaledL1Fee = this.getL1Fee(MOCK_CALLDATA + extraData, toBN(oneByteFee))
 
@@ -92,9 +92,9 @@ export class OptimismFeeManager extends FeeManager {
     // We do it here to get a more accurate result
     const l1Fee = unscaledL1Fee.divn(NZERO_BYTE_GAS)
 
-    const fee = toBN(baseFee).add(l1Fee)
+    const feeEstimate = toBN(baseFee).add(l1Fee)
 
-    return new FeeEstimate(fee)
+    return new FeeEstimate(feeEstimate)
   }
 
   async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
