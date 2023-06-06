@@ -41,6 +41,10 @@ class OptimismUserFeeOptions implements IUserFeeOptions {
     return this
   }
 
+  clone(): this {
+    return new OptimismUserFeeOptions(this.baseFee.clone(), this.oneByteFee.clone()) as this
+  }
+
   getObject() {
     return {
       fee: this.baseFee.toString(10),
@@ -98,6 +102,7 @@ export class OptimismFeeManager extends FeeManager {
   }
 
   async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
+    // TODO: add RLP encoding overhead to baseFee
     const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
 
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
