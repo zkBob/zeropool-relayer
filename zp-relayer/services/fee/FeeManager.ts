@@ -112,9 +112,11 @@ export abstract class FeeManager {
     let feeOptions: IUserFeeOptions
     try {
       feeOptions = await this.fetchFeeOptions(params)
+      logger.debug('Fetched fee options', feeOptions.getObject())
     } catch (e) {
       logger.error('Failed to fetch fee options', e)
       if (!this.cachedFeeOptions) throw e
+      logger.debug('Fallback to cache fee options')
       feeOptions = this.cachedFeeOptions
     }
     return feeOptions

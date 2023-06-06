@@ -100,7 +100,6 @@ export class OptimismFeeManager extends FeeManager {
   async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
     const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
 
-    // TODO: cache
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
     // Use an upper bound for the oneByteFee
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
