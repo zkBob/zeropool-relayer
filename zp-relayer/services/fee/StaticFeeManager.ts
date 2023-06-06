@@ -12,7 +12,7 @@ export class StaticFeeManager extends FeeManager {
     return new FeeEstimate(this.staticFee)
   }
 
-  async _getFees() {
+  async _fetchFeeOptions() {
     return new DefaultUserFeeOptions(this.staticFee)
   }
 }

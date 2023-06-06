@@ -41,6 +41,8 @@ function buildFeeManager(
     priceFeed,
     scaleFactor: config.feeScalingFactor,
     marginFactor: config.feeMarginFactor,
+    updateInterval: config.feeManagerUpdateInterval,
+    defaultFeeOptionsParams: { gasLimit: config.relayerGasLimit },
   }
   if (type === FeeManagerType.Static) {
     if (config.relayerFee === null) throw new Error('Static relayer fee is not set')
@@ -105,7 +107,7 @@ export async function init() {
 
   const priceFeed = buildPriceFeed(config.priceFeedType, web3)
   const feeManager = buildFeeManager(config.feeManagerType, priceFeed, gasPriceService, web3)
-  await feeManager.init()
+  await feeManager.start()
 
   const workerPromises = [
     createPoolTxWorker({
