@@ -17,6 +17,7 @@ export interface IUserFeeOptions {
   denominate(denominator: BN): this
   convert(priceFeed: IPriceFeed): Promise<this>
   getObject(): Record<string, string>
+  clone(): this
 }
 
 export class DefaultUserFeeOptions implements IUserFeeOptions {
@@ -36,6 +37,10 @@ export class DefaultUserFeeOptions implements IUserFeeOptions {
     const [fee] = await priceFeed.convert([this.fee])
     this.fee = fee
     return this
+  }
+
+  clone() {
+    return new DefaultUserFeeOptions(this.fee.clone()) as this
   }
 
   getObject() {
@@ -108,7 +113,7 @@ export abstract class FeeManager {
   }
 
   async getFeeOptions(params: IGetFeesParams, useCached = true): Promise<IUserFeeOptions> {
-    if (useCached && this.cachedFeeOptions) return this.cachedFeeOptions
+    if (useCached && this.cachedFeeOptions) return this.cachedFeeOptions.clone()
     let feeOptions: IUserFeeOptions
     try {
       feeOptions = await this.fetchFeeOptions(params)
@@ -117,7 +122,7 @@ export abstract class FeeManager {
       logger.error('Failed to fetch fee options', e)
       if (!this.cachedFeeOptions) throw e
       logger.debug('Fallback to cache fee options')
-      feeOptions = this.cachedFeeOptions
+      feeOptions = this.cachedFeeOptions.clone()
     }
     return feeOptions
   }
