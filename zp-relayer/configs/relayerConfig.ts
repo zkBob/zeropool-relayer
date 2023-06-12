@@ -7,6 +7,7 @@ import type { EstimationType, GasPriceKey } from '@/services/gas-price'
 import { ProverType } from '@/prover'
 import { countryCodes } from '@/utils/countryCodes'
 import { logger } from '@/services/appLogger'
+import { PermitType } from '@/utils/permit/types'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -72,6 +73,8 @@ const config = {
   priceFeedContractAddress: process.env.RELAYER_PRICE_FEED_CONTRACT_ADDRESS || null,
   priceFeedBaseTokenAddress: process.env.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS || null,
   precomputeParams: process.env.RELAYER_PRECOMPUTE_PARAMS === 'true',
+  permitType: (process.env.RELAYER_PERMIT_TYPE || PermitType.SaltedPermit) as PermitType,
+  permit2VerifyingContract: (process.env.RELAYER_PERMIT2_VERIFYING_CONTRACT as string) || null,
 }
 
 export default config

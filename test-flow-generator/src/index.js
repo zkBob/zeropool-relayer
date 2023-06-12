@@ -6,7 +6,7 @@ const { Proof, Params } = require('libzkbob-rs-node')
 
 const OUT_FLOWS_DIR = './flows/'
 const TEST_FLOWS_DIR = './test-flows/'
-const PARAMS = Params.fromFile(process.env.PARAMS_PATH || '../zp-relayer/params/transfer_params.bin')
+const PARAMS = Params.fromFile(process.env.PARAMS_PATH || '../zp-relayer/params/transfer_params.bin', true)
 
 if (!fs.existsSync(OUT_FLOWS_DIR)) {
   fs.mkdirSync(OUT_FLOWS_DIR, { recursive: true })
