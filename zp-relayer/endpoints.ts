@@ -1,8 +1,10 @@
+import type { Queue } from 'bullmq'
 import { Request, Response } from 'express'
-import { pool, PoolTx } from './pool'
+import { LimitsFetch, pool, PoolTx } from './pool'
 import { poolTxQueue } from './queue/poolTxQueue'
 import config from './configs/relayerConfig'
 import {
+  validateCountryIP,
   checkGetLimits,
   checkGetSiblings,
   checkGetTransactionsV2,
@@ -12,15 +14,17 @@ import {
   validateBatch,
 } from './validation/api/validation'
 import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
-import type { Queue } from 'bullmq'
 import { HEADER_TRACE_ID } from './utils/constants'
 import { getFileHash } from './utils/helpers'
+import type { FeeManager } from './services/fee'
 
 async function sendTransactions(req: Request, res: Response) {
   validateBatch([
     [checkTraceId, req.headers],
     [checkSendTransactionsErrors, req.body],
   ])
+
+  await validateCountryIP(req.ip)
 
   const rawTxs = req.body as PoolTx[]
   const traceId = req.headers[HEADER_TRACE_ID] as string
@@ -202,12 +206,15 @@ function relayerInfo(req: Request, res: Response) {
   })
 }
 
-function getFee(req: Request, res: Response) {
-  validateBatch([[checkTraceId, req.headers]])
+function getFeeBuilder(feeManager: FeeManager) {
+  return async (req: Request, res: Response) => {
+    validateBatch([[checkTraceId, req.headers]])
 
-  res.json({
-    fee: config.relayerFee.toString(10),
-  })
+    const feeOptions = await feeManager.getFeeOptions({ gasLimit: config.relayerGasLimit })
+    const fees = feeOptions.denominate(pool.denominator).getObject()
+
+    res.json(fees)
+  }
 }
 
 async function getLimits(req: Request, res: Response) {
@@ -217,9 +224,24 @@ async function getLimits(req: Request, res: Response) {
   ])
 
   const address = req.query.address as unknown as string
-  const limits = await pool.getLimitsFor(address)
-  const limitsFetch = pool.processLimits(limits)
+
+  let limitsFetch: LimitsFetch
+  try {
+    const limits = await pool.getLimitsFor(address)
+    limitsFetch = pool.processLimits(limits)
+  } catch (e) {
+    throw new Error(`Error while fetching limits for ${address}`)
+  }
+
   res.json(limitsFetch)
+}
+
+function getMaxNativeAmount(req: Request, res: Response) {
+  validateBatch([[checkTraceId, req.headers]])
+
+  res.json({
+    maxNativeAmount: config.maxNativeAmount.toString(10),
+  })
 }
 
 function getSiblings(req: Request, res: Response) {
@@ -239,7 +261,7 @@ function getSiblings(req: Request, res: Response) {
   res.json(siblings)
 }
 
-function getParamsHash(path: string | null) {
+function getParamsHashBuilder(path: string | null) {
   let hash: string | null = null
   if (path) {
     hash = getFileHash(path)
@@ -266,10 +288,11 @@ export default {
   getTransactionsV2,
   getJob,
   relayerInfo,
-  getFee,
+  getFeeBuilder,
   getLimits,
+  getMaxNativeAmount,
   getSiblings,
-  getParamsHash,
+  getParamsHashBuilder,
   relayerVersion,
   root,
 }

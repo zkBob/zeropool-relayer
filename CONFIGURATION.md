@@ -5,6 +5,7 @@ These environment variables are required for all services.
 | name | description | value |
 | - | - | - |
 | COMMON_LOG_LEVEL | Log level | Winston log level |
+| COMMON_COLORIZE_LOGS | If set to `true`, log levels will be colorized when printed to stdout. | boolean |
 | COMMON_POOL_ADDRESS | Address of the pool contract | hexadecimal prefixed with "0x" |
 | COMMON_START_BLOCK | The block number used to start searching for events when the relayer/watcher instance is run for the first time | integer |
 | COMMON_REDIS_URL | Url to redis instance | URL |
@@ -24,7 +25,7 @@ These environment variables are required for all services.
 | RELAYER_ADDRESS_PRIVATE_KEY | Private key to sign pool transactions | hexadecimal prefixed with "0x" |
 | RELAYER_GAS_LIMIT | Gas limit for pool transactions | integer |
 | RELAYER_FEE | Minimal accepted relayer fee (in tokens) | integer |
-| RELAYER_MAX_NATIVE_AMOUNT_FAUCET | Maximal amount of faucet value (in ETH) | integer |
+| RELAYER_MAX_NATIVE_AMOUNT | Maximal amount of pool's tokens which can be converted to native in one withdrawal transaction. Defaults to 0. | integer |
 | RELAYER_TREE_UPDATE_PARAMS_PATH | Local path to tree update circuit parameters | string |
 | RELAYER_TRANSFER_PARAMS_PATH | Local path to transfer circuit parameters | string |
 | RELAYER_TX_VK_PATH | Local path to transaction circuit verification key | string |
@@ -50,11 +51,19 @@ These environment variables are required for all services.
 | RELAYER_LOG_HEADER_BLACKLIST | List of space separated HTTP headers which will be suppressed in request logs. E.g. `content-length content-type` | string(s) |
 | RELAYER_SCREENER_URL | Screener service URL | URL |
 | RELAYER_SCREENER_TOKEN | Authorization token for screener service | string |
+| RELAYER_BLOCKED_COUNTRIES | A list of country codes delimited by spaces | string|
+| RELAYER_EXPRESS_TRUST_PROXY | If set to `true`, then `trust proxy` express setting will be enabled. Defaults to `false` | boolean |
+| RELAYER_FEE_MANAGER_TYPE | Fee manager that will be used for fee estimations | FeeManagerType |
+| RELAYER_FEE_MARGIN_FACTOR | Margin factor (in percent) that is used to adjust fee estimations during validation. Defaults to 100. | number |
+| RELAYER_FEE_SCALING_FACTOR | Scaling factor (in percent) that is used to adjust both exposed user fees and fee estimations during validation. Defaults to 100. | number |
+| RELAYER_PRICE_FEED_TYPE | Price feed type that will be used for rate conversions. | PriceFeedType |
+| RELAYER_PRICE_FEED_CONTRACT_ADDRESS | Price feed contract address. | address |
+| RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS | Base token that will be used for rate conversions. | address |
 
 ## Watcher
 
 | name | description | value |
 | - | - | - |
 | WATCHER_EVENT_POLLING_INTERVAL | The interval in milliseconds used to request the RPC node for new blocks. | integer |
-| WATCHER_DIRECT_DEPOSIT_BATCH_SIZE | Maximum size of a single direct deposit batch. Defaults to `16`. | integer |
-| WATCHER_DIRECT_DEPOSIT_BATCH_TTL | Maximum TTL in milliseconds for a new direct deposit batch. After this time batch will be submitted to the queue, even if it has less than `DIRECT_DEPOSIT_BATCH_SIZE` elements. Defaults to `3600000` (1 hour) | integer |
+| DIRECT_DEPOSIT_BATCH_SIZE | Maximum size of a single direct deposit batch. Defaults to `16`. | integer |
+| DIRECT_DEPOSIT_BATCH_TTL | Maximum TTL in milliseconds for a new direct deposit batch. After this time batch will be submitted to the queue, even if it has less than `DIRECT_DEPOSIT_BATCH_SIZE` elements. Defaults to `3600000` (1 hour) | integer |

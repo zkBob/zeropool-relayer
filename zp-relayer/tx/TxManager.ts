@@ -15,6 +15,11 @@ import { Mutex } from 'async-mutex'
 import { logger } from '@/services/appLogger'
 import { readNonce, updateNonce } from '@/utils/redisFields'
 
+interface PrepareTxConfig {
+  isResend?: boolean
+  shouldUpdateGasPrice?: boolean
+}
+
 export class TxManager {
   nonce!: number
   chainId!: number
@@ -43,11 +48,15 @@ export class TxManager {
     }
   }
 
-  async prepareTx(txConfig: TransactionConfig, tLogger = logger, isResend = false) {
+  async prepareTx(
+    txConfig: TransactionConfig,
+    { isResend = false, shouldUpdateGasPrice = true }: PrepareTxConfig,
+    tLogger = logger
+  ) {
     const release = await this.mutex.acquire()
     try {
-      const gasPriceValue = await this.gasPrice.fetchOnce()
-      const newGasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceSurplus)
+      const gasPriceValue = shouldUpdateGasPrice ? await this.gasPrice.fetchOnce() : this.gasPrice.getPrice()
+      const newGasPriceWithExtra = addExtraGasPrice(gasPriceValue, config.gasPriceSurplus, config.maxFeeLimit)
 
       let updatedTxConfig: TransactionConfig = {}
       let newGasPrice: GasPriceValue
@@ -58,7 +67,7 @@ export class TxManager {
         }
         const [oldGasPrice, updatedGasPrice] = await this.updateAndBumpGasPrice(txConfig, newGasPriceWithExtra)
         newGasPrice = updatedGasPrice
-        tLogger.warn('Updating gasPrice: %o -> %o', oldGasPrice, newGasPrice)
+        tLogger.info('Updating tx gasPrice: %o -> %o', oldGasPrice, newGasPrice)
       } else {
         tLogger.info('Nonce', { nonce: this.nonce })
         newGasPrice = newGasPriceWithExtra

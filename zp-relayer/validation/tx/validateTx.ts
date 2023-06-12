@@ -14,7 +14,8 @@ import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1 } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
-import { checkAssertion, TxValidationError, checkSize, checkScreener } from './common'
+import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondition } from './common'
+import { EstimationType, GasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
 
 const ZERO = toBN(0)
 
@@ -50,33 +51,23 @@ export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
   return new TxValidationError(`Incorrect transfer index`)
 }
 
-export function checkTxSpecificFields(txType: TxType, tokenAmount: BN, energyAmount: BN) {
-  let isValid = false
-  if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
-    isValid = tokenAmount.gte(ZERO) && energyAmount.eq(ZERO)
-  } else if (txType === TxType.TRANSFER) {
-    isValid = tokenAmount.eq(ZERO) && energyAmount.eq(ZERO)
-  } else if (txType === TxType.WITHDRAWAL) {
-    isValid = tokenAmount.lte(ZERO) && energyAmount.lte(ZERO)
-  }
-  if (!isValid) {
-    return new TxValidationError('Tx specific fields are incorrect')
-  }
-  return null
-}
-
-export function checkNativeAmount(nativeAmount: BN | null) {
+export function checkNativeAmount(nativeAmount: BN | null, withdrawalAmount: BN) {
   logger.debug(`Native amount: ${nativeAmount}`)
-  // Check native amount (relayer faucet)
-  if (nativeAmount && nativeAmount > config.maxFaucet) {
+  if (nativeAmount === null) {
+    return null
+  }
+  if (nativeAmount.gt(config.maxNativeAmount) || nativeAmount.gt(withdrawalAmount)) {
     return new TxValidationError('Native amount too high')
   }
   return null
 }
 
-export function checkFee(fee: BN) {
-  logger.debug(`Fee: ${fee}`)
-  if (fee.lt(config.relayerFee)) {
+export function checkFee(userFee: BN, requiredFee: BN) {
+  logger.debug('Fee', {
+    userFee: userFee.toString(),
+    requiredFee: requiredFee.toString(),
+  })
+  if (userFee.lt(requiredFee)) {
     return new TxValidationError('Fee too low')
   }
   return null
@@ -205,6 +196,7 @@ function checkMemoPrefix(memo: string, txType: TxType) {
 export async function validateTx(
   { txType, rawMemo, txProof, depositSignature }: TxPayload,
   pool: Pool,
+  requiredFee: BN,
   traceId?: string
 ) {
   await checkAssertion(() => checkMemoPrefix(rawMemo, txType))
@@ -229,21 +221,26 @@ export async function validateTx(
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
-  await checkAssertion(() => checkFee(fee))
+  await checkAssertion(() => checkFee(fee, requiredFee))
   await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
-  const tokenAmountWithFee = delta.tokenAmount.add(fee)
-  await checkAssertion(() => checkTxSpecificFields(txType, tokenAmountWithFee, delta.energyAmount))
+  const tokenAmount = delta.tokenAmount
+  const tokenAmountWithFee = tokenAmount.add(fee)
+  const energyAmount = delta.energyAmount
 
   let userAddress = ZERO_ADDRESS
 
   if (txType === TxType.WITHDRAWAL) {
+    checkCondition(tokenAmountWithFee.lte(ZERO) && energyAmount.lte(ZERO), 'Incorrect withdraw amounts')
+
     const { nativeAmount, receiver } = txData as TxData<TxType.WITHDRAWAL>
     userAddress = web3.utils.bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
     await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
-    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount)))
+    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount), tokenAmountWithFee.neg()))
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
+    checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
+
     const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
     userAddress = await getRecoveredAddress(
       txType,
@@ -255,6 +252,10 @@ export async function validateTx(
     )
     logger.info('Deposit address: %s', userAddress)
     await checkAssertion(() => checkDepositEnoughBalance(pool.TokenInstance, userAddress, requiredTokenAmount))
+  } else if (txType === TxType.TRANSFER) {
+    checkCondition(tokenAmountWithFee.eq(ZERO) && energyAmount.eq(ZERO), 'Incorrect transfer amounts')
+  } else {
+    throw new TxValidationError('Unsupported TxType')
   }
 
   const limits = await pool.getLimitsFor(userAddress)

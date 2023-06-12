@@ -1,4 +1,5 @@
 import chai from 'chai'
+import type BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import { v4 } from 'uuid'
 import { Mutex } from 'async-mutex'
@@ -8,12 +9,13 @@ import { TxType } from 'zp-memo-parser'
 import { web3 } from './web3'
 import { pool } from '../../pool'
 import config from '../../configs/relayerConfig'
+import DirectDepositQueueAbi from '../../abi/direct-deposit-queue-abi.json'
 import { sentTxQueue, SentTxState } from '../../queue/sentTxQueue'
 import { poolTxQueue, PoolTxResult, BatchTx, WorkerTxType, DirectDeposit } from '../../queue/poolTxQueue'
 import { createPoolTxWorker } from '../../workers/poolTxWorker'
 import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
-import { GasPrice } from '../../services/gas-price'
+import { EstimationType, GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
 import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
@@ -37,6 +39,7 @@ import flowZeroAddressWithdraw from '../flows/flow_zero-address_withdraw_2.json'
 import { Params } from 'libzkbob-rs-node'
 import { directDepositQueue } from '../../queue/directDepositQueue'
 import { createDirectDepositWorker } from '../../workers/directDepositWorker'
+import { DynamicFeeManager, FeeManager } from '../../services/fee'
 
 chai.use(chaiAsPromised)
 const expect = chai.expect
@@ -47,7 +50,6 @@ async function submitJob(item: FlowOutputItem<TxType>): Promise<Job<BatchTx<Work
     transactions: [
       {
         amount: '0',
-        gas: '2000000',
         txProof: item.proof,
         txType: item.txType,
         rawMemo: item.transactionData.memo,
@@ -67,8 +69,9 @@ async function submitDirectDepositJob(deposits: DirectDeposit[]) {
 describe('poolWorker', () => {
   let poolWorker: Worker
   let sentWorker: Worker
-  let gasPriceService: GasPrice<'web3'>
+  let gasPriceService: GasPrice<EstimationType.Web3>
   let txManager: TxManager
+  let feeManager: FeeManager
   let poolQueueEvents: QueueEvents
   let sentQueueEvents: QueueEvents
   let directDepositQueueEvents: QueueEvents
@@ -76,8 +79,8 @@ describe('poolWorker', () => {
   let snapShotId: string
   let eventsInit = false
   let treeProver: IProver<Circuit.Tree>
-  const treeParams = Params.fromFile(config.treeUpdateParamsPath as string)
-  const directDepositParams = Params.fromFile(config.directDepositParamsPath as string)
+  const treeParams = Params.fromFile(config.treeUpdateParamsPath as string, true)
+  const directDepositParams = Params.fromFile(config.directDepositParamsPath as string, true)
   const ddSender = '0x28a8746e75304c0780e011bed21c72cd78cd535e'
 
   beforeEach(async () => {
@@ -92,8 +95,22 @@ describe('poolWorker', () => {
     await pool.init()
     await initializeDomain(web3)
 
-    gasPriceService = new GasPrice(web3, 10000, 'web3', {})
+    gasPriceService = new GasPrice(web3, { gasPrice: config.gasPriceFallback }, 10000, EstimationType.Web3, {})
     await gasPriceService.start()
+
+    const mockPriceFeed = {
+      convert: (amounts: BN[]) => Promise.resolve(amounts.map(() => toBN(0))),
+    }
+    const managerConfig = {
+      gasPrice: gasPriceService,
+      priceFeed: mockPriceFeed,
+      scaleFactor: toBN(1),
+      marginFactor: toBN(1),
+      updateInterval: config.feeManagerUpdateInterval,
+      defaultFeeOptionsParams: { gasLimit: config.relayerGasLimit },
+    }
+    feeManager = new DynamicFeeManager(managerConfig, gasPriceService)
+    await feeManager.start()
 
     txManager = new TxManager(web3, config.relayerPrivateKey, gasPriceService)
     await txManager.init()
@@ -112,6 +129,7 @@ describe('poolWorker', () => {
       treeProver,
       mutex,
       txManager,
+      feeManager,
     })
     sentWorker = await createSentTxWorker({
       ...baseConfig,
@@ -193,6 +211,7 @@ describe('poolWorker', () => {
       txManager,
       validateTx: async () => {},
       treeProver,
+      feeManager,
     })
     mockPoolWorker.run()
     await mockPoolWorker.waitUntilReady()
@@ -329,24 +348,25 @@ describe('poolWorker', () => {
   })
 
   it('should process direct deposit transaction', async () => {
-    const fee = await pool.PoolInstance.methods.directDepositFee().call()
+    const queueAddress = await pool.PoolInstance.methods.direct_deposit_queue().call()
+    const DirectDepositQueueInstance = new web3.eth.Contract(DirectDepositQueueAbi as any, queueAddress)
+
+    const fee = await DirectDepositQueueInstance.methods.directDepositFee().call()
     const numDeposits = 16
     const singleDepositAmount = 2
     const amount = toBN(fee).muln(numDeposits * singleDepositAmount)
 
     await mintTokens(ddSender, amount)
-    await approveTokens(ddSender, config.poolAddress, amount)
+    await approveTokens(ddSender, queueAddress, amount)
 
-    const ddFallback = ddSender
-    const diversifier = '35e48bf15982533e0b9d' // 10 bytes
-    const pk = '035b80d59edd72ff0eb3fcf7f7968395300e9c5d5b980de1920aa9d1f151191d' // 32 bytes
+    const zkAddress = 'QsnTijXekjRm9hKcq5kLNPsa6P4HtMRrc3RxVx3jsLHeo2AiysYxVJP86mriHfN'
     for (let i = 0; i < numDeposits; i++) {
-      await pool.PoolInstance.methods
-        .directDeposit(ddFallback, pool.denominator.mul(toBN(fee).muln(singleDepositAmount)), '0x' + diversifier + pk)
+      await DirectDepositQueueInstance.methods
+        .directDeposit(ddSender, pool.denominator.mul(toBN(fee).muln(singleDepositAmount)), zkAddress)
         .send({ from: ddSender })
     }
 
-    const events = await pool.PoolInstance.getPastEvents('SubmitDirectDeposit', {
+    const events = await DirectDepositQueueInstance.getPastEvents('SubmitDirectDeposit', {
       fromBlock: 0,
       toBlock: 'latest',
     })

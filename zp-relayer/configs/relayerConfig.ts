@@ -1,12 +1,12 @@
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
-import type { EstimationType, GasPriceKey } from '../services/gas-price'
 import baseConfig from './baseConfig'
-
-export enum ProverType {
-  Local = 'local',
-  Remote = 'remote',
-}
+import { FeeManagerType } from '@/services/fee'
+import { PriceFeedType } from '@/services/price-feed'
+import type { EstimationType, GasPriceKey } from '@/services/gas-price'
+import { ProverType } from '@/prover'
+import { countryCodes } from '@/utils/countryCodes'
+import { logger } from '@/services/appLogger'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -24,8 +24,8 @@ const config = {
   relayerPrivateKey: process.env.RELAYER_ADDRESS_PRIVATE_KEY as string,
   tokenAddress: process.env.RELAYER_TOKEN_ADDRESS as string,
   relayerGasLimit: toBN(process.env.RELAYER_GAS_LIMIT as string),
-  relayerFee: toBN(process.env.RELAYER_FEE as string),
-  maxFaucet: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT_FAUCET as string),
+  relayerFee: process.env.RELAYER_FEE ? toBN(process.env.RELAYER_FEE) : null,
+  maxNativeAmount: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT || '0'),
   treeUpdateParamsPath: process.env.RELAYER_TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
   transferParamsPath: process.env.RELAYER_TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
   directDepositParamsPath: process.env.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH || './params/delegated_deposit_params.bin',
@@ -52,8 +52,26 @@ const config = {
   logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
     .split(' ')
     .filter(r => r.length > 0),
+  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '').split(' ').filter(c => {
+    if (c.length === 0) return false
+
+    const exists = countryCodes.has(c)
+    if (!exists) {
+      logger.error(`Country code ${c} is not valid, skipping`)
+    }
+    return exists
+  }),
+  trustProxy: process.env.RELAYER_EXPRESS_TRUST_PROXY === 'true',
   treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
   directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
+  feeManagerType: (process.env.RELAYER_FEE_MANAGER_TYPE || FeeManagerType.Dynamic) as FeeManagerType,
+  feeManagerUpdateInterval: parseInt(process.env.RELAYER_FEE_MANAGER_UPDATE_INTERVAL || '10000'),
+  feeMarginFactor: toBN(process.env.RELAYER_FEE_MARGIN_FACTOR || '100'),
+  feeScalingFactor: toBN(process.env.RELAYER_FEE_SCALING_FACTOR || '100'),
+  priceFeedType: (process.env.RELAYER_PRICE_FEED_TYPE || PriceFeedType.Native) as PriceFeedType,
+  priceFeedContractAddress: process.env.RELAYER_PRICE_FEED_CONTRACT_ADDRESS || null,
+  priceFeedBaseTokenAddress: process.env.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS || null,
+  precomputeParams: process.env.RELAYER_PRECOMPUTE_PARAMS === 'true',
 }
 
 export default config

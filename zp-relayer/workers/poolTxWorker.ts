@@ -4,7 +4,7 @@ import { toBN } from 'web3-utils'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { poolTxQueue, BatchTx, PoolTxResult, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
-import { TX_QUEUE_NAME } from '@/utils/constants'
+import { TX_QUEUE_NAME, MOCK_CALLDATA } from '@/utils/constants'
 import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
@@ -24,7 +24,14 @@ interface HandlerConfig<T extends WorkerTxType> {
   jobId: string
 }
 
-export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, treeProver }: IPoolWorkerConfig) {
+export async function createPoolTxWorker({
+  redis,
+  mutex,
+  txManager,
+  validateTx,
+  treeProver,
+  feeManager,
+}: IPoolWorkerConfig) {
   const workerLogger = logger.child({ worker: 'pool' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -43,11 +50,15 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
     const { data, outCommit, commitIndex, memo, rootAfter, nullifier } = processResult
 
     const gas = config.relayerGasLimit
-    const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx({
-      data,
-      gas: gas.toString(),
-      to: config.poolAddress,
-    })
+    const { txHash, rawTransaction, gasPrice, txConfig } = await txManager.prepareTx(
+      {
+        data,
+        gas: gas.toString(),
+        to: config.poolAddress,
+      },
+      // XXX: Assumed that gasPrice was updated during fee validation
+      { shouldUpdateGasPrice: false }
+    )
     logger.info('Sending tx', { txHash })
     try {
       await txManager.sendTransaction(rawTransaction)
@@ -64,7 +75,7 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
           config.insufficientBalanceCheckTimeout
         )
       }
-      logger.error('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
+      logger.warn('Tx send failed; it will be re-sent later', { txHash, error: (e as Error).message })
     }
 
     const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
@@ -133,7 +144,14 @@ export async function createPoolTxWorker({ redis, mutex, txManager, validateTx, 
         processResult = await buildDirectDeposits(tx, treeProver, pool.optimisticState)
       } else if (type === WorkerTxType.Normal) {
         const tx = payload as WorkerTx<WorkerTxType.Normal>
-        await validateTx(tx, pool, traceId)
+
+        const requiredFee = await feeManager.estimateFee({
+          gasLimit: config.relayerGasLimit,
+          extraData: tx.rawMemo + (tx.depositSignature || ''),
+        })
+        const denominatedFee = requiredFee.denominate(pool.denominator).getEstimate()
+
+        await validateTx(tx, pool, denominatedFee, traceId)
 
         processResult = await buildTx(tx, treeProver, pool.optimisticState)
       } else {

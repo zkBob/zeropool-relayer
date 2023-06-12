@@ -167,7 +167,7 @@ export function withLoop<F extends (i: number) => any>(
         }
 
         if (isSuppressed) {
-          logger.warn('%s', err.message)
+          logger.info('%s', err.message)
         } else {
           logger.error('Found error %s', err.message)
         }
@@ -229,6 +229,7 @@ export function contractCallRetry(contract: Contract, method: string, args: any[
           logger.warn('Retrying failed contract call', { method, args })
           retry(e)
         } else {
+          logger.debug('Unknown contract call error', { method, args, error: e })
           throw e
         }
       }
