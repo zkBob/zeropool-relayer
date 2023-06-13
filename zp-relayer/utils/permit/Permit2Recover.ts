@@ -1,11 +1,4 @@
-import type Web3 from 'web3'
-import { CommonMessageParams, EIP712Domain, IPermitRecover, TypedMessage } from './IPermitRecover'
-
-const Domain: TypedMessage<EIP712Domain> = [
-  { name: 'name', type: 'string' },
-  { name: 'chainId', type: 'uint256' },
-  { name: 'verifyingContract', type: 'address' },
-]
+import { CommonMessageParams, IPermitRecover, TypedMessage } from './IPermitRecover'
 
 export interface ITokenPermissions {
   token: string
@@ -35,7 +28,6 @@ export class Permit2Recover extends IPermitRecover<IPermitTransferFrom, 'PermitT
   PRIMARY_TYPE: 'PermitTransferFrom' = 'PermitTransferFrom'
 
   TYPES = {
-    EIP712Domain: Domain,
     PermitTransferFrom,
     TokenPermissions,
   }
@@ -60,14 +52,5 @@ export class Permit2Recover extends IPermitRecover<IPermitTransferFrom, 'PermitT
       deadline,
     }
     return message
-  }
-
-  async initializeDomain(web3: Web3, verifyingContract: string) {
-    const chainId = await web3.eth.getChainId()
-    this.DOMAIN_SEPARATOR = {
-      name: 'Permit2',
-      chainId,
-      verifyingContract,
-    }
   }
 }

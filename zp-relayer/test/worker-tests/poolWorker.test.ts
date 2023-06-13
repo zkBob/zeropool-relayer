@@ -17,7 +17,6 @@ import { createSentTxWorker } from '../../workers/sentTxWorker'
 import { PoolState } from '../../state/PoolState'
 import { EstimationType, GasPrice } from '../../services/gas-price'
 import { redis } from '../../services/redisClient'
-import { initializeDomain } from '../../utils/EIP712SaltedPermit'
 import { FlowOutputItem } from '../../../test-flow-generator/src/types'
 import {
   approveTokens,
@@ -93,7 +92,6 @@ describe('poolWorker', () => {
     pool.loadState({ poolState, optimisticState })
 
     await pool.init()
-    await initializeDomain(web3)
 
     gasPriceService = new GasPrice(web3, { gasPrice: config.gasPriceFallback }, 10000, EstimationType.Web3, {})
     await gasPriceService.start()

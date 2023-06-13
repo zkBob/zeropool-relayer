@@ -1,7 +1,5 @@
-import Web3 from 'web3'
-import TokenAbi from '@/abi/token-abi.json'
-import { AbiItem, toChecksumAddress, bytesToHex } from 'web3-utils'
-import { CommonMessageParams, EIP712Domain, IPermitRecover, TypedMessage } from './IPermitRecover'
+import { toChecksumAddress, bytesToHex } from 'web3-utils'
+import { CommonMessageParams, IPermitRecover, TypedMessage } from './IPermitRecover'
 import { contractCallRetry } from '../helpers'
 
 type SaltedPermitMessage = {
@@ -12,13 +10,6 @@ type SaltedPermitMessage = {
   deadline: string
   salt: string
 }
-
-const Domain: TypedMessage<EIP712Domain> = [
-  { name: 'name', type: 'string' },
-  { name: 'version', type: 'string' },
-  { name: 'chainId', type: 'uint256' },
-  { name: 'verifyingContract', type: 'address' },
-]
 
 const Permit: TypedMessage<SaltedPermitMessage> = [
   { name: 'owner', type: 'address' },
@@ -33,7 +24,6 @@ export class SaltedPermitRecover extends IPermitRecover<SaltedPermitMessage, 'Pe
   PRIMARY_TYPE: 'Permit' = 'Permit'
 
   TYPES = {
-    EIP712Domain: Domain,
     Permit,
   }
 
@@ -57,17 +47,5 @@ export class SaltedPermitRecover extends IPermitRecover<SaltedPermitMessage, 'Pe
       salt: nullifier,
     }
     return message
-  }
-
-  async initializeDomain(web3: Web3, verifyingContract: string) {
-    const token = new web3.eth.Contract(TokenAbi as AbiItem[], verifyingContract)
-    const name = await token.methods.name().call()
-    const chainId = await web3.eth.getChainId()
-    this.DOMAIN_SEPARATOR = {
-      name,
-      version: '1',
-      chainId,
-      verifyingContract,
-    }
   }
 }
