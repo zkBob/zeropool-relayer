@@ -9,7 +9,6 @@ import config from './configs/relayerConfig'
 import { createPoolTxWorker } from './workers/poolTxWorker'
 import { createSentTxWorker } from './workers/sentTxWorker'
 import { createDirectDepositWorker } from './workers/directDepositWorker'
-import { initializeDomain } from './utils/EIP712SaltedPermit'
 import { redis } from './services/redisClient'
 import { validateTx } from './validation/tx/validateTx'
 import { TxManager } from './tx/TxManager'
@@ -72,7 +71,6 @@ function buildPriceFeed(type: PriceFeedType, web3: Web3): IPriceFeed {
 }
 
 export async function init() {
-  await initializeDomain(web3)
   await pool.init()
 
   const gasPriceService = new GasPrice(

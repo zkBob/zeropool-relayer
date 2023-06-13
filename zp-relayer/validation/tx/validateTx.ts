@@ -9,13 +9,11 @@ import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
 import { web3 } from '@/services/web3'
 import { contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
-import { recoverSaltedPermit } from '@/utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1 } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
 import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondition } from './common'
-import { EstimationType, GasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
 import type { PermitRecover } from '@/utils/permit/types'
 
 const ZERO = toBN(0)
