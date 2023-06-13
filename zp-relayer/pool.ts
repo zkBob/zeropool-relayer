@@ -16,7 +16,7 @@ import type { TxType } from 'zp-memo-parser'
 import { contractCallRetry, numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
 import { OUTPLUSONE } from './utils/constants'
-import { Permit2Recover, SaltedPermitRecover } from './utils/permit'
+import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from './utils/permit'
 import { PermitRecover, PermitType } from './utils/permit/types'
 
 export interface PoolTx {
@@ -105,6 +105,9 @@ class Pool {
       if (config.permit2VerifyingContract === null) throw new Error('Permit2 verifying contract is not set')
       this.permitRecover = new Permit2Recover()
       verifyingContract = config.permit2VerifyingContract
+    } else if (config.permitType === PermitType.TransferWithAuthorization) {
+      this.permitRecover = new TransferWithAuthorizationRecover()
+      verifyingContract = config.tokenAddress
     } else {
       throw new Error("Cannot infer pool's permit standard")
     }
