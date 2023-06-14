@@ -61,7 +61,7 @@ export class TransferWithAuthorizationRecover extends IPermitRecover<
       tokenContract.options.address
     )
     const isUsed = await contractCallRetry(token, 'authorizationState', [owner, numberToHex(nullifier)])
-    if (toBN(isUsed).isZero()) {
+    if (!toBN(isUsed).isZero()) {
       return new PreconditionError('TransferWithAuthorization: authorization is used or canceled')
     }
     return null
