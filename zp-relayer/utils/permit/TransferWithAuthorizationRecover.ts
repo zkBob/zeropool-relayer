@@ -1,5 +1,6 @@
-import { toChecksumAddress, bytesToHex } from 'web3-utils'
-import { CommonMessageParams, IPermitRecover, TypedMessage } from './IPermitRecover'
+import { toBN, numberToHex } from 'web3-utils'
+import { CommonMessageParams, IPermitRecover, PreconditionError, TypedMessage } from './IPermitRecover'
+import { contractCallRetry } from '../helpers'
 
 export interface ITransferWithAuthorization {
   from: string
@@ -29,12 +30,52 @@ export class TransferWithAuthorizationRecover extends IPermitRecover<
     TransferWithAuthorization,
   }
 
-  async buildMessage({ txData, spender, amount, nullifier }: CommonMessageParams): Promise<ITransferWithAuthorization> {
-    const { holder, deadline } = txData
-    const from = toChecksumAddress(bytesToHex(Array.from(holder)))
+  async precondition({ owner, tokenContract, nullifier }: CommonMessageParams) {
+    const token = new this.web3.eth.Contract(
+      [
+        {
+          inputs: [
+            {
+              internalType: 'address',
+              name: 'authorizer',
+              type: 'address',
+            },
+            {
+              internalType: 'bytes32',
+              name: 'nonce',
+              type: 'bytes32',
+            },
+          ],
+          name: 'authorizationState',
+          outputs: [
+            {
+              internalType: 'uin256',
+              name: '',
+              type: 'uint256',
+            },
+          ],
+          stateMutability: 'view',
+          type: 'function',
+        },
+      ],
+      tokenContract.options.address
+    )
+    const isUsed = await contractCallRetry(token, 'authorizationState', [owner, numberToHex(nullifier)])
+    if (toBN(isUsed).isZero()) {
+      return new PreconditionError('TransferWithAuthorization: authorization is used or canceled')
+    }
+    return null
+  }
 
+  async buildMessage({
+    owner,
+    deadline,
+    spender,
+    amount,
+    nullifier,
+  }: CommonMessageParams): Promise<ITransferWithAuthorization> {
     const message: ITransferWithAuthorization = {
-      from,
+      from: owner,
       to: spender,
       value: amount,
       validAfter: '0',

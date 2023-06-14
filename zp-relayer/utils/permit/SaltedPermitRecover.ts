@@ -1,4 +1,3 @@
-import { toChecksumAddress, bytesToHex } from 'web3-utils'
 import { CommonMessageParams, IPermitRecover, TypedMessage } from './IPermitRecover'
 import { contractCallRetry } from '../helpers'
 
@@ -27,15 +26,18 @@ export class SaltedPermitRecover extends IPermitRecover<SaltedPermitMessage, 'Pe
     Permit,
   }
 
+  async precondition() {
+    return null
+  }
+
   async buildMessage({
-    txData,
+    owner,
+    deadline,
     spender,
     tokenContract,
     amount,
     nullifier,
   }: CommonMessageParams): Promise<SaltedPermitMessage> {
-    const { deadline, holder } = txData
-    const owner = toChecksumAddress(bytesToHex(Array.from(holder)))
     const nonce = await contractCallRetry(tokenContract, 'nonces', [owner])
 
     const message: SaltedPermitMessage = {

@@ -1,10 +1,17 @@
 import type Web3 from 'web3'
 import type { Contract } from 'web3-eth-contract'
-import type { TxData, TxType } from 'zp-memo-parser'
 import { ethers } from 'ethers'
 
+export class PreconditionError extends Error {
+  name = 'PreconditionError'
+  constructor(message: string) {
+    super(message)
+  }
+}
+
 export interface CommonMessageParams {
-  txData: TxData<TxType.PERMITTABLE_DEPOSIT>
+  owner: string
+  deadline: string
   spender: string
   tokenContract: Contract
   amount: string
@@ -18,8 +25,10 @@ export abstract class IPermitRecover<Message extends Record<string, any>, Primar
   abstract TYPES: { [key in PrimaryType]: TypedMessage<Message> }
   abstract PRIMARY_TYPE: PrimaryType
 
-  async initializeDomain(web3: Web3, verifyingContract: string) {
-    const contract = new web3.eth.Contract(
+  constructor(protected web3: Web3, protected verifyingContract: string) {}
+
+  async initializeDomain() {
+    const contract = new this.web3.eth.Contract(
       [
         {
           inputs: [],
@@ -35,10 +44,12 @@ export abstract class IPermitRecover<Message extends Record<string, any>, Primar
           ],
         },
       ],
-      verifyingContract
+      this.verifyingContract
     )
     this.DOMAIN_SEPARATOR = await contract.methods.DOMAIN_SEPARATOR().call()
   }
+
+  abstract precondition(params: CommonMessageParams): Promise<null | PreconditionError>
 
   abstract buildMessage(params: CommonMessageParams): Promise<Message>
 

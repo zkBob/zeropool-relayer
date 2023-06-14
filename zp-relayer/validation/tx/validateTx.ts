@@ -141,20 +141,23 @@ async function getRecoveredAddress<T extends TxType>(
   if (txType === TxType.DEPOSIT) {
     recoveredAddress = web3.eth.accounts.recover(nullifier, sig)
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
-    const { holder } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
+    const { holder, deadline } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
     const spender = web3.utils.toChecksumAddress(config.poolAddress as string)
     const owner = web3.utils.toChecksumAddress(web3.utils.bytesToHex(Array.from(holder)))
 
-    recoveredAddress = await permitRecover.recoverPermitSignature(
-      {
-        txData: txData as TxData<TxType.PERMITTABLE_DEPOSIT>,
-        spender,
-        tokenContract,
-        amount: tokenAmount.toString(10),
-        nullifier,
-      },
-      sig
-    )
+    const recoverParams = {
+      owner,
+      deadline,
+      spender,
+      tokenContract,
+      amount: tokenAmount.toString(10),
+      nullifier,
+    }
+    const preconditionRes = await permitRecover.precondition(recoverParams)
+    if (preconditionRes !== null) {
+      throw new TxValidationError(`Invalid permit precondition: ${preconditionRes.message}`)
+    }
+    recoveredAddress = await permitRecover.recoverPermitSignature(recoverParams, sig)
     if (recoveredAddress.toLowerCase() !== owner.toLowerCase()) {
       throw new TxValidationError(`Invalid deposit signer; Restored: ${recoveredAddress}; Expected: ${owner}`)
     }

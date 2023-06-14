@@ -97,21 +97,17 @@ class Pool {
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
     this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
 
-    let verifyingContract: string
     if (config.permitType === PermitType.SaltedPermit) {
-      this.permitRecover = new SaltedPermitRecover()
-      verifyingContract = config.tokenAddress
+      this.permitRecover = new SaltedPermitRecover(web3, config.tokenAddress)
     } else if (config.permitType === PermitType.Permit2) {
       if (config.permit2VerifyingContract === null) throw new Error('Permit2 verifying contract is not set')
-      this.permitRecover = new Permit2Recover()
-      verifyingContract = config.permit2VerifyingContract
+      this.permitRecover = new Permit2Recover(web3, config.permit2VerifyingContract)
     } else if (config.permitType === PermitType.TransferWithAuthorization) {
-      this.permitRecover = new TransferWithAuthorizationRecover()
-      verifyingContract = config.tokenAddress
+      this.permitRecover = new TransferWithAuthorizationRecover(web3, config.tokenAddress)
     } else {
       throw new Error("Cannot infer pool's permit standard")
     }
-    await this.permitRecover.initializeDomain(web3, verifyingContract)
+    await this.permitRecover.initializeDomain()
 
     await this.syncState(config.startBlock)
     this.isInitialized = true
