@@ -20,12 +20,7 @@ const TransferWithAuthorization: TypedMessage<ITransferWithAuthorization> = [
   { name: 'nonce', type: 'bytes32' },
 ]
 
-export class TransferWithAuthorizationRecover extends IPermitRecover<
-  ITransferWithAuthorization,
-  'TransferWithAuthorization'
-> {
-  PRIMARY_TYPE: 'TransferWithAuthorization' = 'TransferWithAuthorization'
-
+export class TransferWithAuthorizationRecover extends IPermitRecover<ITransferWithAuthorization> {
   TYPES = {
     TransferWithAuthorization,
   }

@@ -19,9 +19,7 @@ const Permit: TypedMessage<SaltedPermitMessage> = [
   { name: 'salt', type: 'bytes32' },
 ]
 
-export class SaltedPermitRecover extends IPermitRecover<SaltedPermitMessage, 'Permit'> {
-  PRIMARY_TYPE: 'Permit' = 'Permit'
-
+export class SaltedPermitRecover extends IPermitRecover<SaltedPermitMessage> {
   TYPES = {
     Permit,
   }

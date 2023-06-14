@@ -26,9 +26,7 @@ const PermitTransferFrom: TypedMessage<IPermitTransferFrom> = [
   { name: 'deadline', type: 'uint256' },
 ]
 
-export class Permit2Recover extends IPermitRecover<IPermitTransferFrom, 'PermitTransferFrom'> {
-  PRIMARY_TYPE: 'PermitTransferFrom' = 'PermitTransferFrom'
-
+export class Permit2Recover extends IPermitRecover<IPermitTransferFrom> {
   TYPES = {
     PermitTransferFrom,
     TokenPermissions,

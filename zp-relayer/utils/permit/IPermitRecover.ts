@@ -20,10 +20,9 @@ export interface CommonMessageParams {
 
 export type TypedMessage<Message extends Record<string, any>> = { name: keyof Message & string; type: string }[]
 
-export abstract class IPermitRecover<Message extends Record<string, any>, PrimaryType extends string> {
+export abstract class IPermitRecover<Message extends Record<string, any>> {
   DOMAIN_SEPARATOR: string | null = null
-  abstract TYPES: { [key in PrimaryType]: TypedMessage<Message> }
-  abstract PRIMARY_TYPE: PrimaryType
+  abstract TYPES: { [key: string]: TypedMessage<Record<string, any>> }
 
   constructor(protected web3: Web3, protected verifyingContract: string) {}
 
