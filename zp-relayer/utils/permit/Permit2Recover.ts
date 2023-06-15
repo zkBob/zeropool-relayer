@@ -1,6 +1,7 @@
-import { toBN } from 'web3-utils'
+import { toBN, AbiItem } from 'web3-utils'
 import { CommonMessageParams, IPermitRecover, PreconditionError, TypedMessage } from './IPermitRecover'
 import { contractCallRetry } from '../helpers'
+import Permit2Abi from '@/abi/permit2.json'
 
 export interface ITokenPermissions {
   token: string
@@ -37,21 +38,7 @@ export class Permit2Recover extends IPermitRecover<IPermitTransferFrom> {
     const approved = await contractCallRetry(tokenContract, 'allowance', [owner, this.verifyingContract])
     if (toBN(approved).lt(toBN(amount))) return new PreconditionError('Permit2: Allowance is too low')
 
-    const permit2 = new this.web3.eth.Contract(
-      [
-        {
-          inputs: [
-            { internalType: 'address', name: '', type: 'address' },
-            { internalType: 'uint256', name: '', type: 'uint256' },
-          ],
-          name: 'nonceBitmap',
-          outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-          stateMutability: 'view',
-          type: 'function',
-        },
-      ],
-      this.verifyingContract
-    )
+    const permit2 = new this.web3.eth.Contract(Permit2Abi as AbiItem[], this.verifyingContract)
 
     const nonce = toBN(nullifier)
     const wordPos = nonce.shrn(8)

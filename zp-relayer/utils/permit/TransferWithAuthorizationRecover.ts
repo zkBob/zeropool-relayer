@@ -1,6 +1,7 @@
-import { toBN, numberToHex } from 'web3-utils'
+import { toBN, numberToHex, AbiItem } from 'web3-utils'
 import { CommonMessageParams, IPermitRecover, PreconditionError, TypedMessage } from './IPermitRecover'
 import { contractCallRetry } from '../helpers'
+import Erc3009Abi from '@/abi/erc3009.json'
 
 export interface ITransferWithAuthorization {
   from: string
@@ -26,35 +27,7 @@ export class TransferWithAuthorizationRecover extends IPermitRecover<ITransferWi
   }
 
   async precondition({ owner, tokenContract, nullifier }: CommonMessageParams) {
-    const token = new this.web3.eth.Contract(
-      [
-        {
-          inputs: [
-            {
-              internalType: 'address',
-              name: 'authorizer',
-              type: 'address',
-            },
-            {
-              internalType: 'bytes32',
-              name: 'nonce',
-              type: 'bytes32',
-            },
-          ],
-          name: 'authorizationState',
-          outputs: [
-            {
-              internalType: 'uin256',
-              name: '',
-              type: 'uint256',
-            },
-          ],
-          stateMutability: 'view',
-          type: 'function',
-        },
-      ],
-      tokenContract.options.address
-    )
+    const token = new this.web3.eth.Contract(Erc3009Abi as AbiItem[], tokenContract.options.address)
     const isUsed = await contractCallRetry(token, 'authorizationState', [owner, numberToHex(nullifier)])
     if (!toBN(isUsed).isZero()) {
       return new PreconditionError('TransferWithAuthorization: authorization is used or canceled')

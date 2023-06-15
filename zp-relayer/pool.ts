@@ -15,7 +15,7 @@ import { PoolState } from './state/PoolState'
 import type { TxType } from 'zp-memo-parser'
 import { contractCallRetry, numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
-import { OUTPLUSONE } from './utils/constants'
+import { OUTPLUSONE, PERMIT2_CONTRACT } from './utils/constants'
 import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from './utils/permit'
 import { PermitRecover, PermitType } from './utils/permit/types'
 
@@ -100,8 +100,7 @@ class Pool {
     if (config.permitType === PermitType.SaltedPermit) {
       this.permitRecover = new SaltedPermitRecover(web3, config.tokenAddress)
     } else if (config.permitType === PermitType.Permit2) {
-      if (config.permit2VerifyingContract === null) throw new Error('Permit2 verifying contract is not set')
-      this.permitRecover = new Permit2Recover(web3, config.permit2VerifyingContract)
+      this.permitRecover = new Permit2Recover(web3, PERMIT2_CONTRACT)
     } else if (config.permitType === PermitType.TransferWithAuthorization) {
       this.permitRecover = new TransferWithAuthorizationRecover(web3, config.tokenAddress)
     } else {

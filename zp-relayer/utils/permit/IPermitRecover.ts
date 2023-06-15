@@ -1,6 +1,7 @@
 import type Web3 from 'web3'
 import type { Contract } from 'web3-eth-contract'
 import { ethers } from 'ethers'
+import { contractCallRetry } from '../helpers'
 
 export class PreconditionError extends Error {
   name = 'PreconditionError'
@@ -45,7 +46,7 @@ export abstract class IPermitRecover<Message extends Record<string, any>> {
       ],
       this.verifyingContract
     )
-    this.DOMAIN_SEPARATOR = await contract.methods.DOMAIN_SEPARATOR().call()
+    this.DOMAIN_SEPARATOR = await contractCallRetry(contract, 'DOMAIN_SEPARATOR')
   }
 
   abstract precondition(params: CommonMessageParams): Promise<null | PreconditionError>
