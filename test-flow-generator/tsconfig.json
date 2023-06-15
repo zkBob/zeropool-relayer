@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
+    "outDir": "./dist",
     "module": "es2022",
     "allowJs": true
   },

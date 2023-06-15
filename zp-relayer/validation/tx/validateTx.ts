@@ -9,13 +9,12 @@ import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
 import { web3 } from '@/services/web3'
 import { contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
-import { recoverSaltedPermit } from '@/utils/EIP712SaltedPermit'
 import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1 } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
 import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondition } from './common'
-import { EstimationType, GasPrice, getMaxRequiredGasPrice } from '@/services/gas-price'
+import type { PermitRecover } from '@/utils/permit/types'
 
 const ZERO = toBN(0)
 
@@ -129,34 +128,36 @@ async function getRecoveredAddress<T extends TxType>(
   txData: TxData<T>,
   tokenContract: Contract,
   tokenAmount: BN,
-  depositSignature: string | null
+  depositSignature: string,
+  permitRecover: PermitRecover
 ) {
   // Signature without `0x` prefix, size is 64*2=128
-  await checkAssertion(() => {
-    if (depositSignature !== null && checkSize(depositSignature, 128)) return null
-    return new TxValidationError('Invalid deposit signature size')
-  })
+  checkCondition(checkSize(depositSignature, 128), 'Invalid deposit signature size')
+
   const nullifier = '0x' + numToHex(toBN(proofNullifier))
-  const sig = unpackSignature(depositSignature as string)
+  const sig = unpackSignature(depositSignature)
 
   let recoveredAddress: string
   if (txType === TxType.DEPOSIT) {
     recoveredAddress = web3.eth.accounts.recover(nullifier, sig)
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
-    const { deadline, holder } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
-    const owner = web3.utils.toChecksumAddress(web3.utils.bytesToHex(Array.from(holder)))
+    const { holder, deadline } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
     const spender = web3.utils.toChecksumAddress(config.poolAddress as string)
-    const nonce = await contractCallRetry(tokenContract, 'nonces', [owner])
+    const owner = web3.utils.toChecksumAddress(web3.utils.bytesToHex(Array.from(holder)))
 
-    const message = {
+    const recoverParams = {
       owner,
-      spender,
-      value: tokenAmount.toString(10),
-      nonce,
       deadline,
-      salt: nullifier,
+      spender,
+      tokenContract,
+      amount: tokenAmount.toString(10),
+      nullifier,
     }
-    recoveredAddress = recoverSaltedPermit(message, sig)
+    const preconditionRes = await permitRecover.precondition(recoverParams)
+    if (preconditionRes !== null) {
+      throw new TxValidationError(`Invalid permit precondition: ${preconditionRes.message}`)
+    }
+    recoveredAddress = await permitRecover.recoverPermitSignature(recoverParams, sig)
     if (recoveredAddress.toLowerCase() !== owner.toLowerCase()) {
       throw new TxValidationError(`Invalid deposit signer; Restored: ${recoveredAddress}; Expected: ${owner}`)
     }
@@ -240,6 +241,7 @@ export async function validateTx(
     await checkAssertion(() => checkNativeAmount(toBN(nativeAmount), tokenAmountWithFee.neg()))
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
+    checkCondition(depositSignature !== null, 'Deposit signature is required')
 
     const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
     userAddress = await getRecoveredAddress(
@@ -248,7 +250,8 @@ export async function validateTx(
       txData,
       pool.TokenInstance,
       requiredTokenAmount,
-      depositSignature
+      depositSignature as string,
+      pool.permitRecover
     )
     logger.info('Deposit address: %s', userAddress)
     await checkAssertion(() => checkDepositEnoughBalance(pool.TokenInstance, userAddress, requiredTokenAmount))

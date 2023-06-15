@@ -16,7 +16,6 @@
     "test:worker": "yarn deploy:local && DOTENV_CONFIG_PATH=test.env ts-mocha --exit -r dotenv/config --paths --timeout 1000000 test/worker-tests/*.test.ts && yarn deploy:local:rm"
   },
   "dependencies": {
-    "@metamask/eth-sig-util": "^4.0.1",
     "@mycrypto/gas-estimation": "^1.1.0",
     "ajv": "8.11.0",
     "async-mutex": "^0.3.2",
@@ -24,6 +23,7 @@
     "bullmq": "3.5.0",
     "cors": "^2.8.5",
     "dotenv": "^10.0.0",
+    "ethers": "^6.5.1",
     "express": "^4.17.1",
     "express-winston": "4.2.0",
     "gas-price-oracle": "0.5.1",
@@ -49,8 +49,8 @@
     "chai-as-promised": "7.1.1",
     "docker-compose": "0.23.17",
     "mocha": "10.1.0",
-    "ts-node": "10.9.1",
     "ts-mocha": "^8.0.0",
+    "ts-node": "10.9.1",
     "uuid": "^9.0.0"
   }
 }

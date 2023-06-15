@@ -15,7 +15,9 @@ import { PoolState } from './state/PoolState'
 import type { TxType } from 'zp-memo-parser'
 import { contractCallRetry, numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
-import { OUTPLUSONE } from './utils/constants'
+import { OUTPLUSONE, PERMIT2_CONTRACT } from './utils/constants'
+import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from './utils/permit'
+import { PermitRecover, PermitType } from './utils/permit/types'
 
 export interface PoolTx {
   proof: Proof
@@ -71,6 +73,7 @@ class Pool {
   public denominator: BN = toBN(1)
   public poolId: BN = toBN(0)
   public isInitialized = false
+  public permitRecover!: PermitRecover
 
   constructor() {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
@@ -93,6 +96,17 @@ class Pool {
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
     this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
+
+    if (config.permitType === PermitType.SaltedPermit) {
+      this.permitRecover = new SaltedPermitRecover(web3, config.tokenAddress)
+    } else if (config.permitType === PermitType.Permit2) {
+      this.permitRecover = new Permit2Recover(web3, PERMIT2_CONTRACT)
+    } else if (config.permitType === PermitType.TransferWithAuthorization) {
+      this.permitRecover = new TransferWithAuthorizationRecover(web3, config.tokenAddress)
+    } else {
+      throw new Error("Cannot infer pool's permit standard")
+    }
+    await this.permitRecover.initializeDomain()
 
     await this.syncState(config.startBlock)
     this.isInitialized = true
