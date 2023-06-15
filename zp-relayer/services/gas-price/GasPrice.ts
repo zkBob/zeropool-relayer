@@ -227,7 +227,7 @@ export class GasPrice<ET extends EstimationType> {
   }
 
   private fetchPolygonGasStationV2: FetchFunc<EstimationType.PolygonGSV2> = async options => {
-    const response = await fetch('https://gasstation-mainnet.matic.network/v2')
+    const response = await fetch('https://gasstation.polygon.technology/v2')
     const json: PolygonGSV2Response = await response.json()
     const speedType = polygonGasPriceKeyMapping[options.speedType]
     const { maxFee, maxPriorityFee } = json[speedType]
