@@ -10,48 +10,14 @@ import {
   FeeEstimate,
   IFeeEstimateParams,
   IFeeManagerConfig,
-  IUserFeeOptions,
   IGetFeesParams,
+  UserFeeOptions,
+  DynamicFeeOptions
 } from './FeeManager'
-import type { IPriceFeed } from '../price-feed'
 import type { EstimationType, GasPrice } from '../gas-price'
 
 const ZERO_BYTE_GAS = 4
 const NZERO_BYTE_GAS = 16
-
-class OptimismUserFeeOptions implements IUserFeeOptions {
-  constructor(private baseFee: BN, private oneByteFee: BN) {}
-
-  applyFactor(factor: BN) {
-    this.baseFee = this.baseFee.mul(factor).divn(100)
-    this.oneByteFee = this.oneByteFee.mul(factor).divn(100)
-    return this
-  }
-
-  denominate(denominator: BN): this {
-    this.baseFee = this.baseFee.div(denominator)
-    this.oneByteFee = this.oneByteFee.div(denominator)
-    return this
-  }
-
-  async convert(priceFeed: IPriceFeed) {
-    const [l2fee, oneByteFee] = await priceFeed.convert([this.baseFee, this.oneByteFee])
-    this.baseFee = l2fee
-    this.oneByteFee = oneByteFee
-    return this
-  }
-
-  clone(): this {
-    return new OptimismUserFeeOptions(this.baseFee.clone(), this.oneByteFee.clone()) as this
-  }
-
-  getObject() {
-    return {
-      fee: this.baseFee.toString(10),
-      oneByteFee: this.oneByteFee.toString(10),
-    }
-  }
-}
 
 export class OptimismFeeManager extends FeeManager {
   private oracle: Contract
@@ -87,7 +53,7 @@ export class OptimismFeeManager extends FeeManager {
     return scaled
   }
 
-  async _estimateFee({ extraData }: IFeeEstimateParams, feeOptions: OptimismUserFeeOptions) {
+  async _estimateFee({ extraData }: IFeeEstimateParams, feeOptions: DynamicFeeOptions) {
     const { fee: baseFee, oneByteFee } = feeOptions.getObject()
 
     const unscaledL1Fee = this.getL1Fee(MOCK_CALLDATA + extraData, toBN(oneByteFee))
@@ -98,10 +64,12 @@ export class OptimismFeeManager extends FeeManager {
 
     const feeEstimate = toBN(baseFee).add(l1Fee)
 
-    return new FeeEstimate(feeEstimate)
+    return new FeeEstimate({
+      fee: feeEstimate,
+    })
   }
 
-  async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
+  async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<DynamicFeeOptions> {
     // TODO: add RLP encoding overhead to baseFee
     const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
 
@@ -109,6 +77,9 @@ export class OptimismFeeManager extends FeeManager {
     // Use an upper bound for the oneByteFee
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
 
-    return new OptimismUserFeeOptions(baseFee, oneByteFee)
+    return new UserFeeOptions({
+      fee: baseFee,
+      oneByteFee,
+    })
   }
 }

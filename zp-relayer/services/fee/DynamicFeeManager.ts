@@ -2,7 +2,7 @@ import { toBN } from 'web3-utils'
 import {
   FeeManager,
   FeeEstimate,
-  DefaultUserFeeOptions,
+  UserFeeOptions,
   IFeeEstimateParams,
   IGetFeesParams,
   IFeeManagerConfig,
@@ -16,13 +16,17 @@ export class DynamicFeeManager extends FeeManager {
 
   async init() {}
 
-  async _estimateFee(_params: IFeeEstimateParams, feeOptions: DefaultUserFeeOptions) {
+  async _estimateFee(_params: IFeeEstimateParams, feeOptions: UserFeeOptions<'fee'>) {
     const fee = feeOptions.getObject().fee
-    return new FeeEstimate(toBN(fee))
+    return new FeeEstimate({
+      fee: toBN(fee),
+    })
   }
 
   async _fetchFeeOptions({ gasLimit }: IGetFeesParams) {
     const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
-    return new DefaultUserFeeOptions(baseFee)
+    return new UserFeeOptions({
+      fee: baseFee,
+    })
   }
 }

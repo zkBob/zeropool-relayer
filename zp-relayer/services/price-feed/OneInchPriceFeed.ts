@@ -29,29 +29,27 @@ export class OneInchPriceFeed implements IPriceFeed {
     this.contract = new web3.eth.Contract(OracleAbi as AbiItem[], contractAddress)
   }
 
+  async init() {
+    if (this.baseTokenAddress !== ZERO_ADDRESS) {
+      this.tokenDecimals = await this.getContractDecimals(this.baseTokenAddress)
+    } else {
+      this.tokenDecimals = toBN(toWei('1')) // 1 ether
+    }
+  }
+
   private async getContractDecimals(contractAddress: string): Promise<BN> {
     const contract = new this.web3.eth.Contract(Erc20Abi as AbiItem[], contractAddress)
     const decimals = await contract.methods.decimals().call()
     return toBN(10).pow(toBN(decimals))
   }
 
-  async getBaseTokenDecimals(): Promise<BN> {
-    if (!this.baseTokenDecimals) {
-      this.baseTokenDecimals =
-        this.baseTokenAddress !== ZERO_ADDRESS
-          ? await this.getContractDecimals(this.baseTokenAddress)
-          : toBN(toWei('1')) // 1 ether
-    }
-    return this.baseTokenDecimals
+  getRate(): Promise<BN> {
+    return this.contract.methods.getRate(this.baseTokenAddress, this.poolTokenAddress, true).call().then(toBN)
   }
 
-  async convert(baseTokenAmounts: BN[]): Promise<BN[]> {
-    const baseDecimals = await this.getBaseTokenDecimals()
-    const rate = await this.contract.methods
-      .getRate(this.baseTokenAddress, this.poolTokenAddress, true)
-      .call()
-      .then(toBN)
+  convert(rate: BN, baseTokenAmount: BN): BN {
+    const baseDecimals = this.baseTokenDecimals
 
-    return baseTokenAmounts.map(a => a.mul(rate).div(baseDecimals))
+    return baseTokenAmount.mul(rate).div(baseDecimals)
   }
 }

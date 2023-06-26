@@ -20,41 +20,59 @@ export interface IUserFeeOptions {
   clone(): this
 }
 
-export class DefaultUserFeeOptions implements IUserFeeOptions {
-  constructor(protected fee: BN) {}
+type FeeOptions<K extends string, V = BN> = Required<Record<K, V>>
+
+export class UserFeeOptions<T extends string> implements IUserFeeOptions {
+  constructor(protected fees: FeeOptions<T>) {}
+
+  private mapI(f: (_: BN) => BN) {
+    for (const k in this.fees) {
+      this.fees[k] = f(this.fees[k])
+    }
+  }
+
+  private map<V>(f: (_: BN) => V): FeeOptions<T, V> {
+    const clone = {} as any
+    for (const k in this.fees) {
+      clone[k] = f(this.fees[k])
+    }
+    return clone
+  }
 
   applyFactor(factor: BN) {
-    this.fee = this.fee.mul(factor).divn(100)
+    this.mapI(p => p.mul(factor).divn(100))
     return this
   }
 
   denominate(denominator: BN): this {
-    this.fee = this.fee.div(denominator)
+    this.mapI(p => p.div(denominator))
     return this
   }
 
   async convert(priceFeed: IPriceFeed) {
-    const [fee] = await priceFeed.convert([this.fee])
-    this.fee = fee
+    const rate = await priceFeed.getRate()
+    this.mapI(p => priceFeed.convert(rate, p))
     return this
   }
 
   clone() {
-    return new DefaultUserFeeOptions(this.fee.clone()) as this
+    return new UserFeeOptions(this.map(p => p.clone())) as this
   }
 
   getObject() {
-    return {
-      fee: this.fee.toString(10),
-    }
+    return this.map(p => p.toString(10))
   }
 }
 
-export class FeeEstimate extends DefaultUserFeeOptions {
+export type DynamicFeeOptions = UserFeeOptions<'fee' | 'oneByteFee'>
+
+// Utility class for internal fee estimations
+export class FeeEstimate extends UserFeeOptions<'fee'> {
   getEstimate() {
-    return this.fee
+    return this.fees.fee
   }
 }
+
 
 export interface IFeeManagerConfig {
   priceFeed: IPriceFeed

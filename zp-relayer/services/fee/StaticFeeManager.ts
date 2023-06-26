@@ -1,5 +1,5 @@
 import type BN from 'bn.js'
-import { FeeManager, FeeEstimate, DefaultUserFeeOptions, IFeeManagerConfig } from './FeeManager'
+import { FeeManager, FeeEstimate, IFeeManagerConfig, UserFeeOptions } from './FeeManager'
 
 export class StaticFeeManager extends FeeManager {
   constructor(config: IFeeManagerConfig, private readonly staticFee: BN) {
@@ -9,10 +9,14 @@ export class StaticFeeManager extends FeeManager {
   async init() {}
 
   async _estimateFee() {
-    return new FeeEstimate(this.staticFee)
+    return new FeeEstimate({
+      fee: this.staticFee,
+    })
   }
 
   async _fetchFeeOptions() {
-    return new DefaultUserFeeOptions(this.staticFee)
+    return new UserFeeOptions({
+      fee: this.staticFee,
+    })
   }
 }
