@@ -12,12 +12,10 @@ import {
   IFeeManagerConfig,
   IGetFeesParams,
   UserFeeOptions,
-  DynamicFeeOptions
+  DynamicFeeOptions,
 } from './FeeManager'
 import type { EstimationType, GasPrice } from '../gas-price'
-
-const ZERO_BYTE_GAS = 4
-const NZERO_BYTE_GAS = 16
+import { ZERO_BYTE_GAS, NZERO_BYTE_GAS } from '@/utils/constants'
 
 export class OptimismFeeManager extends FeeManager {
   private oracle: Contract
@@ -53,10 +51,10 @@ export class OptimismFeeManager extends FeeManager {
     return scaled
   }
 
-  async _estimateFee({ extraData }: IFeeEstimateParams, feeOptions: DynamicFeeOptions) {
+  async _estimateFee({ txData }: IFeeEstimateParams, feeOptions: DynamicFeeOptions) {
     const { fee: baseFee, oneByteFee } = feeOptions.getObject()
 
-    const unscaledL1Fee = this.getL1Fee(MOCK_CALLDATA + extraData, toBN(oneByteFee))
+    const unscaledL1Fee = this.getL1Fee(txData, toBN(oneByteFee))
 
     // Because oneByteFee = l1BaseFee * NZERO_BYTE_GAS, we need to divide the estimation
     // We do it here to get a more accurate result
@@ -70,11 +68,11 @@ export class OptimismFeeManager extends FeeManager {
   }
 
   async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<DynamicFeeOptions> {
-    // TODO: add RLP encoding overhead to baseFee
-    const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
+    const gasPrice = await this.gasPrice.fetchOnce()
+    const baseFee = FeeManager.executionFee(gasPrice, gasLimit)
 
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
-    // Use an upper bound for the oneByteFee
+
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
 
     return new UserFeeOptions({

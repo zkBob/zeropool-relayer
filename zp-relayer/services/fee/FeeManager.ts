@@ -1,7 +1,7 @@
 import type BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
-import { GasPrice, EstimationType, getMaxRequiredGasPrice } from '../gas-price'
+import { getMaxRequiredGasPrice, GasPriceValue } from '../gas-price'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { logger } from '../appLogger'
 
@@ -9,7 +9,7 @@ export interface IGetFeesParams {
   gasLimit: BN
 }
 export interface IFeeEstimateParams extends IGetFeesParams {
-  extraData: string
+  txData: string
 }
 
 export interface IUserFeeOptions {
@@ -17,13 +17,13 @@ export interface IUserFeeOptions {
   denominate(denominator: BN): this
   convert(priceFeed: IPriceFeed): Promise<this>
   getObject(): Record<string, string>
-  clone(): this
+  clone(): IUserFeeOptions
 }
 
 type FeeOptions<K extends string, V = BN> = Required<Record<K, V>>
 
 export class UserFeeOptions<T extends string> implements IUserFeeOptions {
-  constructor(protected fees: FeeOptions<T>) {}
+  constructor(public fees: FeeOptions<T>) {}
 
   private mapI(f: (_: BN) => BN) {
     for (const k in this.fees) {
@@ -56,7 +56,8 @@ export class UserFeeOptions<T extends string> implements IUserFeeOptions {
   }
 
   clone() {
-    return new UserFeeOptions(this.map(p => p.clone())) as this
+    const cloneBN = (p: BN) => p.clone()
+    return new UserFeeOptions(this.map(cloneBN))
   }
 
   getObject() {
@@ -72,7 +73,6 @@ export class FeeEstimate extends UserFeeOptions<'fee'> {
     return this.fees.fee
   }
 }
-
 
 export interface IFeeManagerConfig {
   priceFeed: IPriceFeed
@@ -105,9 +105,8 @@ export abstract class FeeManager {
     }, this.config.updateInterval)
   }
 
-  static async estimateExecutionFee(gasPrice: GasPrice<EstimationType>, gasLimit: BN): Promise<BN> {
-    const price = await gasPrice.fetchOnce()
-    return toBN(getMaxRequiredGasPrice(price)).mul(gasLimit)
+  static executionFee(gasPrice: GasPriceValue, gasLimit: BN): BN {
+    return toBN(getMaxRequiredGasPrice(gasPrice)).mul(gasLimit)
   }
 
   private async convertAndScale<T extends IUserFeeOptions>(baseFee: T) {
