@@ -21,7 +21,7 @@ export class DynamicFeeManager extends FeeManager {
   async _estimateFee({ txData }: IFeeEstimateParams, feeOptions: DynamicFeeOptions) {
     const { fee: baseFee, oneByteFee } = feeOptions.fees
     // -1 to account for the 0x prefix
-    const calldataLen = txData.length >> (1 - 1)
+    const calldataLen = (txData.length >> 1) - 1
     const fee = baseFee.add(oneByteFee.muln(calldataLen))
     return new FeeEstimate({ fee })
   }
