@@ -2,7 +2,7 @@ import type BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
 import { getMaxRequiredGasPrice, GasPriceValue } from '../gas-price'
-import { setIntervalAndRun } from '@/utils/helpers'
+import { applyDenominator, setIntervalAndRun } from '@/utils/helpers'
 import { logger } from '../appLogger'
 
 export interface IGetFeesParams {
@@ -45,7 +45,7 @@ export class UserFeeOptions<T extends string> implements IUserFeeOptions {
   }
 
   denominate(denominator: BN): this {
-    this.mapI(p => p.div(denominator))
+    this.mapI(p => applyDenominator(p, denominator.neg()))
     return this
   }
 

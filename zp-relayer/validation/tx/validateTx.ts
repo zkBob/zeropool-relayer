@@ -8,7 +8,7 @@ import config from '@/configs/relayerConfig'
 import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
 import { web3 } from '@/services/web3'
-import { contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
+import { applyDenominator, contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
 import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1 } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
@@ -243,7 +243,7 @@ export async function validateTx(
     checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
     checkCondition(depositSignature !== null, 'Deposit signature is required')
 
-    const requiredTokenAmount = tokenAmountWithFee.mul(pool.denominator)
+    const requiredTokenAmount = applyDenominator(tokenAmountWithFee, pool.denominator)
     userAddress = await getRecoveredAddress(
       txType,
       nullifier,

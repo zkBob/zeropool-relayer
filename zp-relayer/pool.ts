@@ -95,6 +95,9 @@ class Pool {
     if (this.isInitialized) return
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
+    if (this.denominator.testn(255)) {
+      this.denominator = this.denominator.maskn(255).neg()
+    }
     this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
 
     if (config.permitType === PermitType.SaltedPermit) {
