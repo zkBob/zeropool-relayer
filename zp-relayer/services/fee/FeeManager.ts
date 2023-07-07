@@ -24,7 +24,7 @@ export interface IUserFeeOptions {
 type FeeOptions<K extends string, V = BN> = Required<Record<K, V>>
 
 export class UserFeeOptions<T extends string> implements IUserFeeOptions {
-  constructor(public fees: FeeOptions<T>, private readonly feesCap?: FeeOptions<T>) {}
+  constructor(public fees: FeeOptions<T>, private readonly minFees?: FeeOptions<T>) {}
 
   private mapI(f: (v: BN, k: T) => BN) {
     for (const k in this.fees) {
@@ -57,17 +57,17 @@ export class UserFeeOptions<T extends string> implements IUserFeeOptions {
   }
 
   applyCap() {
-    const cap = this.feesCap
-    if (!cap) {
+    const minFees = this.minFees
+    if (!minFees) {
       return this
     }
-    this.mapI((p, k) => BN.max(p, cap[k]))
+    this.mapI((p, k) => BN.max(p, minFees[k]))
     return this
   }
 
   clone() {
     const cloneBN = (p: BN) => p.clone()
-    return new UserFeeOptions(this.map(cloneBN), this.feesCap)
+    return new UserFeeOptions(this.map(cloneBN), this.minFees)
   }
 
   getObject() {
