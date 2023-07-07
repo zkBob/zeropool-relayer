@@ -1,7 +1,7 @@
 import type Web3 from 'web3'
 import type BN from 'bn.js'
 import type { Contract } from 'web3-eth-contract'
-import { OP_GAS_ORACLE_ADDRESS, MOCK_CALLDATA } from '@/utils/constants'
+import { OP_GAS_ORACLE_ADDRESS } from '@/utils/constants'
 import { AbiItem, toBN, hexToBytes } from 'web3-utils'
 import OracleAbi from '@/abi/op-oracle.json'
 import { contractCallRetry } from '@/utils/helpers'
@@ -14,8 +14,9 @@ import {
   UserFeeOptions,
   DynamicFeeOptions,
 } from './FeeManager'
-import type { EstimationType, GasPrice } from '../gas-price'
+import relayerConfig from '@/configs/relayerConfig'
 import { ZERO_BYTE_GAS, NZERO_BYTE_GAS } from '@/utils/constants'
+import type { EstimationType, GasPrice } from '../gas-price'
 
 export class OptimismFeeManager extends FeeManager {
   private oracle: Contract
@@ -78,6 +79,9 @@ export class OptimismFeeManager extends FeeManager {
     return new UserFeeOptions({
       fee: baseFee,
       oneByteFee,
+    }, {
+      fee: relayerConfig.minBaseFee,
+      oneByteFee: toBN(0),
     })
   }
 }

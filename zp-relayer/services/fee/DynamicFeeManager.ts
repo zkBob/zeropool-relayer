@@ -8,8 +8,9 @@ import {
   IFeeManagerConfig,
   DynamicFeeOptions,
 } from './FeeManager'
-import type { EstimationType, GasPrice } from '../gas-price'
 import { NZERO_BYTE_GAS } from '@/utils/constants'
+import relayerConfig from '@/configs/relayerConfig'
+import type { EstimationType, GasPrice } from '../gas-price'
 
 export class DynamicFeeManager extends FeeManager {
   constructor(config: IFeeManagerConfig, private gasPrice: GasPrice<EstimationType>) {
@@ -30,9 +31,15 @@ export class DynamicFeeManager extends FeeManager {
     const gasPrice = await this.gasPrice.fetchOnce()
     const fee = FeeManager.executionFee(gasPrice, gasLimit)
     const oneByteFee = FeeManager.executionFee(gasPrice, toBN(NZERO_BYTE_GAS))
-    return new UserFeeOptions({
-      fee,
-      oneByteFee,
-    })
+    return new UserFeeOptions(
+      {
+        fee,
+        oneByteFee,
+      },
+      {
+        fee: relayerConfig.minBaseFee,
+        oneByteFee: toBN(0),
+      }
+    )
   }
 }

@@ -1,4 +1,4 @@
-import type BN from 'bn.js'
+import BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
 import { getMaxRequiredGasPrice, GasPriceValue } from '../gas-price'
@@ -14,6 +14,7 @@ export interface IFeeEstimateParams extends IGetFeesParams {
 
 export interface IUserFeeOptions {
   applyFactor(factor: BN): this
+  applyCap(): this
   denominate(denominator: BN): this
   convert(priceFeed: IPriceFeed): Promise<this>
   getObject(): Record<string, string>
@@ -23,18 +24,18 @@ export interface IUserFeeOptions {
 type FeeOptions<K extends string, V = BN> = Required<Record<K, V>>
 
 export class UserFeeOptions<T extends string> implements IUserFeeOptions {
-  constructor(public fees: FeeOptions<T>) {}
+  constructor(public fees: FeeOptions<T>, private readonly feesCap?: FeeOptions<T>) {}
 
-  private mapI(f: (_: BN) => BN) {
+  private mapI(f: (v: BN, k: T) => BN) {
     for (const k in this.fees) {
-      this.fees[k] = f(this.fees[k])
+      this.fees[k] = f(this.fees[k], k)
     }
   }
 
-  private map<V>(f: (_: BN) => V): FeeOptions<T, V> {
+  private map<V>(f: (v: BN, k: T) => V): FeeOptions<T, V> {
     const clone = {} as any
     for (const k in this.fees) {
-      clone[k] = f(this.fees[k])
+      clone[k] = f(this.fees[k], k)
     }
     return clone
   }
@@ -55,9 +56,18 @@ export class UserFeeOptions<T extends string> implements IUserFeeOptions {
     return this
   }
 
+  applyCap() {
+    const cap = this.feesCap
+    if (!cap) {
+      return this
+    }
+    this.mapI((p, k) => BN.max(p, cap[k]))
+    return this
+  }
+
   clone() {
     const cloneBN = (p: BN) => p.clone()
-    return new UserFeeOptions(this.map(cloneBN))
+    return new UserFeeOptions(this.map(cloneBN), this.feesCap)
   }
 
   getObject() {
