@@ -76,12 +76,15 @@ export class OptimismFeeManager extends FeeManager {
 
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
 
-    return new UserFeeOptions({
-      fee: baseFee,
-      oneByteFee,
-    }, {
-      fee: relayerConfig.minBaseFee,
-      oneByteFee: toBN(0),
-    })
+    return new UserFeeOptions(
+      {
+        fee: baseFee,
+        oneByteFee,
+      },
+      {
+        fee: relayerConfig.minBaseFee,
+        oneByteFee: toBN(0),
+      }
+    )
   }
 }
