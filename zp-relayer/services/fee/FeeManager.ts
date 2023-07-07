@@ -45,7 +45,8 @@ export class UserFeeOptions<T extends string> implements IUserFeeOptions {
   }
 
   denominate(denominator: BN): this {
-    this.mapI(p => applyDenominator(p, denominator.neg()))
+    const dInverse = toBN(1).shln(255)
+    this.mapI(p => applyDenominator(p, denominator.xor(dInverse)))
     return this
   }
 
