@@ -236,7 +236,7 @@ export async function validateTx(
   const energyAmount = delta.energyAmount
 
   let userAddress = ZERO_ADDRESS
-  let baseTxGas = BASE_TX_GAS[txType]
+  let nativeConvert = false
 
   if (txType === TxType.WITHDRAWAL) {
     checkCondition(tokenAmountWithFee.lte(ZERO) && energyAmount.lte(ZERO), 'Incorrect withdraw amounts')
@@ -249,7 +249,7 @@ export async function validateTx(
     await checkAssertion(() => checkNativeAmount(nativeAmountBN, tokenAmountWithFee.neg()))
 
     if (!nativeAmountBN.isZero()) {
-      baseTxGas += NATIVE_CONVERT_OVERHEAD
+      nativeConvert = true
     }
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
@@ -274,7 +274,8 @@ export async function validateTx(
   }
 
   const requiredFee = await feeManager.estimateFee({
-    gasLimit: toBN(baseTxGas),
+    txType,
+    nativeConvert,
     txData: MOCK_CALLDATA + rawMemo + (depositSignature || ''),
   })
   const denominatedFee = requiredFee.denominate(pool.denominator).getEstimate()

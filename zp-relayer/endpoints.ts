@@ -210,7 +210,7 @@ function getFeeBuilder(feeManager: FeeManager) {
   return async (req: Request, res: Response) => {
     validateBatch([[checkTraceId, req.headers]])
 
-    const feeOptions = await feeManager.getFeeOptions({ gasLimit: config.baseTxGas })
+    const feeOptions = await feeManager.getFeeOptions()
     const fees = feeOptions.denominate(pool.denominator).getObject()
 
     res.json(fees)
