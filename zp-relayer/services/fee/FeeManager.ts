@@ -14,7 +14,7 @@ export interface IFeeEstimateParams extends IGetFeesParams {
 
 export interface IUserFeeOptions {
   applyFactor(factor: BN): this
-  applyCap(): this
+  applyMinBound(): this
   denominate(denominator: BN): this
   convert(priceFeed: IPriceFeed): Promise<this>
   getObject(): Record<string, string>
@@ -56,7 +56,7 @@ export class UserFeeOptions<T extends string> implements IUserFeeOptions {
     return this
   }
 
-  applyCap() {
+  applyMinBound() {
     const minFees = this.minFees
     if (!minFees) {
       return this
@@ -151,6 +151,7 @@ export abstract class FeeManager {
       logger.debug('Fallback to cache fee options')
       feeOptions = this.cachedFeeOptions.clone()
     }
+    feeOptions.applyMinBound()
     return feeOptions
   }
 
