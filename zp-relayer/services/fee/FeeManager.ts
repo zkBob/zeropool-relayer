@@ -5,7 +5,7 @@ import { getMaxRequiredGasPrice, GasPriceValue } from '../gas-price'
 import { setIntervalAndRun } from '@/utils/helpers'
 import { logger } from '../appLogger'
 import { TxType } from 'zp-memo-parser'
-import { BASE_TX_GAS, NATIVE_CONVERT_OVERHEAD } from '@/utils/constants'
+import config from '@/configs/relayerConfig'
 
 export interface IFeeEstimateParams {
   txType: TxType
@@ -95,14 +95,14 @@ type DynamicFeeKeys = [
 // Utility class for dynamic fee estimations
 export class DynamicFeeOptions extends FeeOptions<DynamicFeeKeys> {
   static fromGasPice(gasPrice: GasPriceValue, oneByteFee: BN, minFee: BN) {
-    const getFee = (txType: TxType) => FeeManager.executionFee(gasPrice, toBN(BASE_TX_GAS[txType]))
+    const getFee = (txType: TxType) => FeeManager.executionFee(gasPrice, config.baseTxGas[txType])
     const fees: Fees<DynamicFeeKeys> = {
       [TxType.DEPOSIT]: getFee(TxType.DEPOSIT),
       [TxType.PERMITTABLE_DEPOSIT]: getFee(TxType.PERMITTABLE_DEPOSIT),
       [TxType.TRANSFER]: getFee(TxType.TRANSFER),
       [TxType.WITHDRAWAL]: getFee(TxType.WITHDRAWAL),
       oneByteFee,
-      nativeConvertFee: FeeManager.executionFee(gasPrice, toBN(NATIVE_CONVERT_OVERHEAD)),
+      nativeConvertFee: FeeManager.executionFee(gasPrice, config.baseTxGas.nativeConvertOverhead),
     }
     const minFees: Fees<DynamicFeeKeys> = {
       [TxType.DEPOSIT]: minFee,

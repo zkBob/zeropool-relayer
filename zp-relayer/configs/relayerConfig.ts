@@ -8,6 +8,7 @@ import { ProverType } from '@/prover'
 import { countryCodes } from '@/utils/countryCodes'
 import { logger } from '@/services/appLogger'
 import { PermitType } from '@/utils/permit/types'
+import { TxType } from 'zp-memo-parser'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -75,6 +76,13 @@ const config = {
   priceFeedBaseTokenAddress: process.env.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS || null,
   precomputeParams: process.env.RELAYER_PRECOMPUTE_PARAMS === 'true',
   permitType: (process.env.RELAYER_PERMIT_TYPE || PermitType.SaltedPermit) as PermitType,
+  baseTxGas: {
+    [TxType.DEPOSIT]: toBN(process.env.RELAYER_BASE_TX_GAS_DEPOSIT || '650000'),
+    [TxType.PERMITTABLE_DEPOSIT]: toBN(process.env.RELAYER_BASE_TX_GAS_PERMITTABLE_DEPOSIT || '650000'),
+    [TxType.TRANSFER]: toBN(process.env.RELAYER_BASE_TX_GAS_TRANSFER || '650000'),
+    [TxType.WITHDRAWAL]: toBN(process.env.RELAYER_BASE_TX_GAS_WITHDRAWAL || '650000'),
+    nativeConvertOverhead: toBN(process.env.RELAYER_BASE_TX_GAS_NATIVE_CONVERT || '200000'),
+  },
 }
 
 export default config

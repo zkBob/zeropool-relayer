@@ -9,13 +9,7 @@ import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
 import { web3 } from '@/services/web3'
 import { contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
-import {
-  ZERO_ADDRESS,
-  MESSAGE_PREFIX_COMMON_V1,
-  BASE_TX_GAS,
-  NATIVE_CONVERT_OVERHEAD,
-  MOCK_CALLDATA,
-} from '@/utils/constants'
+import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1, MOCK_CALLDATA } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
