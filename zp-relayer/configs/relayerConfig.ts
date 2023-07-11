@@ -25,7 +25,7 @@ const config = {
   relayerPrivateKey: process.env.RELAYER_ADDRESS_PRIVATE_KEY as string,
   tokenAddress: process.env.RELAYER_TOKEN_ADDRESS as string,
   relayerGasLimit: toBN(process.env.RELAYER_GAS_LIMIT as string),
-  baseTxGas: toBN(process.env.RELAYER_BASE_TX_GAS as string),
+  minBaseFee: toBN(process.env.RELAYER_MIN_BASE_FEE || '0'),
   relayerFee: process.env.RELAYER_FEE ? toBN(process.env.RELAYER_FEE) : null,
   maxNativeAmount: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT || '0'),
   treeUpdateParamsPath: process.env.RELAYER_TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',

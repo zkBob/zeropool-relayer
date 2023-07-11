@@ -1,4 +1,3 @@
-import type BN from 'bn.js'
 import type { Redis } from 'ioredis'
 import type { Mutex } from 'async-mutex'
 import type { TxManager } from '@/tx/TxManager'
@@ -12,7 +11,7 @@ export interface IWorkerBaseConfig {
 }
 
 export interface IPoolWorkerConfig extends IWorkerBaseConfig {
-  validateTx: (tx: TxPayload, pool: Pool, requiredFee: BN, traceId?: string) => Promise<void>
+  validateTx: (tx: TxPayload, pool: Pool, feeManager: FeeManager, traceId?: string) => Promise<void>
   treeProver: IProver<Circuit.Tree>
   mutex: Mutex
   txManager: TxManager

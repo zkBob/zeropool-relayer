@@ -9,12 +9,13 @@ import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
 import { web3 } from '@/services/web3'
 import { applyDenominator, contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
-import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1 } from '@/utils/constants'
+import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1, MOCK_CALLDATA } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
 import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondition } from './common'
 import type { PermitRecover } from '@/utils/permit/types'
+import type { FeeManager } from '@/services/fee'
 
 const ZERO = toBN(0)
 
@@ -197,7 +198,7 @@ function checkMemoPrefix(memo: string, txType: TxType) {
 export async function validateTx(
   { txType, rawMemo, txProof, depositSignature }: TxPayload,
   pool: Pool,
-  requiredFee: BN,
+  feeManager: FeeManager,
   traceId?: string
 ) {
   await checkAssertion(() => checkMemoPrefix(rawMemo, txType))
@@ -222,7 +223,6 @@ export async function validateTx(
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
-  await checkAssertion(() => checkFee(fee, requiredFee))
   await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
   const tokenAmount = delta.tokenAmount
@@ -230,15 +230,21 @@ export async function validateTx(
   const energyAmount = delta.energyAmount
 
   let userAddress = ZERO_ADDRESS
+  let nativeConvert = false
 
   if (txType === TxType.WITHDRAWAL) {
     checkCondition(tokenAmountWithFee.lte(ZERO) && energyAmount.lte(ZERO), 'Incorrect withdraw amounts')
 
     const { nativeAmount, receiver } = txData as TxData<TxType.WITHDRAWAL>
+    const nativeAmountBN = toBN(nativeAmount)
     userAddress = web3.utils.bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
     await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
-    await checkAssertion(() => checkNativeAmount(toBN(nativeAmount), tokenAmountWithFee.neg()))
+    await checkAssertion(() => checkNativeAmount(nativeAmountBN, tokenAmountWithFee.neg()))
+
+    if (!nativeAmountBN.isZero()) {
+      nativeConvert = true
+    }
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
     checkCondition(depositSignature !== null, 'Deposit signature is required')
@@ -260,6 +266,14 @@ export async function validateTx(
   } else {
     throw new TxValidationError('Unsupported TxType')
   }
+
+  const requiredFee = await feeManager.estimateFee({
+    txType,
+    nativeConvert,
+    txData: MOCK_CALLDATA + rawMemo + (depositSignature || ''),
+  })
+  const denominatedFee = requiredFee.denominate(pool.denominator).getEstimate()
+  await checkAssertion(() => checkFee(fee, denominatedFee))
 
   const limits = await pool.getLimitsFor(userAddress)
   await checkAssertion(() => checkLimits(limits, delta.tokenAmount))

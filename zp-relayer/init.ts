@@ -41,7 +41,6 @@ function buildFeeManager(
     scaleFactor: config.feeScalingFactor,
     marginFactor: config.feeMarginFactor,
     updateInterval: config.feeManagerUpdateInterval,
-    defaultFeeOptionsParams: { gasLimit: config.baseTxGas },
   }
   if (type === FeeManagerType.Static) {
     if (config.relayerFee === null) throw new Error('Static relayer fee is not set')

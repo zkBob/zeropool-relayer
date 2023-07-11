@@ -4,7 +4,7 @@ import { toBN } from 'web3-utils'
 import { web3 } from '@/services/web3'
 import { logger } from '@/services/appLogger'
 import { poolTxQueue, BatchTx, PoolTxResult, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
-import { TX_QUEUE_NAME, MOCK_CALLDATA } from '@/utils/constants'
+import { TX_QUEUE_NAME } from '@/utils/constants'
 import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
 import { pool } from '@/pool'
 import { sentTxQueue } from '@/queue/sentTxQueue'
@@ -145,13 +145,7 @@ export async function createPoolTxWorker({
       } else if (type === WorkerTxType.Normal) {
         const tx = payload as WorkerTx<WorkerTxType.Normal>
 
-        const requiredFee = await feeManager.estimateFee({
-          gasLimit: config.relayerGasLimit,
-          txData: MOCK_CALLDATA + tx.rawMemo + (tx.depositSignature || ''),
-        })
-        const denominatedFee = requiredFee.denominate(pool.denominator).getEstimate()
-
-        await validateTx(tx, pool, denominatedFee, traceId)
+        await validateTx(tx, pool, feeManager, traceId)
 
         processResult = await buildTx(tx, treeProver, pool.optimisticState)
       } else {
