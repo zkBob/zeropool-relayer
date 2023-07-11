@@ -2,7 +2,7 @@ import BN from 'bn.js'
 import { toBN } from 'web3-utils'
 import type { IPriceFeed } from '../price-feed/IPriceFeed'
 import { getMaxRequiredGasPrice, GasPriceValue } from '../gas-price'
-import { setIntervalAndRun } from '@/utils/helpers'
+import { applyDenominator, setIntervalAndRun } from '@/utils/helpers'
 import { logger } from '../appLogger'
 import { TxType } from 'zp-memo-parser'
 import config from '@/configs/relayerConfig'
@@ -53,7 +53,8 @@ export class FeeOptions<T extends string[]> implements IFeeOptions<T, BN> {
   }
 
   denominate(denominator: BN): this {
-    this.mapI(p => p.div(denominator))
+    const dInverse = toBN(1).shln(255)
+    this.mapI(p => applyDenominator(p, denominator.xor(dInverse)))
     return this
   }
 
