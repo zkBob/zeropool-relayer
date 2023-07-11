@@ -229,8 +229,8 @@ export async function validateTx(
   const tokenAmountWithFee = tokenAmount.add(fee)
   const energyAmount = delta.energyAmount
 
-  let userAddress = ZERO_ADDRESS
   let nativeConvert = false
+  let userAddress: string
 
   if (txType === TxType.WITHDRAWAL) {
     checkCondition(tokenAmountWithFee.lte(ZERO) && energyAmount.lte(ZERO), 'Incorrect withdraw amounts')
@@ -262,6 +262,7 @@ export async function validateTx(
     logger.info('Deposit address: %s', userAddress)
     await checkAssertion(() => checkDepositEnoughBalance(pool.TokenInstance, userAddress, requiredTokenAmount))
   } else if (txType === TxType.TRANSFER) {
+    userAddress = config.relayerAddress
     checkCondition(tokenAmountWithFee.eq(ZERO) && energyAmount.eq(ZERO), 'Incorrect transfer amounts')
   } else {
     throw new TxValidationError('Unsupported TxType')
