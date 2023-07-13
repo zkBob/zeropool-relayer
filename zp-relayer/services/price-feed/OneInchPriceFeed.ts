@@ -11,10 +11,8 @@ import OracleAbi from '@/abi/one-inch-oracle.json'
 export class OneInchPriceFeed implements IPriceFeed {
   private contract: Contract
   private baseTokenAddress: string
-  private poolTokenAddress: string
-
-  tokenDecimals!: BN
   private baseTokenDecimals!: BN
+  private poolTokenAddress: string
 
   constructor(
     private web3: Web3,
@@ -31,9 +29,9 @@ export class OneInchPriceFeed implements IPriceFeed {
 
   async init() {
     if (this.baseTokenAddress !== ZERO_ADDRESS) {
-      this.tokenDecimals = await this.getContractDecimals(this.baseTokenAddress)
+      this.baseTokenDecimals = await this.getContractDecimals(this.baseTokenAddress)
     } else {
-      this.tokenDecimals = toBN(toWei('1')) // 1 ether
+      this.baseTokenDecimals = toBN(toWei('1')) // 1 ether
     }
   }
 
