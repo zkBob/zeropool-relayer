@@ -15,7 +15,9 @@ import { PoolState } from './state/PoolState'
 import type { TxType } from 'zp-memo-parser'
 import { contractCallRetry, numToHex, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from './utils/helpers'
 import { PoolCalldataParser } from './utils/PoolCalldataParser'
-import { OUTPLUSONE } from './utils/constants'
+import { OUTPLUSONE, PERMIT2_CONTRACT } from './utils/constants'
+import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from './utils/permit'
+import { PermitRecover, PermitType } from './utils/permit/types'
 
 export interface PoolTx {
   proof: Proof
@@ -35,6 +37,9 @@ export interface Limits {
   dailyUserDepositCapUsage: BN
   depositCap: BN
   tier: BN
+  dailyUserDirectDepositCap: BN
+  dailyUserDirectDepositCapUsage: BN
+  directDepositCap: BN
 }
 
 export interface LimitsFetch {
@@ -59,6 +64,13 @@ export interface LimitsFetch {
       available: string
     }
   }
+  dd: {
+    singleOperation: string
+    dailyForAddress: {
+      total: string
+      available: string
+    }
+  }
   tier: string
 }
 
@@ -71,6 +83,7 @@ class Pool {
   public denominator: BN = toBN(1)
   public poolId: BN = toBN(0)
   public isInitialized = false
+  public permitRecover!: PermitRecover
 
   constructor() {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
@@ -93,6 +106,17 @@ class Pool {
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
     this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
+
+    if (config.permitType === PermitType.SaltedPermit) {
+      this.permitRecover = new SaltedPermitRecover(web3, config.tokenAddress)
+    } else if (config.permitType === PermitType.Permit2) {
+      this.permitRecover = new Permit2Recover(web3, PERMIT2_CONTRACT)
+    } else if (config.permitType === PermitType.TransferWithAuthorization) {
+      this.permitRecover = new TransferWithAuthorizationRecover(web3, config.tokenAddress)
+    } else {
+      throw new Error("Cannot infer pool's permit standard")
+    }
+    await this.permitRecover.initializeDomain()
 
     await this.syncState(config.startBlock)
     this.isInitialized = true
@@ -258,6 +282,9 @@ class Pool {
       dailyUserDepositCapUsage: toBN(limits.dailyUserDepositCapUsage),
       depositCap: toBN(limits.depositCap),
       tier: toBN(limits.tier),
+      dailyUserDirectDepositCap: toBN(limits.dailyUserDirectDepositCap),
+      dailyUserDirectDepositCapUsage: toBN(limits.dailyUserDirectDepositCapUsage),
+      directDepositCap: toBN(limits.directDepositCap)
     }
   }
 
@@ -283,6 +310,13 @@ class Pool {
           total: limits.dailyWithdrawalCap.toString(10),
           available: limits.dailyWithdrawalCap.sub(limits.dailyWithdrawalCapUsage).toString(10),
         },
+      },
+      dd: {
+        singleOperation: limits.directDepositCap.toString(10),
+        dailyForAddress: {
+          total: limits.dailyUserDirectDepositCap.toString(10),
+          available: limits.dailyUserDirectDepositCap.sub(limits.dailyUserDirectDepositCapUsage).toString(10),
+        }
       },
       tier: limits.tier.toString(10),
     }
