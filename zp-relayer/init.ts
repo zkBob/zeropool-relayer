@@ -103,6 +103,7 @@ export async function init() {
   )
 
   const priceFeed = buildPriceFeed(config.priceFeedType, web3)
+  await priceFeed.init()
   const feeManager = buildFeeManager(config.feeManagerType, priceFeed, gasPriceService, web3)
   await feeManager.start()
 

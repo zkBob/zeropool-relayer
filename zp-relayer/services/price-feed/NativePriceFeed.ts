@@ -5,6 +5,8 @@ import { toBN } from 'web3-utils'
 export class NativePriceFeed implements IPriceFeed {
   constructor() {}
 
+  async init() {}
+
   async getRate(): Promise<BN> {
     return toBN(1)
   }
