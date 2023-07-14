@@ -59,6 +59,12 @@ These environment variables are required for all services.
 | RELAYER_PRICE_FEED_TYPE | Price feed type that will be used for rate conversions. | PriceFeedType |
 | RELAYER_PRICE_FEED_CONTRACT_ADDRESS | Price feed contract address. | address |
 | RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS | Base token that will be used for rate conversions. | address |
+| RELAYER_MIN_BASE_FEE | Min base fee for each tx type for `dynamic` and `optimism` FeeManagers. Does not affect any extra fee parameters such as per byte fee or native swap fee. Defaults to `0`.  | integer |
+| RELAYER_BASE_TX_GAS_DEPOSIT | Base gas consumption for deposit transaction without variable per byte memo fee or any other features such as native swap fee. Defaults to `650000`.  | integer |
+| RELAYER_BASE_TX_GAS_PERMITTABLE_DEPOSIT | Same as `RELAYER_BASE_TX_GAS_DEPOSIT`, but for permittable deposits. Defaults to `650000`. | integer |
+| RELAYER_BASE_TX_GAS_TRANSFER | Same as `RELAYER_BASE_TX_GAS_DEPOSIT`, but for transfers. Defaults to `650000`.  | integer |
+| RELAYER_BASE_TX_GAS_WITHDRAWAL | Same as `RELAYER_BASE_TX_GAS_DEPOSIT`, but for withdrawals. Defaults to `650000`.  | integer |
+| RELAYER_BASE_TX_GAS_NATIVE_CONVERT | Gas consumption for swapping pool's token to native token during withdrawal. Defaults to `200000`. | integer |
 
 ## Watcher
 

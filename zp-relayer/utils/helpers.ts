@@ -248,3 +248,9 @@ export function getFileHash(path: string) {
   hash.update(buffer)
   return hash.digest('hex')
 }
+
+export function applyDenominator(n: BN, d: BN) {
+  return d.testn(255)
+    ? n.div(d.maskn(255))
+    : n.mul(d)
+}
