@@ -284,7 +284,7 @@ class Pool {
       tier: toBN(limits.tier),
       dailyUserDirectDepositCap: toBN(limits.dailyUserDirectDepositCap),
       dailyUserDirectDepositCapUsage: toBN(limits.dailyUserDirectDepositCapUsage),
-      directDepositCap: toBN(limits.directDepositCap)
+      directDepositCap: toBN(limits.directDepositCap),
     }
   }
 
@@ -316,7 +316,7 @@ class Pool {
         dailyForAddress: {
           total: limits.dailyUserDirectDepositCap.toString(10),
           available: limits.dailyUserDirectDepositCap.sub(limits.dailyUserDirectDepositCapUsage).toString(10),
-        }
+        },
       },
       tier: limits.tier.toString(10),
     }

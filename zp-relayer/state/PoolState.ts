@@ -145,8 +145,12 @@ export class PoolState {
   }
 
   async getTransactions(limit: number, offset: number) {
+    // Round offset to OUTPLUSONE
+    offset = Math.floor(offset / OUTPLUSONE) * OUTPLUSONE
+
     const txs: string[] = []
-    let nextOffset = Math.floor(offset / OUTPLUSONE) * OUTPLUSONE
+
+    let nextOffset = offset
     for (let i = 0; i < limit; i++) {
       nextOffset = offset + i * OUTPLUSONE
       const tx = this.txs.get(nextOffset)

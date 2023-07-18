@@ -1,57 +1,14 @@
 import type Web3 from 'web3'
 import type BN from 'bn.js'
 import type { Contract } from 'web3-eth-contract'
-import { OP_GAS_ORACLE_ADDRESS, MOCK_CALLDATA } from '@/utils/constants'
+import { OP_GAS_ORACLE_ADDRESS } from '@/utils/constants'
 import { AbiItem, toBN, hexToBytes } from 'web3-utils'
 import OracleAbi from '@/abi/op-oracle.json'
 import { contractCallRetry } from '@/utils/helpers'
-import {
-  FeeManager,
-  FeeEstimate,
-  IFeeEstimateParams,
-  IFeeManagerConfig,
-  IUserFeeOptions,
-  IGetFeesParams,
-} from './FeeManager'
-import type { IPriceFeed } from '../price-feed'
+import { FeeManager, FeeEstimate, IFeeEstimateParams, IFeeManagerConfig, DynamicFeeOptions } from './FeeManager'
+import relayerConfig from '@/configs/relayerConfig'
+import { ZERO_BYTE_GAS, NZERO_BYTE_GAS } from '@/utils/constants'
 import type { EstimationType, GasPrice } from '../gas-price'
-
-const ZERO_BYTE_GAS = 4
-const NZERO_BYTE_GAS = 16
-
-class OptimismUserFeeOptions implements IUserFeeOptions {
-  constructor(private baseFee: BN, private oneByteFee: BN) {}
-
-  applyFactor(factor: BN) {
-    this.baseFee = this.baseFee.mul(factor).divn(100)
-    this.oneByteFee = this.oneByteFee.mul(factor).divn(100)
-    return this
-  }
-
-  denominate(denominator: BN): this {
-    this.baseFee = this.baseFee.div(denominator)
-    this.oneByteFee = this.oneByteFee.div(denominator)
-    return this
-  }
-
-  async convert(priceFeed: IPriceFeed) {
-    const [l2fee, oneByteFee] = await priceFeed.convert([this.baseFee, this.oneByteFee])
-    this.baseFee = l2fee
-    this.oneByteFee = oneByteFee
-    return this
-  }
-
-  clone(): this {
-    return new OptimismUserFeeOptions(this.baseFee.clone(), this.oneByteFee.clone()) as this
-  }
-
-  getObject() {
-    return {
-      fee: this.baseFee.toString(10),
-      oneByteFee: this.oneByteFee.toString(10),
-    }
-  }
-}
 
 export class OptimismFeeManager extends FeeManager {
   private oracle: Contract
@@ -87,28 +44,29 @@ export class OptimismFeeManager extends FeeManager {
     return scaled
   }
 
-  async _estimateFee({ extraData }: IFeeEstimateParams, feeOptions: OptimismUserFeeOptions) {
-    const { fee: baseFee, oneByteFee } = feeOptions.getObject()
+  async _estimateFee({ txType, nativeConvert, txData }: IFeeEstimateParams, feeOptions: DynamicFeeOptions) {
+    const { [txType]: baseFee, nativeConvertFee, oneByteFee } = feeOptions.fees
 
-    const unscaledL1Fee = this.getL1Fee(MOCK_CALLDATA + extraData, toBN(oneByteFee))
+    const unscaledL1Fee = this.getL1Fee(txData, oneByteFee)
 
     // Because oneByteFee = l1BaseFee * NZERO_BYTE_GAS, we need to divide the estimation
     // We do it here to get a more accurate result
     const l1Fee = unscaledL1Fee.divn(NZERO_BYTE_GAS)
 
-    const feeEstimate = toBN(baseFee).add(l1Fee)
-
-    return new FeeEstimate(feeEstimate)
+    const fee = baseFee.add(l1Fee)
+    if (nativeConvert) {
+      fee.iadd(nativeConvertFee)
+    }
+    return new FeeEstimate({ fee })
   }
 
-  async _fetchFeeOptions({ gasLimit }: IGetFeesParams): Promise<OptimismUserFeeOptions> {
-    // TODO: add RLP encoding overhead to baseFee
-    const baseFee = await FeeManager.estimateExecutionFee(this.gasPrice, gasLimit)
+  async _fetchFeeOptions(): Promise<DynamicFeeOptions> {
+    const gasPrice = await this.gasPrice.fetchOnce()
 
     const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
-    // Use an upper bound for the oneByteFee
+
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
 
-    return new OptimismUserFeeOptions(baseFee, oneByteFee)
+    return DynamicFeeOptions.fromGasPice(gasPrice, oneByteFee, relayerConfig.minBaseFee)
   }
 }
