@@ -10,12 +10,12 @@ import relayerConfig from '@/configs/relayerConfig'
 import { ZERO_BYTE_GAS, NZERO_BYTE_GAS } from '@/utils/constants'
 import type { EstimationType, GasPrice } from '../gas-price'
 
-// Rough estimation of tx RLP encoding overhead in bytes
-const RLP_ENCODING_OVERHEAD = toBN(120)
+// Rough estimation of tx RLP encoding overhead
+const RLP_ENCODING_OVERHEAD = toBN(10 * 16)
 const SIGNATURE_GAS = toBN(68 * 16)
 
 export class OptimismFeeManager extends FeeManager {
-  public oracle: Contract
+  private oracle: Contract
   private overhead!: BN
   private decimals!: BN
   private scalar!: BN
