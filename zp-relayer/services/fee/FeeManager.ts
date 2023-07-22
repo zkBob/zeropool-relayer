@@ -93,10 +93,18 @@ type DynamicFeeKeys = [
   'oneByteFee',
   'nativeConvertFee'
 ]
+
+interface DynamicFeeParams {
+  gasPrice: GasPriceValue
+  oneByteFee: BN
+  minFee: BN
+  baseExtra: BN
+}
+
 // Utility class for dynamic fee estimations
 export class DynamicFeeOptions extends FeeOptions<DynamicFeeKeys> {
-  static fromGasPice(gasPrice: GasPriceValue, oneByteFee: BN, minFee: BN) {
-    const getFee = (txType: TxType) => FeeManager.executionFee(gasPrice, config.baseTxGas[txType])
+  static fromParams({ gasPrice, baseExtra, oneByteFee, minFee }: DynamicFeeParams) {
+    const getFee = (txType: TxType) => FeeManager.executionFee(gasPrice, config.baseTxGas[txType]).add(baseExtra)
     const fees: Fees<DynamicFeeKeys> = {
       [TxType.DEPOSIT]: getFee(TxType.DEPOSIT),
       [TxType.PERMITTABLE_DEPOSIT]: getFee(TxType.PERMITTABLE_DEPOSIT),
