@@ -244,7 +244,7 @@ function root(req: Request, res: Response) {
 
 export function inject<T>(values: T, f: (req: Request, res: Response, e: T) => void) {
   return (req: Request, res: Response) => {
-    f(req, res, values)
+    return f(req, res, values)
   }
 }
 
