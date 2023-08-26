@@ -1,3 +1,5 @@
+// @ts-ignore
+import TronWeb from 'tronweb'
 import Ajv, { JSONSchemaType } from 'ajv'
 import { isAddress } from 'web3-utils'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
@@ -6,14 +8,20 @@ import type { PoolTx } from '@/pool'
 import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
 import config from '@/configs/relayerConfig'
 import { logger } from '@/services/appLogger'
+import { Network } from '@/services/network'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
 ajv.addKeyword({
   keyword: 'isAddress',
-  validate: (schema: any, address: string) => {
-    return isAddress(address)
-  },
+  validate:
+    config.RELAYER_NETWORK === Network.Ethereum
+      ? (schema: any, address: string) => {
+          return isAddress(address)
+        }
+      : (schema: any, address: string) => {
+          return TronWeb.isAddress(address)
+        },
   errors: true,
 })
 
@@ -30,7 +38,6 @@ const AjvNullableString: JSONSchemaType<string> = { type: 'string', nullable: tr
 
 const AjvNullableAddress: JSONSchemaType<string> = {
   type: 'string',
-  pattern: '^0x[a-fA-F0-9]{40}$',
   default: ZERO_ADDRESS,
   isAddress: true,
 }
