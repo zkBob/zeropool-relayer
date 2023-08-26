@@ -28,7 +28,7 @@ export function checkSize(data: string, size: number) {
 }
 
 export async function checkScreener(address: string, traceId?: string) {
-  if (config.screenerUrl === null || config.screenerToken === null) {
+  if (config.COMMON_SCREENER_TOKEN === null || config.COMMON_SCREENER_TOKEN === null) {
     return null
   }
 
@@ -36,13 +36,13 @@ export async function checkScreener(address: string, traceId?: string) {
 
   const headers: Record<string, string> = {
     'Content-type': 'application/json',
-    'Authorization': `Bearer ${config.screenerToken}`,
+    'Authorization': `Bearer ${config.COMMON_SCREENER_TOKEN}`,
   }
 
   if (traceId) headers[HEADER_TRACE_ID] = traceId
 
   try {
-    const rawResponse = await fetch(config.screenerUrl, {
+    const rawResponse = await fetch(config.COMMON_SCREENER_URL as string, {
       method: 'POST',
       headers,
       body: JSON.stringify({ address }),

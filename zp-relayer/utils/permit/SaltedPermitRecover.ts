@@ -36,7 +36,7 @@ export class SaltedPermitRecover extends IPermitRecover<SaltedPermitMessage> {
     amount,
     nullifier,
   }: CommonMessageParams): Promise<SaltedPermitMessage> {
-    const nonce = await contractCallRetry(tokenContract, 'nonces', [owner])
+    const nonce = await tokenContract.callRetry('nonces', [owner])
 
     const message: SaltedPermitMessage = {
       owner,

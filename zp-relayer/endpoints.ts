@@ -1,7 +1,7 @@
 import type { Queue } from 'bullmq'
 import { Request, Response } from 'express'
-import { LimitsFetch, pool, PoolTx } from './pool'
-import { poolTxQueue } from './queue/poolTxQueue'
+import type { LimitsFetch, Pool, PoolTx } from './pool'
+import { JobState, PoolTx as Tx, WorkerTxType, poolTxQueue } from './queue/poolTxQueue'
 import config from './configs/relayerConfig'
 import {
   validateCountryIP,
@@ -13,12 +13,22 @@ import {
   checkTraceId,
   validateBatch,
 } from './validation/api/validation'
-import { sentTxQueue, SentTxState } from './queue/sentTxQueue'
 import { HEADER_TRACE_ID } from './utils/constants'
-import { getFileHash } from './utils/helpers'
 import type { FeeManager } from './services/fee'
 
-async function sendTransactions(req: Request, res: Response) {
+interface PoolInjection {
+  pool: Pool
+}
+
+interface FeeManagerInjection {
+  feeManager: FeeManager
+}
+
+interface HashInjection {
+  hash: string | null
+}
+
+async function sendTransactions(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
     [checkTraceId, req.headers],
     [checkSendTransactionsErrors, req.body],
@@ -38,11 +48,14 @@ async function sendTransactions(req: Request, res: Response) {
       depositSignature,
     }
   })
-  const jobId = await pool.transact(txs, traceId)
+  if (txs.length !== 1) {
+    throw new Error('Batch transactions are not supported')
+  }
+  const jobId = await pool.transact(txs[0], traceId)
   res.json({ jobId })
 }
 
-async function merkleRoot(req: Request, res: Response) {
+async function merkleRoot(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
     [checkTraceId, req.headers],
     [checkMerkleRootErrors, req.params],
@@ -53,7 +66,7 @@ async function merkleRoot(req: Request, res: Response) {
   res.json(root)
 }
 
-async function getTransactionsV2(req: Request, res: Response) {
+async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
     [checkTraceId, req.headers],
     [checkGetTransactionsV2, req.query],
@@ -82,21 +95,13 @@ async function getTransactionsV2(req: Request, res: Response) {
   res.json(txs)
 }
 
-async function getJob(req: Request, res: Response) {
-  enum JobStatus {
-    WAITING = 'waiting',
-    FAILED = 'failed',
-    SENT = 'sent',
-    REVERTED = 'reverted',
-    COMPLETED = 'completed',
-  }
-
+async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
   interface GetJobResponse {
     resolvedJobId: string
     createdOn: number
     failedReason: null | string
     finishedOn: null | number
-    state: JobStatus
+    state: JobState
     txHash: null | string
   }
 
@@ -108,7 +113,7 @@ async function getJob(req: Request, res: Response) {
     const INCONSISTENCY_ERR = 'Internal job inconsistency'
 
     // Should be used in places where job is expected to exist
-    const safeGetJob = async (queue: Queue, id: string) => {
+    const safeGetJob = async (queue: Queue<Tx<WorkerTxType>>, id: string) => {
       const job = await queue.getJob(id)
       if (!job) {
         throw new Error(INCONSISTENCY_ERR)
@@ -129,7 +134,7 @@ async function getJob(req: Request, res: Response) {
       createdOn: job.timestamp,
       failedReason: null,
       finishedOn: null,
-      state: JobStatus.WAITING,
+      state: JobState.WAITING,
       txHash: null,
     }
 
@@ -137,45 +142,8 @@ async function getJob(req: Request, res: Response) {
       // Transaction was included in optimistic state, waiting to be mined
 
       // Sanity check
-      if (job.returnvalue === null) throw new Error(INCONSISTENCY_ERR)
-      const sentJobId = job.returnvalue[0][1]
-
-      const sentJobState = await sentTxQueue.getJobState(sentJobId)
-      // Should not happen here, but need to verify to be sure
-      if (sentJobState === 'unknown') throw new Error('Sent job not found')
-
-      const sentJob = await safeGetJob(sentTxQueue, sentJobId)
-      if (sentJobState === 'waiting' || sentJobState === 'active' || sentJobState === 'delayed') {
-        // Transaction is in re-send loop
-        const txHash = sentJob.data.prevAttempts.at(-1)?.[0]
-        result.state = JobStatus.SENT
-        result.txHash = txHash || null
-      } else if (sentJobState === 'completed') {
-        // Sanity check
-        if (sentJob.returnvalue === null) throw new Error(INCONSISTENCY_ERR)
-
-        const [txState, txHash] = sentJob.returnvalue
-        if (txState === SentTxState.MINED) {
-          // Transaction mined successfully
-          result.state = JobStatus.COMPLETED
-          result.txHash = txHash
-          result.finishedOn = sentJob.finishedOn || null
-        } else if (txState === SentTxState.REVERT) {
-          // Transaction reverted
-          result.state = JobStatus.REVERTED
-          result.txHash = txHash
-          result.finishedOn = sentJob.finishedOn || null
-        }
-      }
-    } else if (poolJobState === 'failed') {
-      // Either validation or tx sending failed
-
-      // Sanity check
-      if (!job.finishedOn) throw new Error(INCONSISTENCY_ERR)
-
-      result.state = JobStatus.FAILED
-      result.failedReason = job.failedReason
-      result.finishedOn = job.finishedOn || null
+      // if (job.returnvalue === null) throw new Error(INCONSISTENCY_ERR)
+      result.state = job.data.transaction.state
     }
     // Other states mean that transaction is either waiting in queue
     // or being processed by worker
@@ -192,7 +160,7 @@ async function getJob(req: Request, res: Response) {
   }
 }
 
-function relayerInfo(req: Request, res: Response) {
+function relayerInfo(req: Request, res: Response, { pool }: PoolInjection) {
   const deltaIndex = pool.state.getNextIndex()
   const optimisticDeltaIndex = pool.optimisticState.getNextIndex()
   const root = pool.state.getMerkleRoot()
@@ -206,18 +174,16 @@ function relayerInfo(req: Request, res: Response) {
   })
 }
 
-function getFeeBuilder(feeManager: FeeManager) {
-  return async (req: Request, res: Response) => {
-    validateBatch([[checkTraceId, req.headers]])
+async function getFee(req: Request, res: Response, { pool, feeManager }: PoolInjection & FeeManagerInjection) {
+  validateBatch([[checkTraceId, req.headers]])
 
-    const feeOptions = await feeManager.getFeeOptions()
-    const fees = feeOptions.denominate(pool.denominator).getObject()
+  const feeOptions = await feeManager.getFeeOptions()
+  const fees = feeOptions.denominate(pool.denominator).getObject()
 
-    res.json(fees)
-  }
+  res.json(fees)
 }
 
-async function getLimits(req: Request, res: Response) {
+async function getLimits(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
     [checkTraceId, req.headers],
     [checkGetLimits, req.query],
@@ -240,11 +206,11 @@ function getMaxNativeAmount(req: Request, res: Response) {
   validateBatch([[checkTraceId, req.headers]])
 
   res.json({
-    maxNativeAmount: config.maxNativeAmount.toString(10),
+    maxNativeAmount: config.RELAYER_MAX_NATIVE_AMOUNT.toString(10),
   })
 }
 
-function getSiblings(req: Request, res: Response) {
+function getSiblings(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
     [checkTraceId, req.headers],
     [checkGetSiblings, req.query],
@@ -261,25 +227,25 @@ function getSiblings(req: Request, res: Response) {
   res.json(siblings)
 }
 
-function getParamsHashBuilder(path: string | null) {
-  let hash: string | null = null
-  if (path) {
-    hash = getFileHash(path)
-  }
-  return (req: Request, res: Response) => {
-    res.json({ hash })
-  }
+function getParamsHash(req: Request, res: Response, { hash }: HashInjection) {
+  res.json({ hash })
 }
 
 function relayerVersion(req: Request, res: Response) {
   res.json({
-    ref: config.relayerRef,
-    commitHash: config.relayerSHA,
+    ref: config.RELAYER_REF,
+    commitHash: config.RELAYER_SHA,
   })
 }
 
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
+}
+
+export function inject<T>(values: T, f: (req: Request, res: Response, e: T) => void) {
+  return (req: Request, res: Response) => {
+    f(req, res, values)
+  }
 }
 
 export default {
@@ -288,11 +254,12 @@ export default {
   getTransactionsV2,
   getJob,
   relayerInfo,
-  getFeeBuilder,
+  getFee,
   getLimits,
   getMaxNativeAmount,
   getSiblings,
-  getParamsHashBuilder,
+  getParamsHash,
   relayerVersion,
   root,
+  inject,
 }

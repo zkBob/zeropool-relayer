@@ -9,22 +9,26 @@ import { FeeManager, FeeEstimate, IFeeEstimateParams, IFeeManagerConfig, Dynamic
 import relayerConfig from '@/configs/relayerConfig'
 import { ZERO_BYTE_GAS, NZERO_BYTE_GAS } from '@/utils/constants'
 import type { EstimationType, GasPrice } from '../gas-price'
+import { NetworkBackend } from '../network/NetworkBackend'
+import { Network, NetworkContract } from '../network/types'
 
 export class OptimismFeeManager extends FeeManager {
-  private oracle: Contract
+  private oracle: NetworkContract<Network.Ethereum>
   private overhead!: BN
   private decimals!: BN
   private scalar!: BN
+  private gasPrice: GasPrice<EstimationType>
 
-  constructor(config: IFeeManagerConfig, private gasPrice: GasPrice<EstimationType>, web3: Web3) {
+  constructor(config: IFeeManagerConfig, network: NetworkBackend<Network.Ethereum>) {
     super(config)
-    this.oracle = new web3.eth.Contract(OracleAbi as AbiItem[], OP_GAS_ORACLE_ADDRESS)
+    this.gasPrice = network.gasPrice
+    this.oracle = network.contract(OracleAbi, OP_GAS_ORACLE_ADDRESS)
   }
 
   async init() {
-    this.overhead = await contractCallRetry(this.oracle, 'overhead').then(toBN)
-    this.decimals = await contractCallRetry(this.oracle, 'decimals').then(toBN)
-    this.scalar = await contractCallRetry(this.oracle, 'scalar').then(toBN)
+    this.overhead = await this.oracle.callRetry('overhead').then(toBN)
+    this.decimals = await this.oracle.callRetry('decimals').then(toBN)
+    this.scalar = await this.oracle.callRetry('scalar').then(toBN)
   }
 
   private getL1GasUsed(data: string): BN {
@@ -63,10 +67,10 @@ export class OptimismFeeManager extends FeeManager {
   async _fetchFeeOptions(): Promise<DynamicFeeOptions> {
     const gasPrice = await this.gasPrice.fetchOnce()
 
-    const l1BaseFee = await contractCallRetry(this.oracle, 'l1BaseFee').then(toBN)
+    const l1BaseFee = await this.oracle.callRetry('l1BaseFee').then(toBN)
 
     const oneByteFee = l1BaseFee.muln(NZERO_BYTE_GAS)
 
-    return DynamicFeeOptions.fromGasPice(gasPrice, oneByteFee, relayerConfig.minBaseFee)
+    return DynamicFeeOptions.fromGasPice(gasPrice, oneByteFee, relayerConfig.RELAYER_MIN_BASE_FEE)
   }
 }

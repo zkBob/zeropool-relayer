@@ -2,7 +2,7 @@ import { Job, Worker } from 'bullmq'
 import { logger } from '@/services/appLogger'
 import { withErrorLog } from '@/utils/helpers'
 import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'
-import { DirectDeposit, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
+import { DirectDeposit, JobState, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
 import type { IDirectDepositWorkerConfig } from './workerTypes'
 import { getDirectDepositProof } from '@/txProcessor'
 
@@ -29,14 +29,14 @@ export async function createDirectDepositWorker({ redis, directDepositProver }: 
       '',
       {
         type: WorkerTxType.DirectDeposit,
-        transactions: [
-          {
-            deposits: directDeposits,
-            txProof: proof,
-            outCommit,
-            memo,
-          },
-        ],
+        transaction: {
+          deposits: directDeposits,
+          txProof: proof,
+          outCommit,
+          memo,
+          txHash: null,
+          state: JobState.WAITING,
+        },
       },
       {
         priority: WorkerTxTypePriority[WorkerTxType.DirectDeposit],

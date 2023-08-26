@@ -1,14 +1,16 @@
 import Web3 from 'web3'
 import { toBN } from 'web3-utils'
-import baseConfig from './baseConfig'
+import baseConfig, { zBooleanString, zNullishString } from './baseConfig'
 import { FeeManagerType } from '@/services/fee'
 import { PriceFeedType } from '@/services/price-feed'
-import type { EstimationType, GasPriceKey } from '@/services/gas-price'
+import { EstimationType, GasPriceKey } from '@/services/gas-price'
 import { ProverType } from '@/prover'
 import { countryCodes } from '@/utils/countryCodes'
 import { logger } from '@/services/appLogger'
 import { PermitType } from '@/utils/permit/types'
 import { TxType } from 'zp-memo-parser'
+import { z } from 'zod'
+import { Network } from '@/services/network/types'
 
 const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
@@ -17,72 +19,140 @@ const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
 const defaultHeaderBlacklist =
   'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
 
-const config = {
-  ...baseConfig,
-  relayerRef: process.env.RELAYER_REF || null,
-  relayerSHA: process.env.RELAYER_SHA || null,
-  port: parseInt(process.env.RELAYER_PORT || '8000'),
-  relayerAddress,
-  relayerPrivateKey: process.env.RELAYER_ADDRESS_PRIVATE_KEY as string,
-  tokenAddress: process.env.RELAYER_TOKEN_ADDRESS as string,
-  relayerGasLimit: toBN(process.env.RELAYER_GAS_LIMIT as string),
-  minBaseFee: toBN(process.env.RELAYER_MIN_BASE_FEE || '0'),
-  relayerFee: process.env.RELAYER_FEE ? toBN(process.env.RELAYER_FEE) : null,
-  maxNativeAmount: toBN(process.env.RELAYER_MAX_NATIVE_AMOUNT || '0'),
-  treeUpdateParamsPath: process.env.RELAYER_TREE_UPDATE_PARAMS_PATH || './params/tree_params.bin',
-  transferParamsPath: process.env.RELAYER_TRANSFER_PARAMS_PATH || './params/transfer_params.bin',
-  directDepositParamsPath: process.env.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH || './params/delegated_deposit_params.bin',
-  txVKPath: process.env.RELAYER_TX_VK_PATH || './params/transfer_verification_key.json',
-  requestLogPath: process.env.RELAYER_REQUEST_LOG_PATH || './zp.log',
-  stateDirPath: process.env.RELAYER_STATE_DIR_PATH || './POOL_STATE',
-  gasPriceFallback: process.env.RELAYER_GAS_PRICE_FALLBACK as string,
-  gasPriceEstimationType: (process.env.RELAYER_GAS_PRICE_ESTIMATION_TYPE as EstimationType) || 'web3',
-  gasPriceSpeedType: (process.env.RELAYER_GAS_PRICE_SPEED_TYPE as GasPriceKey) || 'fast',
-  gasPriceFactor: parseInt(process.env.RELAYER_GAS_PRICE_FACTOR || '1'),
-  gasPriceUpdateInterval: parseInt(process.env.RELAYER_GAS_PRICE_UPDATE_INTERVAL || '5000'),
-  gasPriceSurplus: parseFloat(process.env.RELAYER_GAS_PRICE_SURPLUS || '0.1'),
-  minGasPriceBumpFactor: parseFloat(process.env.RELAYER_MIN_GAS_PRICE_BUMP_FACTOR || '0.1'),
-  maxFeeLimit: process.env.RELAYER_MAX_FEE_PER_GAS_LIMIT ? toBN(process.env.RELAYER_MAX_FEE_PER_GAS_LIMIT) : null,
-  maxSentQueueSize: parseInt(process.env.RELAYER_MAX_SENT_QUEUE_SIZE || '20'),
-  relayerTxRedundancy: process.env.RELAYER_TX_REDUNDANCY === 'true',
-  sentTxDelay: parseInt(process.env.RELAYER_SENT_TX_DELAY || '30000'),
-  sentTxLogErrorThreshold: parseInt(process.env.RELAYER_SENT_TX_ERROR_THRESHOLD || '3'),
-  insufficientBalanceCheckTimeout: parseInt(process.env.RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT || '60000'),
-  permitDeadlineThresholdInitial: parseInt(process.env.RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL || '300'),
-  requireTraceId: process.env.RELAYER_REQUIRE_TRACE_ID === 'true',
-  requireLibJsVersion: process.env.RELAYER_REQUIRE_LIBJS_VERSION === 'true',
-  logIgnoreRoutes: (process.env.RELAYER_LOG_IGNORE_ROUTES || '').split(' ').filter(r => r.length > 0),
-  logHeaderBlacklist: (process.env.RELAYER_LOG_HEADER_BLACKLIST || defaultHeaderBlacklist)
-    .split(' ')
-    .filter(r => r.length > 0),
-  blockedCountries: (process.env.RELAYER_BLOCKED_COUNTRIES || '').split(' ').filter(c => {
-    if (c.length === 0) return false
+const zBN = () => z.string().transform(toBN)
 
-    const exists = countryCodes.has(c)
-    if (!exists) {
-      logger.error(`Country code ${c} is not valid, skipping`)
-    }
-    return exists
+const zTreeProver = z.discriminatedUnion('RELAYER_TREE_PROVER_TYPE', [
+  z.object({ RELAYER_TREE_PROVER_TYPE: z.literal(ProverType.Local) }),
+  z.object({ RELAYER_TREE_PROVER_TYPE: z.literal(ProverType.Remote) }), // TODO remote prover url
+])
+
+const zDirectDepositProver = z.discriminatedUnion('RELAYER_DD_PROVER_TYPE', [
+  z.object({ RELAYER_DD_PROVER_TYPE: z.literal(ProverType.Local) }),
+  z.object({ RELAYER_DD_PROVER_TYPE: z.literal(ProverType.Remote) }), // TODO remote prover url
+])
+
+const zPriceFeed = z.discriminatedUnion('RELAYER_PRICE_FEED_TYPE', [
+  z.object({ RELAYER_PRICE_FEED_TYPE: z.literal(PriceFeedType.Native) }),
+  z.object({
+    RELAYER_PRICE_FEED_TYPE: z.literal(PriceFeedType.OneInch),
+    RELAYER_PRICE_FEED_CONTRACT_ADDRESS: z.string(),
+    RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS: z.string(),
   }),
-  trustProxy: process.env.RELAYER_EXPRESS_TRUST_PROXY === 'true',
-  treeProverType: (process.env.RELAYER_TREE_PROVER_TYPE || ProverType.Local) as ProverType,
-  directDepositProverType: (process.env.RELAYER_DD_PROVER_TYPE || ProverType.Local) as ProverType,
-  feeManagerType: (process.env.RELAYER_FEE_MANAGER_TYPE || FeeManagerType.Dynamic) as FeeManagerType,
-  feeManagerUpdateInterval: parseInt(process.env.RELAYER_FEE_MANAGER_UPDATE_INTERVAL || '10000'),
-  feeMarginFactor: toBN(process.env.RELAYER_FEE_MARGIN_FACTOR || '100'),
-  feeScalingFactor: toBN(process.env.RELAYER_FEE_SCALING_FACTOR || '100'),
-  priceFeedType: (process.env.RELAYER_PRICE_FEED_TYPE || PriceFeedType.Native) as PriceFeedType,
-  priceFeedContractAddress: process.env.RELAYER_PRICE_FEED_CONTRACT_ADDRESS || null,
-  priceFeedBaseTokenAddress: process.env.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS || null,
-  precomputeParams: process.env.RELAYER_PRECOMPUTE_PARAMS === 'true',
-  permitType: (process.env.RELAYER_PERMIT_TYPE || PermitType.SaltedPermit) as PermitType,
-  baseTxGas: {
-    [TxType.DEPOSIT]: toBN(process.env.RELAYER_BASE_TX_GAS_DEPOSIT || '650000'),
-    [TxType.PERMITTABLE_DEPOSIT]: toBN(process.env.RELAYER_BASE_TX_GAS_PERMITTABLE_DEPOSIT || '650000'),
-    [TxType.TRANSFER]: toBN(process.env.RELAYER_BASE_TX_GAS_TRANSFER || '650000'),
-    [TxType.WITHDRAWAL]: toBN(process.env.RELAYER_BASE_TX_GAS_WITHDRAWAL || '650000'),
-    nativeConvertOverhead: toBN(process.env.RELAYER_BASE_TX_GAS_NATIVE_CONVERT || '200000'),
-  },
-}
+])
 
-export default config
+const zBaseTxGas = z
+  .object({
+    RELAYER_BASE_TX_GAS_DEPOSIT: zBN().default('650000'),
+    RELAYER_BASE_TX_GAS_PERMITTABLE_DEPOSIT: zBN().default('650000'),
+    RELAYER_BASE_TX_GAS_TRANSFER: zBN().default('650000'),
+    RELAYER_BASE_TX_GAS_WITHDRAWAL: zBN().default('650000'),
+    RELAYER_BASE_TX_GAS_NATIVE_CONVERT: zBN().default('200000'),
+  })
+  .transform(o => ({
+    baseTxGas: {
+      [TxType.DEPOSIT]: o.RELAYER_BASE_TX_GAS_DEPOSIT,
+      [TxType.PERMITTABLE_DEPOSIT]: o.RELAYER_BASE_TX_GAS_PERMITTABLE_DEPOSIT,
+      [TxType.TRANSFER]: o.RELAYER_BASE_TX_GAS_TRANSFER,
+      [TxType.WITHDRAWAL]: o.RELAYER_BASE_TX_GAS_WITHDRAWAL,
+      RELAYER_BASE_TX_GAS_NATIVE_CONVERT: o.RELAYER_BASE_TX_GAS_NATIVE_CONVERT,
+    },
+  }))
+
+const zFeeManager = z
+  .object({
+    RELAYER_FEE_MARGIN_FACTOR: zBN().default('100'),
+    RELAYER_FEE_SCALING_FACTOR: zBN().default('100'),
+    RELAYER_FEE_MANAGER_UPDATE_INTERVAL: z.coerce.number().default(10000),
+  })
+  .and(
+    z.discriminatedUnion('RELAYER_FEE_MANAGER_TYPE', [
+      z.object({ RELAYER_FEE_MANAGER_TYPE: z.literal(FeeManagerType.Optimism) }),
+      z.object({ RELAYER_FEE_MANAGER_TYPE: z.literal(FeeManagerType.Dynamic) }),
+      z.object({ RELAYER_FEE_MANAGER_TYPE: z.literal(FeeManagerType.Static), RELAYER_FEE: zBN() }),
+    ])
+  )
+
+const zGasPrice = z.object({
+  RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.nativeEnum(EstimationType).default(EstimationType.Web3),
+  RELAYER_GAS_PRICE_UPDATE_INTERVAL: z.coerce.number().default(5000),
+  RELAYER_GAS_PRICE_SURPLUS: z.coerce.number().default(0.1),
+  RELAYER_MIN_GAS_PRICE_BUMP_FACTOR: z.coerce.number().default(0.1),
+  RELAYER_GAS_PRICE_FACTOR: z.coerce.number().default(1),
+  RELAYER_GAS_PRICE_SPEED_TYPE: z.string().default('fast'),
+  RELAYER_GAS_PRICE_FALLBACK: z.string(),
+  RELAYER_MAX_FEE_PER_GAS_LIMIT: zBN().nullable().default(null),
+})
+z.discriminatedUnion('RELAYER_GAS_PRICE_ESTIMATION_TYPE', [
+  z.object({ RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.literal(EstimationType.EIP1559) }),
+  z.object({ RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.literal(EstimationType.Web3) }),
+  z.object({
+    RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.literal(EstimationType.Oracle),
+    RELAYER_GAS_PRICE_FALLBACK: z.string(),
+  }),
+])
+
+const zSchema = z
+  .object({
+    RELAYER_NETWORK: z.nativeEnum(Network),
+    RELAYER_REF: zNullishString(),
+    RELAYER_SHA: zNullishString(),
+    RELAYER_PORT: z.coerce.number().default(8000),
+    RELAYER_ADDRESS_PRIVATE_KEY: z.string(),
+    RELAYER_TOKEN_ADDRESS: z.string(),
+    RELAYER_GAS_LIMIT: zBN(),
+    RELAYER_MIN_BASE_FEE: zBN().default('0'),
+    RELAYER_MAX_NATIVE_AMOUNT: zBN().default('0'),
+    RELAYER_TREE_UPDATE_PARAMS_PATH: z.string().default('./params/tree_params.bin'),
+    RELAYER_TRANSFER_PARAMS_PATH: z.string().default('./params/transfer_params.bin'),
+    RELAYER_DIRECT_DEPOSIT_PARAMS_PATH: z.string().default('./params/delegated_deposit_params.bin'),
+    RELAYER_TX_VK_PATH: z.string().default('./params/transfer_verification_key.json'),
+    RELAYER_REQUEST_LOG_PATH: z.string().default('./zp.log'),
+    RELAYER_STATE_DIR_PATH: z.string().default('./POOL_STATE'),
+    RELAYER_GAS_PRICE_FALLBACK: z.string(),
+    RELAYER_TX_REDUNDANCY: zBooleanString().default('false'),
+    RELAYER_SENT_TX_DELAY: z.coerce.number().default(30000),
+    RELAYER_SENT_TX_ERROR_THRESHOLD: z.coerce.number().default(3),
+    RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT: z.coerce.number().default(60000),
+    RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL: z.coerce.number().default(300),
+    RELAYER_REQUIRE_TRACE_ID: zBooleanString().default('false'),
+    RELAYER_REQUIRE_LIBJS_VERSION: zBooleanString().default('false'),
+    RELAYER_EXPRESS_TRUST_PROXY: zBooleanString().default('false'),
+    RELAYER_PRECOMPUTE_PARAMS: zBooleanString().default('false'),
+    RELAYER_LOG_IGNORE_ROUTES: z
+      .string()
+      .default('')
+      .transform(rs => rs.split(' ').filter(r => r.length > 0)),
+    RELAYER_LOG_HEADER_BLACKLIST: z
+      .string()
+      .default(defaultHeaderBlacklist)
+      .transform(hs => hs.split(' ').filter(r => r.length > 0)),
+    RELAYER_PERMIT_TYPE: z.nativeEnum(PermitType).default(PermitType.SaltedPermit),
+    RELAYER_BLOCKED_COUNTRIES: z
+      .string()
+      .default('')
+      .transform(cs =>
+        cs.split(' ').filter(c => {
+          if (c.length === 0) return false
+
+          const exists = countryCodes.has(c)
+          if (!exists) {
+            logger.error(`Country code ${c} is not valid, skipping`)
+          }
+          return exists
+        })
+      ),
+  })
+  .and(zTreeProver)
+  .and(zDirectDepositProver)
+  .and(zPriceFeed)
+  .and(zBaseTxGas)
+  .and(zFeeManager)
+  .and(zGasPrice)
+
+const config = zSchema.parse(process.env)
+
+export default {
+  ...config,
+  ...baseConfig,
+  RELAYER_ADDRESS: relayerAddress,
+}

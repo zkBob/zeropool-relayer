@@ -8,5 +8,5 @@
       "@/*": ["./*"]
     }
   },
-  "exclude": ["./test", "./build"]
+  "exclude": ["./test", "./build", "./direct-deposit"]
 }

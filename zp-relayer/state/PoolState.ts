@@ -4,12 +4,14 @@ import { OUTPLUSONE } from '@/utils/constants'
 import { MerkleTree, TxStorage, MerkleProof, Constants, Helpers } from 'libzkbob-rs-node'
 import { NullifierSet } from './nullifierSet'
 import { JobIdsMapping } from './jobIdsMapping'
+import { Mutex } from 'async-mutex'
 
 export class PoolState {
   private tree: MerkleTree
   private txs: TxStorage
   public nullifiers: NullifierSet
   public jobIdsMapping: JobIdsMapping
+  private mutex: Mutex = new Mutex()
 
   constructor(private name: string, redis: Redis, path: string) {
     this.tree = new MerkleTree(`${path}/${name}Tree.db`)
@@ -18,6 +20,16 @@ export class PoolState {
     // This structure can be shared among different pool states
     // So, use constant name
     this.jobIdsMapping = new JobIdsMapping('job-id-mapping', redis)
+  }
+
+  async withLock<R>(f: () => Promise<R>): Promise<R> {
+    const release = await this.mutex.acquire()
+    try {
+      const res = await f()
+      return res
+    } finally {
+      release()
+    }
   }
 
   getVirtualTreeProofInputs(outCommit: string, transferNum?: number) {

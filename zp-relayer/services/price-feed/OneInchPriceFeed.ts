@@ -6,16 +6,18 @@ import { toBN, toWei, AbiItem } from 'web3-utils'
 import { ZERO_ADDRESS } from '@/utils/constants'
 import Erc20Abi from '@/abi/erc20.json'
 import OracleAbi from '@/abi/one-inch-oracle.json'
+import { NetworkBackend } from '../network/NetworkBackend'
+import { Network, NetworkContract } from '../network/types'
 
 // 1Inch price feed oracle: https://github.com/1inch/spot-price-aggregator
 export class OneInchPriceFeed implements IPriceFeed {
-  private contract: Contract
+  private contract: NetworkContract<Network>
   private baseTokenAddress: string
   private baseTokenDecimals!: BN
   private poolTokenAddress: string
 
   constructor(
-    private web3: Web3,
+    private network: NetworkBackend<Network>,
     contractAddress: string,
     config: {
       poolTokenAddress: string
@@ -24,7 +26,7 @@ export class OneInchPriceFeed implements IPriceFeed {
   ) {
     this.poolTokenAddress = config.poolTokenAddress
     this.baseTokenAddress = config.customBaseTokenAddress || ZERO_ADDRESS
-    this.contract = new web3.eth.Contract(OracleAbi as AbiItem[], contractAddress)
+    this.contract = network.contract(OracleAbi, contractAddress)
   }
 
   async init() {
@@ -36,13 +38,13 @@ export class OneInchPriceFeed implements IPriceFeed {
   }
 
   private async getContractDecimals(contractAddress: string): Promise<BN> {
-    const contract = new this.web3.eth.Contract(Erc20Abi as AbiItem[], contractAddress)
-    const decimals = await contract.methods.decimals().call()
+    const contract = this.network.contract(Erc20Abi, contractAddress)
+    const decimals = await contract.call('decimals')
     return toBN(10).pow(toBN(decimals))
   }
 
   getRate(): Promise<BN> {
-    return this.contract.methods.getRate(this.baseTokenAddress, this.poolTokenAddress, true).call().then(toBN)
+    return this.contract.call('getRate', [this.baseTokenAddress, this.poolTokenAddress, true]).then(toBN)
   }
 
   convert(rate: BN, baseTokenAmount: BN): BN {

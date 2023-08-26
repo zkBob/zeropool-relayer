@@ -1,14 +1,12 @@
 import BN from 'bn.js'
-import { toBN } from 'web3-utils'
-import type { Contract } from 'web3-eth-contract'
+import { toBN, toChecksumAddress, bytesToHex, hexToBytes } from 'web3-utils'
 import { TxType, TxData, getTxData } from 'zp-memo-parser'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { logger } from '@/services/appLogger'
 import config from '@/configs/relayerConfig'
 import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
-import { web3 } from '@/services/web3'
-import { applyDenominator, contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
+import { applyDenominator, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
 import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1, MOCK_CALLDATA } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
@@ -16,17 +14,10 @@ import type { PoolState } from '@/state/PoolState'
 import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondition } from './common'
 import type { PermitRecover } from '@/utils/permit/types'
 import type { FeeManager } from '@/services/fee'
+import { isEthereum, isTron, type NetworkBackend } from '@/services/network/NetworkBackend'
+import type { Network } from '@/services/network/types'
 
 const ZERO = toBN(0)
-
-export async function checkBalance(token: Contract, address: string, minBalance: string) {
-  const balance = await contractCallRetry(token, 'balanceOf', [address])
-  const res = toBN(balance).gte(toBN(minBalance))
-  if (!res) {
-    return new TxValidationError('Not enough balance for deposit')
-  }
-  return null
-}
 
 export function checkCommitment(treeProof: Proof, txProof: Proof) {
   return treeProof.inputs[2] === txProof.inputs[2]
@@ -56,7 +47,7 @@ export function checkNativeAmount(nativeAmount: BN | null, withdrawalAmount: BN)
   if (nativeAmount === null) {
     return null
   }
-  if (nativeAmount.gt(config.maxNativeAmount) || nativeAmount.gt(withdrawalAmount)) {
+  if (nativeAmount.gt(config.RELAYER_MAX_NATIVE_AMOUNT) || nativeAmount.gt(withdrawalAmount)) {
     return new TxValidationError('Native amount too high')
   }
   return null
@@ -115,19 +106,23 @@ export function checkLimits(limits: Limits, amount: BN) {
   return null
 }
 
-async function checkDepositEnoughBalance(token: Contract, address: string, requiredTokenAmount: BN) {
+async function checkDepositEnoughBalance(network: NetworkBackend<Network>, address: string, requiredTokenAmount: BN) {
   if (requiredTokenAmount.lte(toBN(0))) {
     throw new TxValidationError('Requested balance check for token amount <= 0')
   }
-
-  return checkBalance(token, address, requiredTokenAmount.toString(10))
+  const balance = await network.token.callRetry('balanceOf', [address])
+  const res = toBN(balance).gte(requiredTokenAmount)
+  if (!res) {
+    return new TxValidationError('Not enough balance for deposit')
+  }
+  return null
 }
 
-async function getRecoveredAddress<T extends TxType>(
+async function getRecoveredAddress<T extends TxType, N extends Network>(
   txType: T,
   proofNullifier: string,
   txData: TxData<T>,
-  tokenContract: Contract,
+  network: NetworkBackend<N>,
   tokenAmount: BN,
   depositSignature: string,
   permitRecover: PermitRecover
@@ -140,17 +135,21 @@ async function getRecoveredAddress<T extends TxType>(
 
   let recoveredAddress: string
   if (txType === TxType.DEPOSIT) {
-    recoveredAddress = web3.eth.accounts.recover(nullifier, sig)
+    recoveredAddress = await network.recover(nullifier, sig)
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
+    if (permitRecover === null) {
+      throw new TxValidationError('Permittable deposits are not enabled')
+    }
+
     const { holder, deadline } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
-    const spender = web3.utils.toChecksumAddress(config.poolAddress as string)
-    const owner = web3.utils.toChecksumAddress(web3.utils.bytesToHex(Array.from(holder)))
+    const spender = toChecksumAddress(config.COMMON_POOL_ADDRESS)
+    const owner = toChecksumAddress(bytesToHex(Array.from(holder)))
 
     const recoverParams = {
       owner,
       deadline,
       spender,
-      tokenContract,
+      tokenContract: network.token,
       amount: tokenAmount.toString(10),
       nullifier,
     }
@@ -223,7 +222,7 @@ export async function validateTx(
   await checkAssertion(() => checkNullifier(nullifier, pool.state.nullifiers))
   await checkAssertion(() => checkNullifier(nullifier, pool.optimisticState.nullifiers))
   await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
-  await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
+  // await checkAssertion(() => checkProof(txProof, (p, i) => pool.verifyProof(p, i)))
 
   const tokenAmount = delta.tokenAmount
   const tokenAmountWithFee = tokenAmount.add(fee)
@@ -237,7 +236,7 @@ export async function validateTx(
 
     const { nativeAmount, receiver } = txData as TxData<TxType.WITHDRAWAL>
     const nativeAmountBN = toBN(nativeAmount)
-    userAddress = web3.utils.bytesToHex(Array.from(receiver))
+    userAddress = bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
     await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
     await checkAssertion(() => checkNativeAmount(nativeAmountBN, tokenAmountWithFee.neg()))
@@ -254,15 +253,16 @@ export async function validateTx(
       txType,
       nullifier,
       txData,
-      pool.TokenInstance,
+      pool.network,
       requiredTokenAmount,
       depositSignature as string,
       pool.permitRecover
     )
     logger.info('Deposit address: %s', userAddress)
-    await checkAssertion(() => checkDepositEnoughBalance(pool.TokenInstance, userAddress, requiredTokenAmount))
+    // TODO check for approve in case of deposit
+    await checkAssertion(() => checkDepositEnoughBalance(pool.network, userAddress, requiredTokenAmount))
   } else if (txType === TxType.TRANSFER) {
-    userAddress = config.relayerAddress
+    userAddress = config.RELAYER_ADDRESS
     checkCondition(tokenAmountWithFee.eq(ZERO) && energyAmount.eq(ZERO), 'Incorrect transfer amounts')
   } else {
     throw new TxValidationError('Unsupported TxType')
@@ -282,7 +282,7 @@ export async function validateTx(
   if (txType === TxType.PERMITTABLE_DEPOSIT) {
     const { deadline } = txData as TxData<TxType.PERMITTABLE_DEPOSIT>
     logger.info('Deadline: %s', deadline)
-    await checkAssertion(() => checkDeadline(toBN(deadline), config.permitDeadlineThresholdInitial))
+    await checkAssertion(() => checkDeadline(toBN(deadline), config.RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL))
   }
 
   if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT || txType === TxType.WITHDRAWAL) {

@@ -200,6 +200,7 @@ export class GasPrice<ET extends EstimationType> {
       [EstimationType.Oracle]: this.fetchGasPriceOracle,
       [EstimationType.PolygonGSV2]: this.fetchPolygonGasStationV2,
       [EstimationType.OptimismOracle]: this.fetchOptimismOracle,
+      [EstimationType.Tron]: this.fetchTron,
     }
     return funcs[estimationType]
   }
@@ -254,6 +255,10 @@ export class GasPrice<ET extends EstimationType> {
     const oracle = new this.web3.eth.Contract(OracleAbi as AbiItem[], constants.OP_GAS_ORACLE_ADDRESS)
     const gasPrice = await contractCallRetry(oracle, 'gasPrice')
     return { gasPrice }
+  }
+
+  private fetchTron: FetchFunc<EstimationType.Tron> = async () => {
+    return { gasPrice: '0' }
   }
 
   static normalizeGasPrice(rawGasPrice: number, factor = 1) {

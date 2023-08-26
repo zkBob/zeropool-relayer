@@ -101,7 +101,7 @@ export function encodeProof(p: SnarkProof): string {
 }
 
 export function buildPrefixedMemo(outCommit: string, txHash: string, truncatedMemo: string) {
-  return numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+  return numToHex(toBN(outCommit)).concat(truncateHexPrefix(txHash)).concat(truncatedMemo)
 }
 
 export async function setIntervalAndRun(f: () => Promise<void> | void, interval: number) {
@@ -142,7 +142,7 @@ export async function withErrorLog<R>(
   }
 }
 
-function sleep(ms: number) {
+export function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
@@ -242,7 +242,11 @@ export function contractCallRetry(contract: Contract, method: string, args: any[
   )
 }
 
-export function getFileHash(path: string) {
+export function getFileHash(path: string | null) {
+  if (!path) {
+    return null
+  }
+
   const buffer = fs.readFileSync(path)
   const hash = crypto.createHash('sha256')
   hash.update(buffer)
@@ -250,7 +254,5 @@ export function getFileHash(path: string) {
 }
 
 export function applyDenominator(n: BN, d: BN) {
-  return d.testn(255)
-    ? n.div(d.maskn(255))
-    : n.mul(d)
+  return d.testn(255) ? n.div(d.maskn(255)) : n.mul(d)
 }

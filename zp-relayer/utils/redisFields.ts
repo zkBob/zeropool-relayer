@@ -1,14 +1,15 @@
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
-import { web3 } from '@/services/web3'
 import config from '@/configs/relayerConfig'
 import { getNonce } from './web3'
+import type Web3 from 'web3'
 
 export enum RelayerKeys {
   NONCE = `relayer:nonce`,
 }
 
-export const readNonce = readFieldBuilder(RelayerKeys.NONCE, () => getNonce(web3, config.relayerAddress))
+export const readNonce = (web3: Web3) =>
+  readFieldBuilder(RelayerKeys.NONCE, () => getNonce(web3, config.RELAYER_ADDRESS))
 
 function readFieldBuilder(key: RelayerKeys, forceUpdateFunc?: Function) {
   return async (forceUpdate?: boolean) => {

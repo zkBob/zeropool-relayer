@@ -4,9 +4,22 @@ import type { Proof } from 'libzkbob-rs-node'
 import type { TxType } from 'zp-memo-parser'
 import { redis } from '@/services/redisClient'
 
-export interface TxPayload {
-  amount: string
+export enum JobState {
+  WAITING = 'waiting',
+  SENT = 'sent',
+  COMPLETED = 'completed',
+  REVERTED = 'reverted',
+  FAILED = 'failed',
+}
+
+export interface BaseTxPayload {
   txProof: Proof
+  txHash: string | null
+  state: JobState
+}
+
+export interface TxPayload extends BaseTxPayload {
+  amount: string
   txType: TxType
   rawMemo: string
   depositSignature: string | null
@@ -25,9 +38,8 @@ export interface DirectDeposit {
   deposit: string
 }
 
-export interface DirectDepositTxPayload {
+export interface DirectDepositTxPayload extends BaseTxPayload {
   deposits: DirectDeposit[]
-  txProof: Proof
   outCommit: string
   memo: string
 }
@@ -48,14 +60,12 @@ export type WorkerTx<T extends WorkerTxType> = T extends WorkerTxType.Normal
   ? DirectDepositTxPayload
   : never
 
-export interface BatchTx<T extends WorkerTxType, M extends boolean = true> {
+export interface PoolTx<T extends WorkerTxType> {
   type: T
-  transactions: M extends true ? WorkerTx<T>[] : WorkerTx<T>
+  transaction: WorkerTx<T>
   traceId?: string
 }
 
-export type PoolTxResult = [string, string]
-
-export const poolTxQueue = new Queue<BatchTx<WorkerTxType>, PoolTxResult[]>(TX_QUEUE_NAME, {
+export const poolTxQueue = new Queue<PoolTx<WorkerTxType>>(TX_QUEUE_NAME, {
   connection: redis,
 })

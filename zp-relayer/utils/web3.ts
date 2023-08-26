@@ -1,6 +1,8 @@
 import type Web3 from 'web3'
 import type { Contract, PastEventOptions } from 'web3-eth-contract'
 import { logger } from '@/services/appLogger'
+import { NetworkBackend } from '@/services/network/NetworkBackend'
+import { Network } from '@/services/network/types'
 
 export async function getNonce(web3: Web3, address: string) {
   try {
@@ -60,10 +62,10 @@ export async function getChainId(web3: Web3) {
   }
 }
 
-export async function getBlockNumber(web3: Web3) {
+export async function getBlockNumber(network: NetworkBackend<Network>) {
   try {
     logger.debug('Getting block number')
-    const blockNumber = await web3.eth.getBlockNumber()
+    const blockNumber = await network.getBlockNumber()
     logger.debug('Block number obtained', { blockNumber })
     return blockNumber
   } catch (e) {

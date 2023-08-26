@@ -35,6 +35,7 @@ function buildTxData(txData: TxData) {
   const tokenAmount = numToHex(txData.delta.tokenAmount, TOKEN_SIZE)
   logger.debug(`DELTA ${transferIndex} ${energyAmount} ${tokenAmount}`)
 
+  txData.txProof.a = ['0', '0']
   const txFlatProof = encodeProof(txData.txProof)
   const treeFlatProof = encodeProof(txData.treeProof)
 
@@ -95,6 +96,7 @@ export async function getDirectDepositProof(deposits: DirectDeposit[], prover: I
 
 export interface ProcessResult {
   data: string
+  func: string
   commitIndex: number
   outCommit: string
   rootAfter: string
@@ -107,6 +109,7 @@ export async function buildTx(
   treeProver: IProver<Circuit.Tree>,
   state: PoolState
 ): Promise<ProcessResult> {
+  const func = 'transact()'
   const { txType, txProof, rawMemo, depositSignature } = tx
 
   const nullifier = getTxProofField(txProof, 'nullifier')
@@ -130,7 +133,7 @@ export async function buildTx(
 
   const memo = truncateMemoTxPrefix(rawMemo, txType)
 
-  return { data, commitIndex, outCommit, rootAfter, nullifier, memo }
+  return { data, func, commitIndex, outCommit, rootAfter, nullifier, memo }
 }
 
 export async function buildDirectDeposits(
@@ -138,6 +141,7 @@ export async function buildDirectDeposits(
   treeProver: IProver<Circuit.Tree>,
   state: PoolState
 ): Promise<ProcessResult> {
+  const func = 'appendDirectDeposits(uint256,uint256[],uint256,uint256[8],uint256[8])'
   const outCommit = tx.outCommit
 
   const { treeProof, commitIndex } = await getTreeProof(state, outCommit, treeProver)
@@ -149,5 +153,5 @@ export async function buildDirectDeposits(
     .appendDirectDeposits(rootAfter, indices, outCommit, flattenProof(tx.txProof.proof), flattenProof(treeProof.proof))
     .encodeABI()
 
-  return { data, commitIndex, outCommit, rootAfter, memo: tx.memo }
+  return { data, func, commitIndex, outCommit, rootAfter, memo: tx.memo }
 }

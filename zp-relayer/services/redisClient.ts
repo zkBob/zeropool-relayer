@@ -1,6 +1,6 @@
 import Redis from 'ioredis'
 import config from '@/configs/baseConfig'
 
-export const redis = new Redis(config.redisUrl, {
+export const redis = new Redis(config.COMMON_REDIS_URL, {
   maxRetriesPerRequest: null,
 })

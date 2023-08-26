@@ -14,8 +14,8 @@ export function createConsoleLoggerMiddleware() {
   return expressWinston.logger({
     winstonInstance: logger,
     level: 'debug',
-    ignoredRoutes: config.logIgnoreRoutes,
-    headerBlacklist: config.logHeaderBlacklist,
+    ignoredRoutes: config.RELAYER_LOG_IGNORE_ROUTES,
+    headerBlacklist: config.RELAYER_LOG_HEADER_BLACKLIST,
     requestWhitelist: ['headers', 'httpVersion'],
   })
 }

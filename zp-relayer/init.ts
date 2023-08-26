@@ -1,128 +1,133 @@
-import type Web3 from 'web3'
 import { Mutex } from 'async-mutex'
 import { Params } from 'libzkbob-rs-node'
-import { pool } from './pool'
-import { EstimationType, GasPrice } from './services/gas-price'
-import { web3 } from './services/web3'
-import { web3Redundant } from './services/web3Redundant'
+import { Pool } from './pool'
 import config from './configs/relayerConfig'
 import { createPoolTxWorker } from './workers/poolTxWorker'
-import { createSentTxWorker } from './workers/sentTxWorker'
 import { createDirectDepositWorker } from './workers/directDepositWorker'
 import { redis } from './services/redisClient'
 import { validateTx } from './validation/tx/validateTx'
-import { TxManager } from './tx/TxManager'
 import { Circuit, IProver, LocalProver, ProverType, RemoteProver } from './prover'
 import { FeeManagerType, FeeManager, StaticFeeManager, DynamicFeeManager, OptimismFeeManager } from './services/fee'
 import type { IPriceFeed } from './services/price-feed/IPriceFeed'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
 import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from './services/price-feed'
+import { Network, TronBackend, EvmBackend, NetworkBackend, isEthereum } from './services/network'
 
 function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
-  if (type === ProverType.Local) {
-    const params = Params.fromFile(path, config.precomputeParams)
-    return new LocalProver(circuit, params)
-  } else if (type === ProverType.Remote) {
-    // TODO: test relayer with remote prover
-    return new RemoteProver('')
-  } else {
-    throw new Error('Unsupported prover type')
+  switch (type) {
+    case ProverType.Local: {
+      const params = Params.fromFile(path, config.RELAYER_PRECOMPUTE_PARAMS)
+      return new LocalProver(circuit, params)
+    }
+    case ProverType.Remote:
+      // TODO: test relayer with remote prover
+      return new RemoteProver(path)
+    default:
+      throw new Error('Unsupported prover type')
   }
 }
 
-function buildFeeManager(
-  type: FeeManagerType,
-  priceFeed: IPriceFeed,
-  gasPrice: GasPrice<EstimationType>,
-  web3: Web3
-): FeeManager {
-  const managerConfig = {
-    priceFeed,
-    scaleFactor: config.feeScalingFactor,
-    marginFactor: config.feeMarginFactor,
-    updateInterval: config.feeManagerUpdateInterval,
-  }
-  if (type === FeeManagerType.Static) {
-    if (config.relayerFee === null) throw new Error('Static relayer fee is not set')
-    return new StaticFeeManager(managerConfig, config.relayerFee)
-  }
-  if (type === FeeManagerType.Dynamic) {
-    return new DynamicFeeManager(managerConfig, gasPrice)
-  } else if (type === FeeManagerType.Optimism) {
-    return new OptimismFeeManager(managerConfig, gasPrice, web3)
-  } else {
-    throw new Error('Unsupported fee manager')
-  }
-}
-
-function buildPriceFeed(type: PriceFeedType, web3: Web3): IPriceFeed {
-  if (type === PriceFeedType.OneInch) {
-    if (!config.priceFeedContractAddress) throw new Error('Price feed contract address is not set')
-    return new OneInchPriceFeed(web3, config.priceFeedContractAddress, {
-      poolTokenAddress: config.tokenAddress,
-      customBaseTokenAddress: config.priceFeedBaseTokenAddress,
-    })
-  } else if (type === PriceFeedType.Native) {
-    return new NativePriceFeed()
-  } else {
-    throw new Error('Unsupported price feed')
+function buildPriceFeed(network: NetworkBackend<Network>): IPriceFeed {
+  switch (config.RELAYER_PRICE_FEED_TYPE) {
+    case PriceFeedType.OneInch:
+      return new OneInchPriceFeed(network, config.RELAYER_PRICE_FEED_CONTRACT_ADDRESS, {
+        poolTokenAddress: config.RELAYER_TOKEN_ADDRESS,
+        customBaseTokenAddress: config.RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS,
+      })
+    case PriceFeedType.Native:
+      return new NativePriceFeed()
+    default:
+      throw new Error('Unsupported price feed')
   }
 }
 
 export async function init() {
+  let networkBackend: NetworkBackend<Network>
+  const baseConfig = {
+    poolAddress: config.COMMON_POOL_ADDRESS,
+    tokenAddress: config.RELAYER_TOKEN_ADDRESS,
+    pk: config.RELAYER_ADDRESS_PRIVATE_KEY,
+    rpcUrls: config.COMMON_RPC_URL,
+    requireHTTPS: config.COMMON_REQUIRE_RPC_HTTPS,
+  }
+  if (config.RELAYER_NETWORK === Network.Ethereum) {
+    networkBackend = new EvmBackend({
+      ...baseConfig,
+      rpcRequestTimeout: config.COMMON_RPC_REQUEST_TIMEOUT,
+      rpcSyncCheckInterval: config.COMMON_RPC_SYNC_STATE_CHECK_INTERVAL,
+      jsonRpcErrorCodes: config.COMMON_JSONRPC_ERROR_CODES,
+      relayerTxRedundancy: config.RELAYER_TX_REDUNDANCY,
+    })
+  } else if (config.RELAYER_NETWORK === Network.Tron) {
+    networkBackend = new TronBackend({
+      ...baseConfig,
+    })
+  } else {
+    throw new Error('Unsupported network backend')
+  }
+  await networkBackend.init()
+
+  const pool = new Pool(networkBackend)
   await pool.init()
-
-  const gasPriceService = new GasPrice(
-    web3,
-    { gasPrice: config.gasPriceFallback },
-    config.gasPriceUpdateInterval,
-    config.gasPriceEstimationType,
-    {
-      speedType: config.gasPriceSpeedType,
-      factor: config.gasPriceFactor,
-      maxFeeLimit: config.maxFeeLimit,
-    }
-  )
-  await gasPriceService.start()
-
-  const txManager = new TxManager(web3Redundant, config.relayerPrivateKey, gasPriceService)
-  await txManager.init()
 
   const mutex = new Mutex()
 
-  const baseConfig: IWorkerBaseConfig = {
+  const workerBaseConfig: IWorkerBaseConfig = {
+    pool,
     redis,
   }
 
-  const treeProver = buildProver(Circuit.Tree, config.treeProverType, config.treeUpdateParamsPath as string)
+  const treeProver = buildProver(
+    Circuit.Tree,
+    config.RELAYER_TREE_PROVER_TYPE,
+    config.RELAYER_TREE_UPDATE_PARAMS_PATH as string
+  )
 
   const directDepositProver = buildProver(
     Circuit.DirectDeposit,
-    config.directDepositProverType,
-    config.directDepositParamsPath as string
+    config.RELAYER_DD_PROVER_TYPE,
+    config.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH as string
   )
 
-  const priceFeed = buildPriceFeed(config.priceFeedType, web3)
+  const priceFeed = buildPriceFeed(networkBackend)
   await priceFeed.init()
-  const feeManager = buildFeeManager(config.feeManagerType, priceFeed, gasPriceService, web3)
+
+  let feeManager: FeeManager
+  const managerConfig = {
+    priceFeed,
+    scaleFactor: config.RELAYER_FEE_SCALING_FACTOR,
+    marginFactor: config.RELAYER_FEE_MARGIN_FACTOR,
+    updateInterval: config.RELAYER_FEE_MANAGER_UPDATE_INTERVAL,
+  }
+  switch (config.RELAYER_FEE_MANAGER_TYPE) {
+    case FeeManagerType.Static:
+      feeManager = new StaticFeeManager(managerConfig, config.RELAYER_FEE)
+      break
+    case FeeManagerType.Dynamic: {
+      if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is only supported for Ethereum')
+      feeManager = new DynamicFeeManager(managerConfig, networkBackend.gasPrice)
+      break
+    }
+    case FeeManagerType.Optimism: {
+      if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is only supported for Ethereum')
+      feeManager = new OptimismFeeManager(managerConfig, networkBackend)
+      break
+    }
+    default:
+      throw new Error('Unsupported fee manager')
+  }
   await feeManager.start()
 
   const workerPromises = [
     createPoolTxWorker({
-      ...baseConfig,
+      ...workerBaseConfig,
       validateTx,
       treeProver,
       mutex,
-      txManager,
       feeManager,
     }),
-    createSentTxWorker({
-      ...baseConfig,
-      mutex,
-      txManager,
-    }),
     createDirectDepositWorker({
-      ...baseConfig,
+      ...workerBaseConfig,
       directDepositProver,
     }),
   ]
@@ -130,5 +135,5 @@ export async function init() {
   const workers = await Promise.all(workerPromises)
   workers.forEach(w => w.run())
 
-  return { feeManager }
+  return { feeManager, pool }
 }

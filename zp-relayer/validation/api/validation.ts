@@ -149,7 +149,7 @@ const AjvGetSiblingsSchema: JSONSchemaType<{
 const AjvTraceIdSchema: JSONSchemaType<{ [HEADER_TRACE_ID]: string }> = {
   type: 'object',
   properties: { [HEADER_TRACE_ID]: AjvNullableString },
-  required: config.requireTraceId ? [HEADER_TRACE_ID] : [],
+  required: config.RELAYER_REQUIRE_TRACE_ID ? [HEADER_TRACE_ID] : [],
 }
 
 function checkErrors<T>(schema: JSONSchemaType<T>) {
@@ -197,7 +197,7 @@ async function fetchSafe(url: string) {
 }
 
 export async function validateCountryIP(ip: string) {
-  if (config.blockedCountries.length === 0) return null
+  if (config.RELAYER_BLOCKED_COUNTRIES.length === 0) return null
 
   const apis = [
     fetchSafe(`https://ipapi.co/${ip}/country`).then(res => res.text()),
@@ -216,7 +216,7 @@ export async function validateCountryIP(ip: string) {
     ])
   })
 
-  if (config.blockedCountries.includes(country)) {
+  if (config.RELAYER_BLOCKED_COUNTRIES.includes(country)) {
     logger.warn('Restricted country', { ip, country })
     throw new ValidationError([
       {

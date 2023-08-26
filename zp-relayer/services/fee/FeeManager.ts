@@ -103,7 +103,7 @@ export class DynamicFeeOptions extends FeeOptions<DynamicFeeKeys> {
       [TxType.TRANSFER]: getFee(TxType.TRANSFER),
       [TxType.WITHDRAWAL]: getFee(TxType.WITHDRAWAL),
       oneByteFee,
-      nativeConvertFee: FeeManager.executionFee(gasPrice, config.baseTxGas.nativeConvertOverhead),
+      nativeConvertFee: FeeManager.executionFee(gasPrice, config.baseTxGas.RELAYER_BASE_TX_GAS_NATIVE_CONVERT),
     }
     const minFees: Fees<DynamicFeeKeys> = {
       [TxType.DEPOSIT]: minFee,

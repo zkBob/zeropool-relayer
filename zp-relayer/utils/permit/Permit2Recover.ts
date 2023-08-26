@@ -1,6 +1,5 @@
 import { toBN, AbiItem } from 'web3-utils'
 import { CommonMessageParams, IPermitRecover, PreconditionError, TypedMessage } from './IPermitRecover'
-import { contractCallRetry } from '../helpers'
 import Permit2Abi from '@/abi/permit2.json'
 
 export interface ITokenPermissions {
@@ -35,16 +34,16 @@ export class Permit2Recover extends IPermitRecover<IPermitTransferFrom> {
 
   async precondition({ nullifier, amount, owner, tokenContract }: CommonMessageParams) {
     // Make sure user approved tokens for Permit2 contract
-    const approved = await contractCallRetry(tokenContract, 'allowance', [owner, this.verifyingContract])
+    const approved = await tokenContract.callRetry('allowance', [owner, this.verifyingContract])
     if (toBN(approved).lt(toBN(amount))) return new PreconditionError('Permit2: Allowance is too low')
 
-    const permit2 = new this.web3.eth.Contract(Permit2Abi as AbiItem[], this.verifyingContract)
+    const permit2 = this.network.contract(Permit2Abi as AbiItem[], this.verifyingContract)
 
     const nonce = toBN(nullifier)
     const wordPos = nonce.shrn(8)
     const bitPos = nonce.maskn(8)
 
-    const pointer = await contractCallRetry(permit2, 'nonceBitmap', [owner, wordPos])
+    const pointer = await permit2.callRetry('nonceBitmap', [owner, wordPos])
     const isSet = toBN(pointer).testn(bitPos.toNumber())
     if (isSet) return new PreconditionError('Permit2: Nonce already used')
 
@@ -58,7 +57,7 @@ export class Permit2Recover extends IPermitRecover<IPermitTransferFrom> {
     amount,
     nullifier,
   }: CommonMessageParams): Promise<IPermitTransferFrom> {
-    const token = tokenContract.options.address
+    const token = tokenContract.address()
 
     const message: IPermitTransferFrom = {
       permitted: {

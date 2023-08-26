@@ -1,15 +1,18 @@
 import express, { NextFunction, Request, Response } from 'express'
 import cors from 'cors'
 import semver from 'semver'
-import endpoints from './endpoints'
+import endpoints, { inject } from './endpoints'
 import { logger } from './services/appLogger'
 import { ValidationError } from './validation/api/validation'
 import config from './configs/relayerConfig'
 import { HEADER_LIBJS, HEADER_TRACE_ID, LIBJS_MIN_VERSION } from './utils/constants'
+import { getFileHash } from './utils/helpers'
 import type { FeeManager } from './services/fee'
+import type { Pool } from './pool'
 
 interface IRouterConfig {
   feeManager: FeeManager
+  pool: Pool
 }
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
@@ -22,7 +25,7 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
   }
 }
 
-export function createRouter({ feeManager }: IRouterConfig) {
+export function createRouter({ feeManager, pool }: IRouterConfig) {
   const router = express.Router()
 
   router.use(cors())
@@ -40,11 +43,11 @@ export function createRouter({ feeManager }: IRouterConfig) {
 
   router.use((req: Request, res: Response, next: NextFunction) => {
     const traceId = req.headers[HEADER_TRACE_ID]
-    if (config.requireTraceId && traceId) {
+    if (config.RELAYER_REQUIRE_TRACE_ID && traceId) {
       logger.info('TraceId', { traceId, path: req.path })
     }
 
-    if (config.requireLibJsVersion) {
+    if (config.RELAYER_REQUIRE_LIBJS_VERSION) {
       const libJsVersion = req.headers[HEADER_LIBJS] as string
       let isValidVersion = false
       try {
@@ -63,18 +66,27 @@ export function createRouter({ feeManager }: IRouterConfig) {
 
   router.get('/', endpoints.root)
   router.get('/version', endpoints.relayerVersion)
-  router.post('/sendTransactions', wrapErr(endpoints.sendTransactions))
-  router.get('/transactions/v2', wrapErr(endpoints.getTransactionsV2))
-  router.get('/merkle/root/:index?', wrapErr(endpoints.merkleRoot))
-  router.get('/job/:id', wrapErr(endpoints.getJob))
-  router.get('/info', wrapErr(endpoints.relayerInfo))
-  router.get('/fee', wrapErr(endpoints.getFeeBuilder(feeManager)))
-  router.get('/limits', wrapErr(endpoints.getLimits))
+  router.post('/sendTransactions', wrapErr(inject({ pool }, endpoints.sendTransactions)))
+  router.get('/transactions/v2', wrapErr(inject({ pool }, endpoints.getTransactionsV2)))
+  router.get('/merkle/root/:index?', wrapErr(inject({ pool }, endpoints.merkleRoot)))
+  router.get('/job/:id', wrapErr(inject({ pool }, endpoints.getJob)))
+  router.get('/info', wrapErr(inject({ pool }, endpoints.relayerInfo)))
+  router.get('/fee', wrapErr(endpoints.inject({ pool, feeManager }, endpoints.getFee)))
+  router.get('/limits', wrapErr(inject({ pool }, endpoints.getLimits)))
   router.get('/maxNativeAmount', wrapErr(endpoints.getMaxNativeAmount))
-  router.get('/siblings', wrapErr(endpoints.getSiblings))
-  router.get('/params/hash/tree', wrapErr(endpoints.getParamsHashBuilder(config.treeUpdateParamsPath)))
-  router.get('/params/hash/tx', wrapErr(endpoints.getParamsHashBuilder(config.transferParamsPath)))
-  router.get('/params/hash/direct-deposit', wrapErr(endpoints.getParamsHashBuilder(config.directDepositParamsPath)))
+  router.get('/siblings', wrapErr(inject({ pool }, endpoints.getSiblings)))
+  router.get(
+    '/params/hash/tree',
+    wrapErr(inject({ hash: getFileHash(config.RELAYER_TREE_UPDATE_PARAMS_PATH) }, endpoints.getParamsHash))
+  )
+  router.get(
+    '/params/hash/tx',
+    wrapErr(inject({ hash: getFileHash(config.RELAYER_TRANSFER_PARAMS_PATH) }, endpoints.getParamsHash))
+  )
+  router.get(
+    '/params/hash/direct-deposit',
+    wrapErr(inject({ hash: getFileHash(config.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH) }, endpoints.getParamsHash))
+  )
 
   // Error handler middleware
   router.use((error: any, req: Request, res: Response, next: NextFunction) => {

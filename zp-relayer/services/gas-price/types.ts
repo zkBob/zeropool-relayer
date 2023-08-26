@@ -38,6 +38,7 @@ export enum EstimationType {
   Web3 = 'web3',
   PolygonGSV2 = 'polygon-gasstation-v2',
   OptimismOracle = 'optimism-gas-price-oracle',
+  Tron = 'tron',
 }
 
 export type EstimationOracleOptions = { speedType: GasPriceKey; factor: number }
