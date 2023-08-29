@@ -25,7 +25,11 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
 export function createRouter({ feeManager }: IRouterConfig) {
   const router = express.Router()
 
-  router.use(cors())
+  router.use(
+    cors({
+      origin: config.corsOrigin,
+    })
+  )
   router.use(express.urlencoded({ extended: true }))
   router.use(express.json())
   router.use(express.text())

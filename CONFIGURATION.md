@@ -65,6 +65,7 @@ These environment variables are required for all services.
 | RELAYER_BASE_TX_GAS_TRANSFER | Same as `RELAYER_BASE_TX_GAS_DEPOSIT`, but for transfers. Defaults to `650000`.  | integer |
 | RELAYER_BASE_TX_GAS_WITHDRAWAL | Same as `RELAYER_BASE_TX_GAS_DEPOSIT`, but for withdrawals. Defaults to `650000`.  | integer |
 | RELAYER_BASE_TX_GAS_NATIVE_CONVERT | Gas consumption for swapping pool's token to native token during withdrawal. Defaults to `200000`. | integer |
+| RELAYER_CORS_ORIGIN | Whitelisted clients' URLs delimited by spaces. If none are provided all URLs are considered whitelisted. | string |
 
 ## Watcher
 
