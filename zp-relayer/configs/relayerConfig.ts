@@ -14,7 +14,13 @@ const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
   process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
 ).address
 
-const corsOrigin = (process.env.RELAYER_CORS_ORIGIN || '').split(' ').filter(url => url.length > 0)
+const corsOrigin = (process.env.RELAYER_CORS_ORIGIN || '').split(' ').filter(url => url.length > 0).map(url => {
+  // If the url is enclosed in slashes, treat it as a regex
+  if (/^\/.*\/$/.test(url)) {
+    return new RegExp(url.slice(1, -1))
+  }
+  return url
+})
 
 const defaultHeaderBlacklist =
   'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
