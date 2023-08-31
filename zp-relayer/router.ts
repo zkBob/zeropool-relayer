@@ -25,6 +25,7 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
 export function createRouter({ feeManager }: IRouterConfig) {
   const router = express.Router()
 
+  logger.debug(`CORS Origin Allowlist: ${config.corsOrigin}`)
   router.use(
     cors({
       origin: config.corsOrigin,
