@@ -41,6 +41,80 @@
       {
         "indexed": true,
         "internalType": "uint256",
+        "name": "nullifier",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "exitStart",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "exitEnd",
+        "type": "uint256"
+      }
+    ],
+    "name": "CommitForcedExit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "nullifier",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "ForcedExit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
         "name": "index",
         "type": "uint256"
       },
@@ -83,56 +157,13 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
-        "internalType": "uint8",
-        "name": "tier",
-        "type": "uint8"
-      },
-      {
-        "components": [
-          {
-            "internalType": "uint56",
-            "name": "tvlCap",
-            "type": "uint56"
-          },
-          {
-            "internalType": "uint32",
-            "name": "dailyDepositCap",
-            "type": "uint32"
-          },
-          {
-            "internalType": "uint32",
-            "name": "dailyWithdrawalCap",
-            "type": "uint32"
-          },
-          {
-            "internalType": "uint32",
-            "name": "dailyUserDepositCap",
-            "type": "uint32"
-          },
-          {
-            "internalType": "uint32",
-            "name": "depositCap",
-            "type": "uint32"
-          },
-          {
-            "internalType": "uint32",
-            "name": "directDepositCap",
-            "type": "uint32"
-          },
-          {
-            "internalType": "uint32",
-            "name": "dailyUserDirectDepositCap",
-            "type": "uint32"
-          }
-        ],
         "indexed": false,
-        "internalType": "struct ZkBobAccounting.TierLimits",
-        "name": "limits",
-        "type": "tuple"
+        "internalType": "address",
+        "name": "accounting",
+        "type": "address"
       }
     ],
-    "name": "UpdateLimits",
+    "name": "UpdateAccounting",
     "type": "event"
   },
   {
@@ -154,17 +185,11 @@
       {
         "indexed": false,
         "internalType": "address",
-        "name": "user",
+        "name": "redeemer",
         "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "tier",
-        "type": "uint8"
       }
     ],
-    "name": "UpdateTier",
+    "name": "UpdateRedeemer",
     "type": "event"
   },
   {
@@ -198,6 +223,19 @@
     ],
     "name": "WithdrawFee",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "accounting",
+    "outputs": [
+      {
+        "internalType": "contract IZkBobAccounting",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [
@@ -278,6 +316,68 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_operator",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_index",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_nullifier",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_out_commit",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[8]",
+        "name": "_transfer_proof",
+        "type": "uint256[8]"
+      }
+    ],
+    "name": "commitForcedExit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "committedForcedExits",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "denominator",
     "outputs": [
@@ -287,7 +387,7 @@
         "type": "uint256"
       }
     ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -306,84 +406,79 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_nullifier",
+        "type": "uint256"
+      },
+      {
         "internalType": "address",
-        "name": "_user",
+        "name": "_operator",
         "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_exitStart",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_exitEnd",
+        "type": "uint256"
       }
     ],
-    "name": "getLimitsFor",
+    "name": "executeForcedExit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "slot",
+        "type": "bytes32"
+      }
+    ],
+    "name": "extsload",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "tvlCap",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "tvl",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyDepositCap",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyDepositCapUsage",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyWithdrawalCap",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyWithdrawalCapUsage",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyUserDepositCap",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyUserDepositCapUsage",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "depositCap",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint8",
-            "name": "tier",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyUserDirectDepositCap",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "dailyUserDirectDepositCapUsage",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "directDepositCap",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct ZkBobAccounting.Limits",
+        "internalType": "bytes32",
+        "name": "value",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "startSlot",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nSlots",
+        "type": "uint256"
+      }
+    ],
+    "name": "extsload",
+    "outputs": [
+      {
+        "internalType": "bytes",
         "name": "",
-        "type": "tuple"
+        "type": "bytes"
       }
     ],
     "stateMutability": "view",
@@ -395,44 +490,22 @@
         "internalType": "uint256",
         "name": "_root",
         "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_tvlCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyDepositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyWithdrawalCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyUserDepositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_depositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyUserDirectDepositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_directDepositCap",
-        "type": "uint256"
       }
     ],
     "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint96",
+        "name": "_poolIndex",
+        "type": "uint96"
+      }
+    ],
+    "name": "initializePoolIndex",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -500,9 +573,9 @@
     "name": "pool_index",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "uint96",
         "name": "",
-        "type": "uint256"
+        "type": "uint96"
       }
     ],
     "stateMutability": "view",
@@ -528,20 +601,20 @@
   },
   {
     "inputs": [],
-    "name": "renounceOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "name": "redeemer",
+    "outputs": [
+      {
+        "internalType": "contract IEnergyRedeemer",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "_tier",
-        "type": "uint8"
-      }
-    ],
-    "name": "resetDailyLimits",
+    "inputs": [],
+    "name": "renounceOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -568,47 +641,25 @@
   {
     "inputs": [
       {
-        "internalType": "uint8",
-        "name": "_tier",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_tvlCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyDepositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyWithdrawalCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyUserDepositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_depositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_dailyUserDirectDepositCap",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_directDepositCap",
-        "type": "uint256"
+        "internalType": "contract IZkBobAccounting",
+        "name": "_accounting",
+        "type": "address"
       }
     ],
-    "name": "setLimits",
+    "name": "setAccounting",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IEnergyRedeemer",
+        "name": "_redeemer",
+        "type": "address"
+      }
+    ],
+    "name": "setEnergyRedeemer",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -635,24 +686,6 @@
       }
     ],
     "name": "setTokenSeller",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "_tier",
-        "type": "uint8"
-      },
-      {
-        "internalType": "address[]",
-        "name": "_users",
-        "type": "address[]"
-      }
-    ],
-    "name": "setUsersTier",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

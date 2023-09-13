@@ -1,0 +1,487 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_pool",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_precision",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "manager",
+        "type": "address"
+      }
+    ],
+    "name": "UpdateKYCProvidersManager",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint8",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint56",
+            "name": "tvlCap",
+            "type": "uint56"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyDepositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyWithdrawalCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyUserDepositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "depositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "directDepositCap",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "dailyUserDirectDepositCap",
+            "type": "uint32"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct ZkBobAccounting.TierLimits",
+        "name": "limits",
+        "type": "tuple"
+      }
+    ],
+    "name": "UpdateLimits",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "UpdateTier",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getLimitsFor",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "tvlCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "tvl",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyDepositCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyDepositCapUsage",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyWithdrawalCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyWithdrawalCapUsage",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyUserDepositCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyUserDepositCapUsage",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "depositCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyUserDirectDepositCap",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "dailyUserDirectDepositCapUsage",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "directDepositCap",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct IZkBobAccounting.Limits",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_txCount",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint72",
+        "name": "_tvl",
+        "type": "uint72"
+      },
+      {
+        "internalType": "uint88",
+        "name": "_cumTvl",
+        "type": "uint88"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_maxWeeklyTxCount",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint56",
+        "name": "_maxWeeklyAvgTvl",
+        "type": "uint56"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "kycProvidersManager",
+    "outputs": [
+      {
+        "internalType": "contract IKycProvidersManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pool",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum IZkBobAccounting.TxType",
+        "name": "_txType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "int256",
+        "name": "_txAmount",
+        "type": "int256"
+      }
+    ],
+    "name": "recordOperation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "resetDailyLimits",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IKycProvidersManager",
+        "name": "_kycProvidersManager",
+        "type": "address"
+      }
+    ],
+    "name": "setKycProvidersManager",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_tvlCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dailyDepositCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dailyWithdrawalCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dailyUserDepositCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_depositCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_dailyUserDirectDepositCap",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_directDepositCap",
+        "type": "uint256"
+      }
+    ],
+    "name": "setLimits",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "setUserTier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address[]",
+        "name": "_users",
+        "type": "address[]"
+      }
+    ],
+    "name": "setUsersTier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "slot0",
+    "outputs": [
+      {
+        "internalType": "uint56",
+        "name": "maxWeeklyAvgTvl",
+        "type": "uint56"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxWeeklyTxCount",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint24",
+        "name": "tailSlot",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint24",
+        "name": "headSlot",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint88",
+        "name": "cumTvl",
+        "type": "uint88"
+      },
+      {
+        "internalType": "uint32",
+        "name": "txCount",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "slot1",
+    "outputs": [
+      {
+        "internalType": "uint72",
+        "name": "tvl",
+        "type": "uint72"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
