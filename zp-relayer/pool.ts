@@ -1,6 +1,7 @@
 import BN from 'bn.js'
 import PoolAbi from './abi/pool-abi.json'
 import TokenAbi from './abi/token-abi.json'
+import AccountingAbi from './abi/accounting-abi.json'
 import { AbiItem, toBN } from 'web3-utils'
 import type { Contract } from 'web3-eth-contract'
 import config from './configs/relayerConfig'
@@ -77,6 +78,7 @@ export interface LimitsFetch {
 class Pool {
   public PoolInstance: Contract
   public TokenInstance: Contract
+  public AccountingInstance: Contract
   private txVK: VK
   public state: PoolState
   public optimisticState: PoolState
@@ -88,6 +90,7 @@ class Pool {
   constructor() {
     this.PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
     this.TokenInstance = new web3.eth.Contract(TokenAbi as AbiItem[], config.tokenAddress)
+    this.AccountingInstance = new web3.eth.Contract(AccountingAbi as AbiItem[], config.poolAddress)
 
     const txVK = require(config.txVKPath)
     this.txVK = txVK
@@ -106,6 +109,11 @@ class Pool {
 
     this.denominator = toBN(await this.PoolInstance.methods.denominator().call())
     this.poolId = toBN(await this.PoolInstance.methods.pool_id().call())
+    try {
+      this.AccountingInstance.options.address = await this.PoolInstance.methods.accounting().call()
+    } catch (_) {
+      logger.warn('Accounting contract not configured')
+    }
 
     if (config.permitType === PermitType.SaltedPermit) {
       this.permitRecover = new SaltedPermitRecover(web3, config.tokenAddress)
@@ -270,7 +278,7 @@ class Pool {
   }
 
   async getLimitsFor(address: string): Promise<Limits> {
-    const limits = await contractCallRetry(this.PoolInstance, 'getLimitsFor', [address])
+    const limits = await contractCallRetry(this.AccountingInstance, 'getLimitsFor', [address])
     return {
       tvlCap: toBN(limits.tvlCap),
       tvl: toBN(limits.tvl),
