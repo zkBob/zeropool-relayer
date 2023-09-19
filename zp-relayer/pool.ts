@@ -269,11 +269,9 @@ export class Pool<N extends Network = Network> {
 
       const parser = new PoolCalldataParser(calldata)
 
-      const outCommitRaw = parser.getField('outCommit')
-      outCommit = hexToNumberString(outCommitRaw)
+      outCommit = hexToNumberString(parser.getField('outCommit'))
 
-      const txTypeRaw = parser.getField('txType')
-      const txType = toTxType(txTypeRaw)
+      const txType = toTxType(parser.getField('txType'))
 
       const memoSize = hexToNumber(parser.getField('memoSize'))
       const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
