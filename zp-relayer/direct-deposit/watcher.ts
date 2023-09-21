@@ -1,6 +1,3 @@
-// Reference implementation:
-// https://github.com/omni/tokenbridge/blob/master/oracle/src/watcher.js
-import type Web3 from 'web3'
 import type { AbiItem } from 'web3-utils'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { web3 } from '@/services/web3'
@@ -9,81 +6,65 @@ import DirectDepositQueueAbi from '@/abi/direct-deposit-queue-abi.json'
 import config from '@/configs/watcherConfig'
 import { logger } from '@/services/appLogger'
 import { redis } from '@/services/redisClient'
-import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock, parseDirectDepositEvent } from './utils'
 import { BatchCache } from './BatchCache'
 import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
-import { getBlockNumber, getEvents } from '@/utils/web3'
 import { directDepositQueue } from '@/queue/directDepositQueue'
+import { EventWatcher } from '../services/EventWatcher'
 
-const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
-const DirectDepositQueueInstance = new web3.eth.Contract(DirectDepositQueueAbi as AbiItem[])
+export function parseDirectDepositEvent(o: Record<string, any>): DirectDeposit {
+  const dd: DirectDeposit = {
+    sender: o.sender,
+    nonce: o.nonce,
+    fallbackUser: o.fallbackUser,
+    zkAddress: {
+      diversifier: o.zkAddress.diversifier,
+      pk: o.zkAddress.pk,
+    },
+    deposit: o.deposit,
+  }
 
-const eventName = 'SubmitDirectDeposit'
-
-const batch = new BatchCache<DirectDeposit>(
-  config.directDepositBatchSize,
-  config.directDepositBatchTtl,
-  ds => {
-    logger.info('Adding direct-deposit events to queue', { count: ds.length })
-    directDepositQueue.add('', ds)
-  },
-  dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
-  redis
-)
+  return dd
+}
 
 async function init() {
-  await getLastProcessedBlock()
-  await batch.init()
+  const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
   const queueAddress = await PoolInstance.methods.direct_deposit_queue().call()
-  DirectDepositQueueInstance.options.address = queueAddress
-  runWatcher()
-}
+  const DirectDepositQueueInstance = new web3.eth.Contract(DirectDepositQueueAbi as AbiItem[], queueAddress)
 
-async function getLastBlockToProcess(web3: Web3) {
-  const lastBlockNumber = await getBlockNumber(web3)
-  return lastBlockNumber - config.blockConfirmations
-}
+  const batch = new BatchCache<DirectDeposit>(
+    config.directDepositBatchSize,
+    config.directDepositBatchTtl,
+    ds => {
+      logger.info('Adding direct-deposit events to queue', { count: ds.length })
+      directDepositQueue.add('', ds)
+    },
+    dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
+    redis
+  )
+  await batch.init()
 
-async function watch() {
-  const lastBlockToProcess = await getLastBlockToProcess(web3)
+  const watcher = new EventWatcher({
+    name: 'direct-deposit',
+    startBlock: config.startBlock,
+    blockConfirmations: config.blockConfirmations,
+    eventName: 'SubmitDirectDeposit',
+    eventPollingInterval: config.eventPollingInterval,
+    eventsProcessingBatchSize: config.eventsProcessingBatchSize,
+    redis,
+    web3,
+    contract: DirectDepositQueueInstance,
+    callback: async events => {
+      const directDeposits: [string, DirectDeposit][] = []
+      for (let event of events) {
+        const dd = parseDirectDepositEvent(event.returnValues)
+        directDeposits.push([dd.nonce, dd])
+      }
 
-  if (lastBlockToProcess <= lastProcessedBlock) {
-    logger.debug('All blocks already processed')
-    return
-  }
-
-  const fromBlock = lastProcessedBlock + 1
-  const rangeEndBlock = fromBlock + config.eventsProcessingBatchSize
-  let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
-
-  let events = await getEvents(DirectDepositQueueInstance, eventName, {
-    fromBlock,
-    toBlock,
+      await batch.add(directDeposits)
+    },
   })
-  logger.info(`Found ${events.length} direct-deposit events`)
-
-  const directDeposits: [string, DirectDeposit][] = []
-  for (let event of events) {
-    const dd = parseDirectDepositEvent(event.returnValues)
-    directDeposits.push([dd.nonce, dd])
-  }
-
-  await batch.add(directDeposits)
-
-  logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })
-  await updateLastProcessedBlock(toBlock)
+  await watcher.init()
+  return watcher
 }
 
-async function runWatcher() {
-  try {
-    await watch()
-  } catch (e) {
-    logger.error(e)
-  }
-
-  setTimeout(() => {
-    runWatcher()
-  }, config.eventPollingInterval)
-}
-
-init()
+init().then(w => w.run())
