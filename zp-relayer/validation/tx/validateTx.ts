@@ -188,9 +188,9 @@ function checkMemoPrefix(memo: string, txType: TxType) {
   return new TxValidationError(`Memo prefix is incorrect: ${numItemsSuffix}`)
 }
 
-export async function checkWithdrawalTransfer(token: Contract, address: string, amount: BN) {
+export async function checkWithdrawalTransfer(token: Contract, address: string) {
   try {
-    await token.methods.transfer(address, amount.toString(10)).call({
+    await token.methods.transfer(address, 0).call({
       from: config.poolAddress,
     })
   } catch (e) {
@@ -233,8 +233,6 @@ export async function validateTx(
   const tokenAmountWithFee = tokenAmount.add(fee)
   const energyAmount = delta.energyAmount
 
-  const requiredTokenAmount = applyDenominator(tokenAmountWithFee, pool.denominator)
-
   let nativeConvert = false
   let userAddress: string
 
@@ -245,7 +243,7 @@ export async function validateTx(
     const nativeAmountBN = toBN(nativeAmount)
     userAddress = web3.utils.bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
-    await checkAssertion(() => checkWithdrawalTransfer(pool.TokenInstance, userAddress, requiredTokenAmount))
+    await checkAssertion(() => checkWithdrawalTransfer(pool.TokenInstance, userAddress))
     await checkAssertion(() => checkNativeAmount(nativeAmountBN, tokenAmountWithFee.neg()))
 
     if (!nativeAmountBN.isZero()) {
@@ -255,6 +253,7 @@ export async function validateTx(
     checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
     checkCondition(depositSignature !== null, 'Deposit signature is required')
 
+    const requiredTokenAmount = applyDenominator(tokenAmountWithFee, pool.denominator)
     userAddress = await getRecoveredAddress(
       txType,
       nullifier,
