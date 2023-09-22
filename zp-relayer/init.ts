@@ -124,6 +124,8 @@ export async function init() {
     callback: async events => {
       for (let event of events) {
         const nullifier = event.returnValues.nullifier as string
+        await pool.state.nullifiers.add([nullifier])
+
         const exitEnd = toBN(event.returnValues.exitEnd)
         const now = toBN(Math.floor(Date.now() / 1000))
         await forcedExitQueue.add(
