@@ -1,4 +1,5 @@
 import type Web3 from 'web3'
+import { toBN } from 'web3-utils'
 import { Mutex } from 'async-mutex'
 import { Params } from 'libzkbob-rs-node'
 import { pool } from './pool'
@@ -17,6 +18,9 @@ import { FeeManagerType, FeeManager, StaticFeeManager, DynamicFeeManager, Optimi
 import type { IPriceFeed } from './services/price-feed/IPriceFeed'
 import type { IWorkerBaseConfig } from './workers/workerTypes'
 import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from './services/price-feed'
+import { createForcedExitWorker } from './workers/forcedExitWorker'
+import { EventWatcher } from './services/EventWatcher'
+import { forcedExitQueue } from './queue/forcedExitQueue'
 
 function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
   if (type === ProverType.Local) {
@@ -107,6 +111,35 @@ export async function init() {
   const feeManager = buildFeeManager(config.feeManagerType, priceFeed, gasPriceService, web3)
   await feeManager.start()
 
+  const forcedExitWatcher = new EventWatcher({
+    name: 'forced-exit',
+    startBlock: config.forcedExitStartBlock,
+    blockConfirmations: config.forcedExitBlockConfirmations,
+    eventName: 'CommitForcedExit',
+    eventPollingInterval: config.forcedExitPollingInterval,
+    eventsProcessingBatchSize: config.eventsProcessingBatchSize,
+    redis,
+    web3,
+    contract: pool.PoolInstance,
+    callback: async events => {
+      for (let event of events) {
+        const nullifier = event.returnValues.nullifier as string
+        const exitEnd = toBN(event.returnValues.exitEnd)
+        const now = toBN(Math.floor(Date.now() / 1000))
+        await forcedExitQueue.add(
+          nullifier,
+          { nullifier },
+          {
+            // add a 10 minute buffer
+            delay: exitEnd.sub(now).addn(600).muln(1000).toNumber(),
+          }
+        )
+      }
+    },
+  })
+  await forcedExitWatcher.init()
+  forcedExitWatcher.run()
+
   const workerPromises = [
     createPoolTxWorker({
       ...baseConfig,
@@ -124,6 +157,9 @@ export async function init() {
     createDirectDepositWorker({
       ...baseConfig,
       directDepositProver,
+    }),
+    createForcedExitWorker({
+      ...baseConfig,
     }),
   ]
 

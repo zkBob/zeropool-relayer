@@ -83,6 +83,9 @@ const config = {
     [TxType.WITHDRAWAL]: toBN(process.env.RELAYER_BASE_TX_GAS_WITHDRAWAL || '650000'),
     nativeConvertOverhead: toBN(process.env.RELAYER_BASE_TX_GAS_NATIVE_CONVERT || '200000'),
   },
+  forcedExitStartBlock: parseInt(process.env.RELAYER_FORCED_EXIT_START_BLOCK || '0'),
+  forcedExitPollingInterval: parseInt(process.env.RELAYER_FORCED_EXIT_POLLING_INTERVAL || '600000'),
+  forcedExitBlockConfirmations: parseInt(process.env.RELAYER_FORCED_EXIT_BLOCK_CONFIRMATIONS || '1'),
 }
 
 export default config
