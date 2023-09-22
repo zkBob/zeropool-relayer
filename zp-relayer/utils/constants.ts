@@ -8,6 +8,7 @@ const constants = {
   TX_QUEUE_NAME: 'tx',
   SENT_TX_QUEUE_NAME: 'sent',
   DIRECT_DEPOSIT_QUEUE_NAME: 'dd-prove',
+  FORCED_EXIT_QUEUE_NAME: 'forced-exit',
   DIRECT_DEPOSIT_SET_NAME: 'dd:cache',
   DIRECT_DEPOSIT_REPROCESS_NAME: 'dd:reprocess',
   DIRECT_DEPOSIT_REPROCESS_INTERVAL: 60 * 1000,

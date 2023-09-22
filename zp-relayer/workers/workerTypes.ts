@@ -26,3 +26,5 @@ export interface ISentWorkerConfig extends IWorkerBaseConfig {
 export interface IDirectDepositWorkerConfig extends IWorkerBaseConfig {
   directDepositProver: IProver<Circuit.DirectDeposit>
 }
+
+export interface IForcedExitWorkerConfig extends IWorkerBaseConfig {}
