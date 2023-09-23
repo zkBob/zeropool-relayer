@@ -194,7 +194,9 @@ export async function checkWithdrawalTransfer(token: Contract, address: string) 
       from: config.poolAddress,
     })
   } catch (e) {
-    return new TxValidationError(`Transfer simulation failed: ${(e as Error).message}`)
+    const msg = 'Transfer simulation failed'
+    logger.warn(msg, { error: (e as Error).message })
+    return new TxValidationError(msg)
   }
   return null
 }
