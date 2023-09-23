@@ -73,13 +73,6 @@ export function checkFee(userFee: BN, requiredFee: BN) {
   return null
 }
 
-export function checkNonZeroWithdrawAddress(address: string) {
-  if (address === ZERO_ADDRESS) {
-    return new TxValidationError('Withdraw address cannot be zero')
-  }
-  return null
-}
-
 /**
  * @param signedDeadline deadline signed by user, in seconds
  * @param threshold "window" added to current relayer time, in seconds
@@ -195,6 +188,19 @@ function checkMemoPrefix(memo: string, txType: TxType) {
   return new TxValidationError(`Memo prefix is incorrect: ${numItemsSuffix}`)
 }
 
+export async function checkWithdrawalTransfer(token: Contract, address: string) {
+  try {
+    await token.methods.transfer(address, 0).call({
+      from: config.poolAddress,
+    })
+  } catch (e) {
+    const msg = 'Transfer simulation failed'
+    logger.warn(msg, { error: (e as Error).message })
+    return new TxValidationError(msg)
+  }
+  return null
+}
+
 export async function validateTx(
   { txType, rawMemo, txProof, depositSignature }: TxPayload,
   pool: Pool,
@@ -239,7 +245,7 @@ export async function validateTx(
     const nativeAmountBN = toBN(nativeAmount)
     userAddress = web3.utils.bytesToHex(Array.from(receiver))
     logger.info('Withdraw address: %s', userAddress)
-    await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
+    await checkAssertion(() => checkWithdrawalTransfer(pool.TokenInstance, userAddress))
     await checkAssertion(() => checkNativeAmount(nativeAmountBN, tokenAmountWithFee.neg()))
 
     if (!nativeAmountBN.isZero()) {
