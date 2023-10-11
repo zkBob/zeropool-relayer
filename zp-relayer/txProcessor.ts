@@ -35,7 +35,6 @@ function buildTxData(txData: TxData) {
   const tokenAmount = numToHex(txData.delta.tokenAmount, TOKEN_SIZE)
   logger.debug(`DELTA ${transferIndex} ${energyAmount} ${tokenAmount}`)
 
-  txData.txProof.a = ['0', '0']
   const txFlatProof = encodeProof(txData.txProof)
   const treeFlatProof = encodeProof(txData.treeProof)
 
