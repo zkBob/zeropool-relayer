@@ -164,6 +164,7 @@ export async function createPoolTxWorker({
           value: 0,
           data,
           func,
+          feeLimit: config.RELAYER_GAS_LIMIT.toNumber(),
         },
         onSend: txHash => onSend(txHash, jobId, processResult),
         onIncluded: txHash => onIncluded(txHash, processResult),

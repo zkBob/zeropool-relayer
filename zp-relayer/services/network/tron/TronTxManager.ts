@@ -22,13 +22,13 @@ export class TronTxManager implements TransactionManager<Network.Tron> {
   async runConsumer() {
     this.isSending = true
     while (this.txQueue.length !== 0) {
-      const a = this.txQueue.shift()
-      if (!a) {
+      const tx = this.txQueue.shift()
+      if (!tx) {
         return // TODO
       }
-      const { txDesc, onSend, onIncluded, onRevert } = a
+      const { txDesc, onSend, onIncluded, onRevert } = tx
       const options = {
-        feeLimit: 200000000,
+        feeLimit: txDesc.feeLimit,
         callValue: txDesc.value,
         rawParameter: txDesc.data.slice(10), // TODO: cut off selector
       }

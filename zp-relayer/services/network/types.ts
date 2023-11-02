@@ -35,6 +35,7 @@ type TronTxDesc = BaseTxDesc
 export type TxDesc<N extends Network> = N extends Network.Tron
   ? TronTxDesc & {
       func: string
+      feeLimit: number
     }
   : EvmTxDesc & {
       isResend?: boolean
