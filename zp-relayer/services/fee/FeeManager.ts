@@ -182,8 +182,9 @@ export abstract class FeeManager<T extends string[] = DynamicFeeKeys> {
     const feeOptions = await this._fetchFeeOptions()
     const convertedFees = await feeOptions.convert(this.config.priceFeed)
     const scaledFees = convertedFees.applyFactor(this.config.scaleFactor)
+    const boundedFees = scaledFees.applyMinBound()
 
-    return scaledFees
+    return boundedFees
   }
 
   async getFeeOptions(useCached = true): Promise<IFeeOptions<T>> {
@@ -198,7 +199,6 @@ export abstract class FeeManager<T extends string[] = DynamicFeeKeys> {
       logger.debug('Fallback to cache fee options')
       feeOptions = this.cachedFeeOptions.clone()
     }
-    feeOptions.applyMinBound()
     return feeOptions
   }
 
