@@ -1,7 +1,7 @@
 import Contract from 'web3-eth-contract'
 import { AbiItem, toBN } from 'web3-utils'
 import type { TxType } from 'zp-memo-parser'
-import { DelegatedDepositsData, SnarkProof } from 'libzkbob-rs-node'
+import { DelegatedDepositsData, Proof } from 'libzkbob-rs-node'
 import type { PoolState } from './state/PoolState'
 import PoolAbi from './abi/pool-abi.json'
 import { logger } from './services/appLogger'
@@ -15,28 +15,29 @@ import type { Circuit, IProver } from './prover/IProver'
 // Used only to get `transact` method selector
 const PoolInstance = new Contract(PoolAbi as AbiItem[])
 
-interface TxData {
-  txProof: SnarkProof
-  treeProof: SnarkProof
+type Stringified<T> = {
+  [P in keyof T]: string
+}
+export interface TxData {
+  txProof: Proof
+  treeProof: Proof
   nullifier: string
   outCommit: string
   rootAfter: string
-  delta: Delta
+  delta: Stringified<Omit<Delta, 'poolId'>>
   txType: TxType
   memo: string
   depositSignature: string | null
 }
 
-function buildTxData(txData: TxData) {
+export function buildTxData(txData: TxData) {
   const selector: string = PoolInstance.methods.transact().encodeABI()
 
-  const transferIndex = numToHex(txData.delta.transferIndex, TRANSFER_INDEX_SIZE)
-  const energyAmount = numToHex(txData.delta.energyAmount, ENERGY_SIZE)
-  const tokenAmount = numToHex(txData.delta.tokenAmount, TOKEN_SIZE)
+  const { transferIndex, energyAmount, tokenAmount } = txData.delta
   logger.debug(`DELTA ${transferIndex} ${energyAmount} ${tokenAmount}`)
 
-  const txFlatProof = encodeProof(txData.txProof)
-  const treeFlatProof = encodeProof(txData.treeProof)
+  const txFlatProof = encodeProof(txData.txProof.proof)
+  const treeFlatProof = encodeProof(txData.treeProof.proof)
 
   const memoMessage = txData.memo
   const memoSize = numToHex(toBN(memoMessage.length).divn(2), 4)
@@ -119,12 +120,16 @@ export async function buildTx(
 
   const rootAfter = treeProof.inputs[1]
   const data = buildTxData({
-    txProof: txProof.proof,
-    treeProof: treeProof.proof,
+    txProof,
+    treeProof,
     nullifier: numToHex(toBN(nullifier)),
     outCommit: numToHex(toBN(outCommit)),
     rootAfter: numToHex(toBN(rootAfter)),
-    delta,
+    delta: {
+      transferIndex: numToHex(delta.transferIndex, TRANSFER_INDEX_SIZE),
+      energyAmount: numToHex(delta.energyAmount, ENERGY_SIZE),
+      tokenAmount: numToHex(delta.tokenAmount, TOKEN_SIZE),
+    },
     txType,
     memo: rawMemo,
     depositSignature,

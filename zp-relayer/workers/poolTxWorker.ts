@@ -149,11 +149,7 @@ export async function createPoolTxWorker({
     }
   }
 
-  async function handleTx<T extends WorkerTxType>({
-    processResult,
-    logger,
-    jobId,
-  }: HandlerConfig<T>) {
+  async function handleTx<T extends WorkerTxType>({ processResult, logger, jobId }: HandlerConfig<T>) {
     const { data, func, outCommit, commitIndex, memo, nullifier } = processResult
 
     const txManager = pool.network.txManager
@@ -182,7 +178,7 @@ export async function createPoolTxWorker({
         onRevert: txHash => onRevert(txHash, jobId),
       })
     }
-    
+
     const emptyTxHash = '0x' + '0'.repeat(64)
     const prefixedMemo = buildPrefixedMemo(outCommit, emptyTxHash, memo)
 
@@ -223,7 +219,16 @@ export async function createPoolTxWorker({
     } else if (type === WorkerTxType.Normal) {
       const tx = transaction as WorkerTx<WorkerTxType.Normal>
 
-      await validateTx(tx, pool, feeManager, traceId)
+      await validateTx(
+        tx,
+        pool,
+        {
+          checkFee: {
+            feeManager,
+          },
+        },
+        traceId
+      )
 
       processResult = await buildTx(tx, treeProver, pool.optimisticState)
     } else {

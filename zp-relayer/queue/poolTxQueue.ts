@@ -12,18 +12,20 @@ export enum JobState {
   FAILED = 'failed',
 }
 
-export interface BaseTxPayload {
-  txProof: Proof
+export interface BasePayload {
   txHash: string | null
   state: JobState
 }
 
-export interface TxPayload extends BaseTxPayload {
+export interface Tx {
+  txProof: Proof
   amount: string
   txType: TxType
   rawMemo: string
   depositSignature: string | null
 }
+
+export interface TxPayload extends BasePayload, Tx {}
 
 interface ZkAddress {
   diversifier: string
@@ -38,11 +40,14 @@ export interface DirectDeposit {
   deposit: string
 }
 
-export interface DirectDepositTxPayload extends BaseTxPayload {
+export interface DirectDepositTx {
+  txProof: Proof
   deposits: DirectDeposit[]
   outCommit: string
   memo: string
 }
+
+export interface DirectDepositTxPayload extends BasePayload, DirectDepositTx {}
 
 export enum WorkerTxType {
   Normal = 'normal',

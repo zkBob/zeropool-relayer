@@ -1,9 +1,9 @@
 import type { Redis } from 'ioredis'
 import type { Mutex } from 'async-mutex'
 import type { Pool } from '@/pool'
-import type { TxPayload } from '@/queue/poolTxQueue'
 import type { Circuit, IProver } from '@/prover'
 import type { FeeManager } from '@/services/fee'
+import type { validateTx } from '@/validation/tx/validateTx'
 
 export interface IWorkerBaseConfig {
   redis: Redis
@@ -11,7 +11,7 @@ export interface IWorkerBaseConfig {
 }
 
 export interface IPoolWorkerConfig extends IWorkerBaseConfig {
-  validateTx: (tx: TxPayload, pool: Pool, feeManager: FeeManager, traceId?: string) => Promise<void>
+  validateTx: typeof validateTx
   treeProver: IProver<Circuit.Tree>
   mutex: Mutex
   feeManager: FeeManager

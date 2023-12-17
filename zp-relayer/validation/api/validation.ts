@@ -9,6 +9,7 @@ import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
 import config from '@/configs/relayerConfig'
 import { logger } from '@/services/appLogger'
 import { Network } from '@/services/network'
+import type { TxData } from '@/txProcessor'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
@@ -90,6 +91,33 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
     depositSignature: AjvNullableString,
   },
   required: ['proof', 'memo', 'txType'],
+}
+
+const AjvSignMPCSchema: JSONSchemaType<TxData> = {
+  type: 'object',
+  properties: {
+    txProof: AjvProofSchema,
+    treeProof: AjvProofSchema,
+    nullifier: AjvString,
+    outCommit: AjvString,
+    rootAfter: AjvString,
+    delta: {
+      type: 'object',
+      properties: {
+        transferIndex: AjvString,
+        energyAmount: AjvString,
+        tokenAmount: AjvString,
+      },
+      required: ['transferIndex', 'energyAmount', 'tokenAmount'],
+    },
+    txType: {
+      type: 'string',
+      enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
+    },
+    memo: AjvString,
+    depositSignature: AjvNullableString,
+  },
+  required: ['txProof', 'treeProof', 'nullifier', 'outCommit', 'rootAfter', 'delta', 'txType', 'memo'],
 }
 
 const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
@@ -190,6 +218,7 @@ export function validateBatch(validationSet: [ValidationFunction, any][]) {
 
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
+export const checkSignMPCSchema = checkErrors(AjvSignMPCSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)

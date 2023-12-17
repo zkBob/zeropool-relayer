@@ -75,7 +75,7 @@ export interface LimitsFetch {
 }
 
 export class Pool<N extends Network = Network> {
-  private txVK: VK
+  public txVK: VK
   public state: PoolState
   public optimisticState: PoolState
   public denominator: BN = toBN(1)
@@ -95,7 +95,7 @@ export class Pool<N extends Network = Network> {
     this.optimisticState = states.optimisticState
   }
 
-  async init() {
+  async init(sync: boolean = true) {
     if (this.isInitialized) return
 
     this.denominator = toBN(await this.network.pool.call('denominator'))
@@ -113,7 +113,9 @@ export class Pool<N extends Network = Network> {
       throw new Error("Cannot infer pool's permit standard")
     }
     await this.permitRecover?.initializeDomain()
-    await this.syncState(config.COMMON_START_BLOCK)
+    if (sync) {
+      await this.syncState(config.COMMON_START_BLOCK)
+    }
     this.isInitialized = true
   }
 

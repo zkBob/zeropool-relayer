@@ -1,8 +1,8 @@
 import express from 'express'
 import { createRouter } from './router'
-import { logger } from './services/appLogger'
-import { createConsoleLoggerMiddleware, createPersistentLoggerMiddleware } from './services/loggerMiddleware'
-import config from './configs/relayerConfig'
+import { logger } from '../services/appLogger'
+import { createConsoleLoggerMiddleware, createPersistentLoggerMiddleware } from '../services/loggerMiddleware'
+import config from '../configs/relayerConfig'
 import { init } from './init'
 
 init().then(({ feeManager, pool }) => {

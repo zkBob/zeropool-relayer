@@ -6,7 +6,8 @@
   "scripts": {
     "initialize": "yarn install --frozen-lockfile",
     "build": "tsc --project ./ && tsc-alias",
-    "start:dev": "DOTENV_CONFIG_PATH=relayer.env ts-node -r dotenv/config index.ts",
+    "start:dev": "DOTENV_CONFIG_PATH=relayer.env ts-node -r dotenv/config relayer/relayer.ts",
+    "start:mpc:guard:dev": "DOTENV_CONFIG_PATH=mpc.env ts-node -r dotenv/config guard/guard.ts",
     "start:prod": "node index.js",
     "start:direct-deposit-watcher:dev": "DOTENV_CONFIG_PATH=watcher.env ts-node -r dotenv/config direct-deposit/watcher.ts",
     "start:direct-deposit-watcher:prod": "node direct-deposit/watcher.js",
