@@ -1,21 +1,18 @@
 import type { Logger } from 'winston'
 import { Job, Worker } from 'bullmq'
-import { toBN } from 'web3-utils'
 import { logger } from '@/services/appLogger'
 import { poolTxQueue, PoolTx, WorkerTx, WorkerTxType, JobState } from '@/queue/poolTxQueue'
 import { OUTPLUSONE, TX_QUEUE_NAME } from '@/utils/constants'
-import { buildPrefixedMemo, waitForFunds, withErrorLog, withMutex } from '@/utils/helpers'
+import { buildPrefixedMemo, withErrorLog, withMutex } from '@/utils/helpers'
 import { buildDirectDeposits, ProcessResult, buildTx } from '@/txProcessor'
 import config from '@/configs/relayerConfig'
-import { getMaxRequiredGasPrice } from '@/services/gas-price'
-import { isInsufficientBalanceError } from '@/utils/web3Errors'
 import { TxValidationError } from '@/validation/tx/common'
 import type { IPoolWorkerConfig } from './workerTypes'
-import { EvmTx, Network, Tx, isEthereum, isTron } from '@/services/network'
+import { isEthereum, isTron } from '@/services/network'
 import { TronTxManager } from '@/services/network/tron/TronTxManager'
 import { EvmTxManager } from '@/services/network/evm/EvmTxManager'
-import { Pool } from '@/pool'
 import Redis from 'ioredis'
+import { OptionalChecks } from '@/validation/tx/validateTx'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -150,13 +147,14 @@ export async function createPoolTxWorker({
   }
 
   async function handleTx<T extends WorkerTxType>({ processResult, logger, jobId }: HandlerConfig<T>) {
-    const { data, func, outCommit, commitIndex, memo, nullifier } = processResult
+    const { data, func, outCommit, commitIndex, memo, nullifier, mpc } = processResult
+    const to = mpc ? (config.RELAYER_MPC_GUARD_CONTRACT as string) : config.COMMON_POOL_ADDRESS
 
     const txManager = pool.network.txManager
     if (isTron(pool.network)) {
       await (txManager as TronTxManager).sendTx({
         txDesc: {
-          to: config.COMMON_POOL_ADDRESS,
+          to,
           value: 0,
           data,
           func,
@@ -170,7 +168,7 @@ export async function createPoolTxWorker({
       await (txManager as EvmTxManager).sendTx({
         txDesc: {
           data,
-          to: config.COMMON_POOL_ADDRESS,
+          to,
           gas: config.RELAYER_GAS_LIMIT.toString(),
         },
         onSend: txHash => onSend(txHash, jobId, processResult),
@@ -219,18 +217,29 @@ export async function createPoolTxWorker({
     } else if (type === WorkerTxType.Normal) {
       const tx = transaction as WorkerTx<WorkerTxType.Normal>
 
+      const optionalChecks: OptionalChecks = {
+        fee: {
+          feeManager,
+        },
+      }
+      if (config.COMMON_SCREENER_URL && config.COMMON_SCREENER_TOKEN) {
+        optionalChecks.screener = {
+          screenerUrl: config.COMMON_SCREENER_URL,
+          screenerToken: config.COMMON_SCREENER_TOKEN,
+        }
+      }
       await validateTx(
         tx,
         pool,
-        {
-          checkFee: {
-            feeManager,
-          },
-        },
+        config.RELAYER_ADDRESS,
+        config.RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL,
+        config.RELAYER_MAX_NATIVE_AMOUNT,
+        optionalChecks,
         traceId
       )
 
-      processResult = await buildTx(tx, treeProver, pool.optimisticState)
+      const guards = config.RELAYER_GUARDS_CONFIG_PATH ? require(config.RELAYER_GUARDS_CONFIG_PATH) : null
+      processResult = await buildTx(tx, treeProver, pool.optimisticState, guards)
     } else {
       throw new Error(`Unknown tx type: ${type}`)
     }

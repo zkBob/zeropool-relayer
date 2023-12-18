@@ -1,17 +1,16 @@
 import { logger } from '@/services/appLogger'
-import { redis } from '@/services/redisClient'
-import config from '@/configs/relayerConfig'
 import { getNonce } from './web3'
 import type Web3 from 'web3'
+import type { Redis } from 'ioredis'
 
 export enum RelayerKeys {
   NONCE = `relayer:nonce`,
 }
 
-export const readNonce = (web3: Web3) =>
-  readFieldBuilder(RelayerKeys.NONCE, () => getNonce(web3, config.RELAYER_ADDRESS))
+export const readNonce = (redis: Redis, web3: Web3, address: string) =>
+  readFieldBuilder(redis, RelayerKeys.NONCE, () => getNonce(web3, address))
 
-function readFieldBuilder(key: RelayerKeys, forceUpdateFunc?: Function) {
+function readFieldBuilder(redis: Redis, key: RelayerKeys, forceUpdateFunc?: Function) {
   return async (forceUpdate?: boolean) => {
     const update = () => {
       if (!forceUpdateFunc) throw new Error('Force update function not provided')
@@ -35,10 +34,10 @@ function readFieldBuilder(key: RelayerKeys, forceUpdateFunc?: Function) {
   }
 }
 
-export function updateField(key: RelayerKeys, val: any) {
+export function updateField(redis: Redis, key: RelayerKeys, val: any) {
   return redis.set(key, val)
 }
 
-export function updateNonce(nonce: number) {
-  return updateField(RelayerKeys.NONCE, nonce)
+export function updateNonce(redis: Redis, nonce: number) {
+  return updateField(redis, RelayerKeys.NONCE, nonce)
 }

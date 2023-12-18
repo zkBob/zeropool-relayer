@@ -1,5 +1,5 @@
 import { createLogger, format, transports } from 'winston'
-import config from '@/configs/baseConfig'
+import config from '@/configs/loggerConfig'
 
 let logFormat = format.combine(format.timestamp(), format.splat(), format.simple())
 if (config.COMMON_COLORIZE_LOGS) {

@@ -12,6 +12,7 @@ import {
   checkSendTransactionsErrors,
   checkTraceId,
   validateBatch,
+  ValidationFunction,
 } from '../validation/api/validation'
 import { HEADER_TRACE_ID } from '../utils/constants'
 import type { FeeManager } from '../services/fee'
@@ -28,13 +29,20 @@ interface HashInjection {
   hash: string | null
 }
 
+const checkTraceIdFromConfig: ValidationFunction = (() => {
+  if (config.RELAYER_REQUIRE_TRACE_ID) {
+    return checkTraceId
+  }
+  return () => null
+})()
+
 async function sendTransactions(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
-    [checkTraceId, req.headers],
+    [checkTraceIdFromConfig, req.headers],
     [checkSendTransactionsErrors, req.body],
   ])
 
-  await validateCountryIP(req.ip)
+  await validateCountryIP(req.ip, config.RELAYER_BLOCKED_COUNTRIES)
 
   const rawTxs = req.body as PoolTx[]
   const traceId = req.headers[HEADER_TRACE_ID] as string
@@ -57,7 +65,7 @@ async function sendTransactions(req: Request, res: Response, { pool }: PoolInjec
 
 async function merkleRoot(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
-    [checkTraceId, req.headers],
+    [checkTraceIdFromConfig, req.headers],
     [checkMerkleRootErrors, req.params],
   ])
 
@@ -68,7 +76,7 @@ async function merkleRoot(req: Request, res: Response, { pool }: PoolInjection) 
 
 async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
-    [checkTraceId, req.headers],
+    [checkTraceIdFromConfig, req.headers],
     [checkGetTransactionsV2, req.query],
   ])
 
@@ -105,7 +113,7 @@ async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
     txHash: null | string
   }
 
-  validateBatch([[checkTraceId, req.headers]])
+  validateBatch([[checkTraceIdFromConfig, req.headers]])
 
   const jobId = req.params.id
 
@@ -175,7 +183,7 @@ function relayerInfo(req: Request, res: Response, { pool }: PoolInjection) {
 }
 
 async function getFee(req: Request, res: Response, { pool, feeManager }: PoolInjection & FeeManagerInjection) {
-  validateBatch([[checkTraceId, req.headers]])
+  validateBatch([[checkTraceIdFromConfig, req.headers]])
 
   const feeOptions = await feeManager.getFeeOptions()
   const fees = feeOptions.denominate(pool.denominator).getObject()
@@ -185,7 +193,7 @@ async function getFee(req: Request, res: Response, { pool, feeManager }: PoolInj
 
 async function getLimits(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
-    [checkTraceId, req.headers],
+    [checkTraceIdFromConfig, req.headers],
     [checkGetLimits, req.query],
   ])
 
@@ -203,7 +211,7 @@ async function getLimits(req: Request, res: Response, { pool }: PoolInjection) {
 }
 
 function getMaxNativeAmount(req: Request, res: Response) {
-  validateBatch([[checkTraceId, req.headers]])
+  validateBatch([[checkTraceIdFromConfig, req.headers]])
 
   res.json({
     maxNativeAmount: config.RELAYER_MAX_NATIVE_AMOUNT.toString(10),
@@ -212,7 +220,7 @@ function getMaxNativeAmount(req: Request, res: Response) {
 
 function getSiblings(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([
-    [checkTraceId, req.headers],
+    [checkTraceIdFromConfig, req.headers],
     [checkGetSiblings, req.query],
   ])
 

@@ -1,6 +1,9 @@
+import BN from 'bn.js'
 import type { TransactionConfig } from 'web3-core'
-import type { EthereumContract } from './evm/EvmBackend'
-import type { TronContract } from './tron/TronBackend'
+import type { EthereumContract } from './evm/EvmContract'
+import type { TronContract } from './tron/TronContract'
+import { EstimationType } from '../gas-price'
+import type { Redis } from 'ioredis'
 
 export enum Network {
   Tron = 'tron',
@@ -20,6 +23,17 @@ interface EvmBackendConfig extends BaseBackendConfig {
   rpcSyncCheckInterval: number
   jsonRpcErrorCodes: number[]
   relayerTxRedundancy: boolean
+
+  gasPriceFallback: string
+  gasPriceUpdateInterval: number
+  gasPriceEstimationType: EstimationType
+  gasPriceSpeedType: string
+  gasPriceFactor: number
+  gasPriceMaxFeeLimit: BN | null
+  gasPriceBumpFactor: number
+  gasPriceSurplus: number
+
+  redis: Redis
 }
 
 interface TronBackendConfig extends BaseBackendConfig {}
@@ -42,29 +56,10 @@ export type TxDesc<N extends Network> = N extends Network.Tron
       shouldUpdateGasPrice?: boolean
     }
 
-// interface TronPrepareTxConfig
-// export type PrepareTxConfig<N extends Network> = N extends Network.Tron ? TronPrepareTxConfig : EvmPrepareTxConfig
-
 export interface EvmTx extends TransactionConfig {}
 export interface TronTx {
   tx: {}
 }
-// {
-//   result: { result: true },
-//   transaction: {
-//     visible: false,
-//     txID: '2e3cfe002928451caeddaa56740cf9cba12220e0246fe09f26d9ba9a7e4093b4',
-//     raw_data: {
-//       contract: [Array],
-//       ref_block_bytes: '6630',
-//       ref_block_hash: '046df9e75a1cc467',
-//       expiration: 1692285951000,
-//       fee_limit: 100000000,
-//       timestamp: 1692285893195
-//     },
-//     raw_data_hex: '0a0266302208046df9e75a1cc4674098b8e9a0a0315a8e01081f1289010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412540a1541c583bb73a1d811eee60eb1e078d35c555cbed8531215419d09bfe09180d54950a92606532526878d6f4f272224514b1520000000000000000000000000726dca7eeaadeef5ab7902c92a85ccced7bb022770cbf4e5a0a031900180c2d72f'
-//   }
-// }
 export type Tx<N extends Network> = N extends Network.Tron ? TronTx : EvmTx
 
 export interface SendTx<N extends Network> {

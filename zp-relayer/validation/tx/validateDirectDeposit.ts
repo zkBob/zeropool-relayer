@@ -4,6 +4,7 @@ import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { Helpers } from 'libzkbob-rs-node'
 import { contractCallRetry } from '@/utils/helpers'
 import { checkAssertion, checkScreener, TxValidationError } from './common'
+import config from '@/configs/baseConfig'
 
 const SNARK_SCALAR_FIELD = toBN('21888242871839275222246405745257275088548364400416034343698204186575808495617')
 
@@ -65,6 +66,11 @@ async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositCon
 export async function validateDirectDeposit(dd: DirectDeposit, directDepositContract: Contract) {
   await checkAssertion(() => checkDirectDepositPK(dd.zkAddress.pk))
   await checkAssertion(() => checkDirectDepositConsistency(dd, directDepositContract))
-  await checkAssertion(() => checkScreener(dd.sender))
-  await checkAssertion(() => checkScreener(dd.fallbackUser))
+
+  const screenerUrl = config.COMMON_SCREENER_URL
+  const screenerToken = config.COMMON_SCREENER_TOKEN
+  if (screenerUrl && screenerToken) {
+    await checkAssertion(() => checkScreener(dd.sender, screenerUrl, screenerToken))
+    await checkAssertion(() => checkScreener(dd.fallbackUser, screenerUrl, screenerToken))
+  }
 }

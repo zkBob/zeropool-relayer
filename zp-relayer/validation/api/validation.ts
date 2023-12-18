@@ -6,23 +6,16 @@ import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { TxType } from 'zp-memo-parser'
 import type { PoolTx } from '@/pool'
 import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
-import config from '@/configs/relayerConfig'
 import { logger } from '@/services/appLogger'
-import { Network } from '@/services/network'
-import type { TxData } from '@/txProcessor'
+import { TxDataMPC } from '../tx/validateTx'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
 ajv.addKeyword({
   keyword: 'isAddress',
-  validate:
-    config.RELAYER_NETWORK === Network.Ethereum
-      ? (schema: any, address: string) => {
-          return isAddress(address)
-        }
-      : (schema: any, address: string) => {
-          return TronWeb.isAddress(address)
-        },
+  validate: (schema: any, address: string) => {
+    return isAddress(address)
+  },
   errors: true,
 })
 
@@ -93,23 +86,11 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSignMPCSchema: JSONSchemaType<TxData> = {
+const AjvSignMPCSchema: JSONSchemaType<TxDataMPC> = {
   type: 'object',
   properties: {
     txProof: AjvProofSchema,
     treeProof: AjvProofSchema,
-    nullifier: AjvString,
-    outCommit: AjvString,
-    rootAfter: AjvString,
-    delta: {
-      type: 'object',
-      properties: {
-        transferIndex: AjvString,
-        energyAmount: AjvString,
-        tokenAmount: AjvString,
-      },
-      required: ['transferIndex', 'energyAmount', 'tokenAmount'],
-    },
     txType: {
       type: 'string',
       enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
@@ -117,7 +98,7 @@ const AjvSignMPCSchema: JSONSchemaType<TxData> = {
     memo: AjvString,
     depositSignature: AjvNullableString,
   },
-  required: ['txProof', 'treeProof', 'nullifier', 'outCommit', 'rootAfter', 'delta', 'txType', 'memo'],
+  required: ['txProof', 'treeProof', 'txType', 'memo'],
 }
 
 const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
@@ -184,7 +165,7 @@ const AjvGetSiblingsSchema: JSONSchemaType<{
 const AjvTraceIdSchema: JSONSchemaType<{ [HEADER_TRACE_ID]: string }> = {
   type: 'object',
   properties: { [HEADER_TRACE_ID]: AjvNullableString },
-  required: config.RELAYER_REQUIRE_TRACE_ID ? [HEADER_TRACE_ID] : [],
+  required: [HEADER_TRACE_ID],
 }
 
 function checkErrors<T>(schema: JSONSchemaType<T>) {
@@ -200,12 +181,17 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
   }
 }
 
-type ValidationFunction = ReturnType<typeof checkErrors>
+export type ValidationFunction = ReturnType<typeof checkErrors>
 
 export class ValidationError extends Error {
   constructor(public validationErrors: ReturnType<ValidationFunction>) {
     super()
   }
+}
+
+export function validateBatchWithTrace(req: any, validationSet: [ValidationFunction, any][]) {
+  validationSet.push([checkTraceId, req.headers])
+  return validateBatch(validationSet)
 }
 
 export function validateBatch(validationSet: [ValidationFunction, any][]) {
@@ -232,8 +218,8 @@ async function fetchSafe(url: string) {
   return r
 }
 
-export async function validateCountryIP(ip: string) {
-  if (config.RELAYER_BLOCKED_COUNTRIES.length === 0) return null
+export async function validateCountryIP(ip: string, blockedCountries: string[]) {
+  if (blockedCountries.length === 0) return null
 
   const apis = [
     fetchSafe(`https://ipapi.co/${ip}/country`).then(res => res.text()),
@@ -252,7 +238,7 @@ export async function validateCountryIP(ip: string) {
     ])
   })
 
-  if (config.RELAYER_BLOCKED_COUNTRIES.includes(country)) {
+  if (blockedCountries.includes(country)) {
     logger.warn('Restricted country', { ip, country })
     throw new ValidationError([
       {

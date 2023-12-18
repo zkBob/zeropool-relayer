@@ -1,4 +1,3 @@
-import config from '@/configs/baseConfig'
 import { logger } from '@/services/appLogger'
 import { HEADER_TRACE_ID } from '@/utils/constants'
 
@@ -27,22 +26,18 @@ export function checkSize(data: string, size: number) {
   return data.length === size
 }
 
-export async function checkScreener(address: string, traceId?: string) {
-  if (config.COMMON_SCREENER_TOKEN === null || config.COMMON_SCREENER_TOKEN === null) {
-    return null
-  }
-
+export async function checkScreener(address: string, screenerUrl: string, screenerToken: string, traceId?: string) {
   const ACC_VALIDATION_FAILED = 'Internal account validation failed'
 
   const headers: Record<string, string> = {
     'Content-type': 'application/json',
-    'Authorization': `Bearer ${config.COMMON_SCREENER_TOKEN}`,
+    'Authorization': `Bearer ${screenerToken}`,
   }
 
   if (traceId) headers[HEADER_TRACE_ID] = traceId
 
   try {
-    const rawResponse = await fetch(config.COMMON_SCREENER_URL as string, {
+    const rawResponse = await fetch(screenerUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({ address }),

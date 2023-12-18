@@ -1,43 +1,12 @@
 // @ts-ignore
 import TronWeb from 'tronweb'
 import { hexToBytes } from 'web3-utils'
-import type { INetworkBackend, NetworkBackend } from '../NetworkBackend'
-import { INetworkContract, Network, NetworkBackendConfig, TransactionManager } from '../types'
+import type { INetworkBackend } from '../NetworkBackend'
+import { Network, NetworkBackendConfig, TransactionManager } from '../types'
 import { TronTxManager } from './TronTxManager'
-import PoolAbi from '../../../abi/pool-abi.json'
-import TokenAbi from '../../../abi/token-abi.json'
-
-export class TronContract implements INetworkContract {
-  instance: any
-
-  constructor(tron: TronWeb, public abi: any[], address: string) {
-    this.instance = tron.contract(abi, address)
-  }
-
-  address(): string {
-    return this.instance.address
-  }
-
-  call(method: string, args: any[] = []): Promise<any> {
-    return this.instance[method](...args).call()
-  }
-
-  callRetry(method: string, args: any[] = []): Promise<any> {
-    return this.instance[method](...args).call()
-  }
-
-  async getEvents(eventName: string) {
-    const res = await this.instance._getEvents({
-      eventName,
-      size: 0,
-      onlyConfirmed: true,
-    })
-    return res.map((e: any) => ({
-      returnValues: e.result,
-      transactionHash: e.transaction,
-    }))
-  }
-}
+import PoolAbi from '@/abi/pool-abi.json'
+import TokenAbi from '@/abi/token-abi.json'
+import { TronContract } from './TronContract'
 
 export class TronBackend implements INetworkBackend<Network.Tron> {
   type: Network.Tron = Network.Tron

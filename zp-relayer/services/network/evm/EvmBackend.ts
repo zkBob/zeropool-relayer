@@ -1,46 +1,18 @@
 import Web3 from 'web3'
-import relayerConfig from '@/configs/relayerConfig'
-import type { Contract } from 'web3-eth-contract'
-import { AbiItem, toBN } from 'web3-utils'
+import { AbiItem } from 'web3-utils'
 import type { HttpProvider } from 'web3-core'
 import { RETRY_CONFIG } from '@/utils/constants'
 import { checkHTTPS } from '@/utils/helpers'
 import HttpListProvider from '../../providers/HttpListProvider'
 import { SafeEthLogsProvider } from '../../providers/SafeEthLogsProvider'
-import type { INetworkBackend, NetworkBackend } from '../NetworkBackend'
+import type { INetworkBackend } from '../NetworkBackend'
 import PoolAbi from '../../../abi/pool-abi.json'
 import TokenAbi from '../../../abi/token-abi.json'
-import { INetworkContract, Network, NetworkBackendConfig, TransactionManager } from '../types'
+import { Network, NetworkBackendConfig, TransactionManager } from '../types'
 import { EvmTxManager } from './EvmTxManager'
 import { EstimationType, GasPrice } from '@/services/gas-price'
 import RedundantHttpListProvider from '@/services/providers/RedundantHttpListProvider'
-
-export class EthereumContract implements INetworkContract {
-  instance: Contract
-
-  constructor(web3: Web3, public abi: any[], address: string) {
-    this.instance = new web3.eth.Contract(abi, address)
-  }
-
-  address(): string {
-    return this.instance.options.address
-  }
-
-  call(method: string, args: any[] = []): Promise<any> {
-    return this.instance.methods[method](...args).call()
-  }
-
-  callRetry(method: string, args: any[] = []): Promise<any> {
-    return this.instance.methods[method](...args).call()
-  }
-
-  getEvents(event: string) {
-    return this.instance.getPastEvents(event, {
-      fromBlock: 0,
-      toBlock: 'latest',
-    })
-  }
-}
+import { EthereumContract } from './EvmContract'
 
 export class EvmBackend implements INetworkBackend<Network.Ethereum> {
   type: Network.Ethereum = Network.Ethereum
@@ -73,19 +45,24 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
 
     this.gasPrice = new GasPrice(
       this.web3,
-      { gasPrice: relayerConfig.RELAYER_GAS_PRICE_FALLBACK },
-      relayerConfig.RELAYER_GAS_PRICE_UPDATE_INTERVAL,
-      relayerConfig.RELAYER_GAS_PRICE_ESTIMATION_TYPE,
+      { gasPrice: config.gasPriceFallback },
+      config.gasPriceUpdateInterval,
+      config.gasPriceEstimationType,
       {
-        speedType: relayerConfig.RELAYER_GAS_PRICE_SPEED_TYPE,
-        factor: relayerConfig.RELAYER_GAS_PRICE_FACTOR,
-        maxFeeLimit: relayerConfig.RELAYER_MAX_FEE_PER_GAS_LIMIT,
+        speedType: config.gasPriceSpeedType,
+        factor: config.gasPriceFactor,
+        maxFeeLimit: config.gasPriceMaxFeeLimit,
       }
     )
 
     this.pool = this.contract(PoolAbi as AbiItem[], config.poolAddress)
     this.token = this.contract(TokenAbi as AbiItem[], config.tokenAddress)
-    this.txManager = new EvmTxManager(this.web3Redundant, config.pk, this.gasPrice)
+    this.txManager = new EvmTxManager(this.web3Redundant, config.pk, this.gasPrice, {
+      gasPriceBumpFactor: config.gasPriceBumpFactor,
+      gasPriceMaxFeeLimit: config.gasPriceMaxFeeLimit,
+      gasPriceSurplus: config.gasPriceSurplus,
+      redis: config.redis,
+    })
   }
 
   async init() {

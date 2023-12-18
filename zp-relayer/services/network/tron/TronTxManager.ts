@@ -1,5 +1,5 @@
 import { sleep } from '@/utils/helpers'
-import { Network, SendTx, TransactionManager, Tx, TxDesc } from '../types'
+import { Network, SendTx, TransactionManager } from '../types'
 import { logger } from '@/services/appLogger'
 
 export class TronTxManager implements TransactionManager<Network.Tron> {

@@ -1,7 +1,7 @@
 import Contract from 'web3-eth-contract'
 import { AbiItem, toBN } from 'web3-utils'
 import type { TxType } from 'zp-memo-parser'
-import { DelegatedDepositsData, Proof } from 'libzkbob-rs-node'
+import { DelegatedDepositsData, SnarkProof } from 'libzkbob-rs-node'
 import type { PoolState } from './state/PoolState'
 import PoolAbi from './abi/pool-abi.json'
 import { logger } from './services/appLogger'
@@ -19,8 +19,8 @@ type Stringified<T> = {
   [P in keyof T]: string
 }
 export interface TxData {
-  txProof: Proof
-  treeProof: Proof
+  txProof: SnarkProof
+  treeProof: SnarkProof
   nullifier: string
   outCommit: string
   rootAfter: string
@@ -30,14 +30,14 @@ export interface TxData {
   depositSignature: string | null
 }
 
-export function buildTxData(txData: TxData) {
+export function buildTxData(txData: TxData, mpcSignatures: string[] = []) {
   const selector: string = PoolInstance.methods.transact().encodeABI()
 
   const { transferIndex, energyAmount, tokenAmount } = txData.delta
   logger.debug(`DELTA ${transferIndex} ${energyAmount} ${tokenAmount}`)
 
-  const txFlatProof = encodeProof(txData.txProof.proof)
-  const treeFlatProof = encodeProof(txData.treeProof.proof)
+  const txFlatProof = encodeProof(txData.txProof)
+  const treeFlatProof = encodeProof(txData.treeProof)
 
   const memoMessage = txData.memo
   const memoSize = numToHex(toBN(memoMessage.length).divn(2), 4)
@@ -60,6 +60,11 @@ export function buildTxData(txData: TxData) {
   if (txData.depositSignature) {
     const signature = truncateHexPrefix(txData.depositSignature)
     data.push(signature)
+  }
+
+  if (mpcSignatures.length > 0) {
+    data.push(numToHex(toBN(mpcSignatures.length), 2))
+    data.push(...mpcSignatures)
   }
 
   return data.join('')
@@ -102,12 +107,14 @@ export interface ProcessResult {
   rootAfter: string
   memo: string
   nullifier?: string
+  mpc: boolean
 }
 
 export async function buildTx(
   tx: WorkerTx<WorkerTxType.Normal>,
   treeProver: IProver<Circuit.Tree>,
-  state: PoolState
+  state: PoolState,
+  mpcGuards: [string, string][] | null
 ): Promise<ProcessResult> {
   const func = 'transact()'
   const { txType, txProof, rawMemo, depositSignature } = tx
@@ -119,12 +126,10 @@ export async function buildTx(
   const { treeProof, commitIndex } = await getTreeProof(state, outCommit, treeProver)
 
   const rootAfter = treeProof.inputs[1]
-  const data = buildTxData({
-    txProof,
-    treeProof,
-    nullifier: numToHex(toBN(nullifier)),
-    outCommit: numToHex(toBN(outCommit)),
-    rootAfter: numToHex(toBN(rootAfter)),
+
+  const txData: TxData = {
+    txProof: txProof.proof,
+    treeProof: treeProof.proof,
     delta: {
       transferIndex: numToHex(delta.transferIndex, TRANSFER_INDEX_SIZE),
       energyAmount: numToHex(delta.energyAmount, ENERGY_SIZE),
@@ -133,11 +138,34 @@ export async function buildTx(
     txType,
     memo: rawMemo,
     depositSignature,
-  })
+    nullifier: numToHex(toBN(nullifier)),
+    outCommit: numToHex(toBN(outCommit)),
+    rootAfter: numToHex(toBN(rootAfter)),
+  }
+
+  let mpc = false
+  const mpcSignatures = []
+  if (mpcGuards) {
+    for (const [, guardHttp] of mpcGuards) {
+      const rawRes = await fetch(guardHttp, {
+        headers: {
+          'Content-type': 'application/json',
+        },
+        method: 'POST',
+        body: JSON.stringify(txData),
+      })
+      const res = await rawRes.json()
+      const signature = truncateHexPrefix(res.signature)
+      mpcSignatures.push(signature)
+    }
+    mpc = true
+  }
+
+  const data = buildTxData(txData, mpcSignatures)
 
   const memo = truncateMemoTxPrefix(rawMemo, txType)
 
-  return { data, func, commitIndex, outCommit, rootAfter, nullifier, memo }
+  return { data, func, commitIndex, outCommit, rootAfter, nullifier, memo, mpc }
 }
 
 export async function buildDirectDeposits(
@@ -157,5 +185,5 @@ export async function buildDirectDeposits(
     .appendDirectDeposits(rootAfter, indices, outCommit, flattenProof(tx.txProof.proof), flattenProof(treeProof.proof))
     .encodeABI()
 
-  return { data, func, commitIndex, outCommit, rootAfter, memo: tx.memo }
+  return { data, func, commitIndex, outCommit, rootAfter, memo: tx.memo, mpc: false }
 }

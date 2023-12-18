@@ -1,4 +1,5 @@
 import Web3 from 'web3'
+import BN from 'bn.js'
 import { isSameTransactionError } from '@/utils/web3Errors'
 import {
   addExtraGasPrice,
@@ -9,14 +10,21 @@ import {
   getGasPriceValue,
 } from '@/services/gas-price'
 import { getChainId, getNonce } from '@/utils/web3'
-import config from '@/configs/relayerConfig'
 import { Mutex } from 'async-mutex'
 import { logger } from '@/services/appLogger'
 import { readNonce, updateNonce } from '@/utils/redisFields'
-import type { Network, SendTx, TransactionManager, Tx, TxDesc } from '@/services/network/types'
+import type { Network, SendTx, TransactionManager, TxDesc } from '@/services/network/types'
 import { Logger } from 'winston'
 import { sleep } from '@/utils/helpers'
 import type { TransactionReceipt, TransactionConfig } from 'web3-core'
+import type { Redis } from 'ioredis'
+
+export interface EvmTxManagerConfig {
+  redis: Redis
+  gasPriceBumpFactor: number
+  gasPriceSurplus: number
+  gasPriceMaxFeeLimit: BN | null
+}
 
 export class EvmTxManager implements TransactionManager<Network.Ethereum> {
   txQueue: SendTx<Network.Ethereum>[] = []
@@ -25,14 +33,21 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
   chainId!: number
   mutex: Mutex
   logger!: Logger
+  address: string
 
-  constructor(private web3: Web3, private pk: string, private gasPrice: GasPrice<EstimationType>) {
+  constructor(
+    private web3: Web3,
+    private pk: string,
+    private gasPrice: GasPrice<EstimationType>,
+    private config: EvmTxManagerConfig
+  ) {
     this.mutex = new Mutex()
+    this.address = new Web3().eth.accounts.privateKeyToAccount(pk).address
   }
 
   async init() {
-    this.nonce = await readNonce(this.web3)(true)
-    await updateNonce(this.nonce)
+    this.nonce = await readNonce(this.config.redis, this.web3, this.address)(true)
+    await updateNonce(this.config.redis, this.nonce)
     this.chainId = await getChainId(this.web3)
   }
 
@@ -42,7 +57,7 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
   ): Promise<[GasPriceValue | null, GasPriceValue]> {
     const oldGasPrice = getGasPriceValue(txConfig)
     if (oldGasPrice) {
-      const oldGasPriceWithExtra = addExtraGasPrice(oldGasPrice, config.RELAYER_MIN_GAS_PRICE_BUMP_FACTOR, null)
+      const oldGasPriceWithExtra = addExtraGasPrice(oldGasPrice, this.config.gasPriceBumpFactor, null)
       return [oldGasPrice, chooseGasPriceOptions(oldGasPriceWithExtra, newGasPrice)]
     } else {
       return [null, newGasPrice]
@@ -58,8 +73,8 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
       const gasPriceValue = shouldUpdateGasPrice ? await this.gasPrice.fetchOnce() : this.gasPrice.getPrice()
       const newGasPriceWithExtra = addExtraGasPrice(
         gasPriceValue,
-        config.RELAYER_GAS_PRICE_SURPLUS,
-        config.RELAYER_MAX_FEE_PER_GAS_LIMIT
+        this.config.gasPriceSurplus,
+        this.config.gasPriceMaxFeeLimit
       )
 
       let updatedTxConfig: TransactionConfig = {}
@@ -77,7 +92,7 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
         newGasPrice = newGasPriceWithExtra
         updatedTxConfig.nonce = this.nonce++
         updatedTxConfig.chainId = this.chainId
-        await updateNonce(this.nonce)
+        await updateNonce(this.config.redis, this.nonce)
       }
 
       updatedTxConfig = {
@@ -100,7 +115,7 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
 
   async confirmTx(txHashes: string[], txNonce: number): Promise<TransactionReceipt | null> {
     // Transaction was not mined
-    const actualNonce = await getNonce(this.web3, config.RELAYER_ADDRESS)
+    const actualNonce = await getNonce(this.web3, this.address)
     logger.info('Nonce value from RPC: %d; tx nonce: %d', actualNonce, txNonce)
     if (actualNonce <= txNonce) {
       return null

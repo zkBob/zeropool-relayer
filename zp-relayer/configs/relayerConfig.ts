@@ -3,7 +3,7 @@ import { toBN } from 'web3-utils'
 import baseConfig, { zBooleanString, zNullishString } from './baseConfig'
 import { FeeManagerType } from '@/services/fee'
 import { PriceFeedType } from '@/services/price-feed'
-import { EstimationType, GasPriceKey } from '@/services/gas-price'
+import { EstimationType } from '@/services/gas-price'
 import { ProverType } from '@/prover'
 import { countryCodes } from '@/utils/countryCodes'
 import { logger } from '@/services/appLogger'
@@ -91,6 +91,11 @@ z.discriminatedUnion('RELAYER_GAS_PRICE_ESTIMATION_TYPE', [
   }),
 ])
 
+const zGuards = z.object({
+  RELAYER_GUARDS_CONFIG_PATH: z.string().optional(),
+  RELAYER_MPC_GUARD_CONTRACT: z.string().optional(),
+})
+
 const zSchema = z
   .object({
     RELAYER_NETWORK: z.nativeEnum(Network),
@@ -148,6 +153,7 @@ const zSchema = z
   .and(zBaseTxGas)
   .and(zFeeManager)
   .and(zGasPrice)
+  .and(zGuards)
 
 const config = zSchema.parse(process.env)
 

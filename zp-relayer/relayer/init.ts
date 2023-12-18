@@ -57,6 +57,16 @@ export async function init() {
       rpcSyncCheckInterval: config.COMMON_RPC_SYNC_STATE_CHECK_INTERVAL,
       jsonRpcErrorCodes: config.COMMON_JSONRPC_ERROR_CODES,
       relayerTxRedundancy: config.RELAYER_TX_REDUNDANCY,
+
+      gasPriceFallback: config.RELAYER_GAS_PRICE_FALLBACK,
+      gasPriceUpdateInterval: config.RELAYER_GAS_PRICE_UPDATE_INTERVAL,
+      gasPriceEstimationType: config.RELAYER_GAS_PRICE_ESTIMATION_TYPE,
+      gasPriceSpeedType: config.RELAYER_GAS_PRICE_SPEED_TYPE,
+      gasPriceFactor: config.RELAYER_GAS_PRICE_FACTOR,
+      gasPriceMaxFeeLimit: config.RELAYER_MAX_FEE_PER_GAS_LIMIT,
+      gasPriceBumpFactor: config.RELAYER_MIN_GAS_PRICE_BUMP_FACTOR,
+      gasPriceSurplus: config.RELAYER_GAS_PRICE_SURPLUS,
+      redis,
     })
   } else if (config.RELAYER_NETWORK === Network.Tron) {
     networkBackend = new TronBackend({
