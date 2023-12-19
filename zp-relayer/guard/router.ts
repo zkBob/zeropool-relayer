@@ -1,13 +1,13 @@
 // @ts-ignore
 import cors from 'cors'
-import { Signer } from 'ethers'
+import { Signer, keccak256, getBytes } from 'ethers'
 import { toBN } from 'web3-utils'
 import express, { NextFunction, Request, Response } from 'express'
 import { checkSignMPCSchema, validateBatch } from '../validation/api/validation'
 import { logger } from '../services/appLogger'
 import { TxDataMPC, validateTxMPC } from '../validation/tx/validateTx'
 import { TxData, buildTxData } from '@/txProcessor'
-import { numToHex, truncateHexPrefix } from '@/utils/helpers'
+import { numToHex, packSignature } from '@/utils/helpers'
 import { VK } from 'libzkbob-rs-node'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import { ENERGY_SIZE, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
@@ -52,13 +52,13 @@ export function createRouter({ signer, poolContract }: RouterConfig) {
       const message = req.body as TxDataMPC
 
       // Validate
-      const vk: VK = require('../params/tree_verification_key.json') // TODO: config vk
+      const txVK: VK = require(config.GUARD_TX_VK_PATH)
+      const treeVK: VK = require(config.GUARD_TREE_VK_PATH)
 
-      const denominator = toBN(await poolContract.call('denominator'))
       const poolId = toBN(await poolContract.call('pool_id'))
 
       try {
-        await validateTxMPC(message, config.GUARD_RELAYER_ADDRESS, poolContract, poolId, denominator, vk, vk)
+        await validateTxMPC(message, poolId, treeVK, txVK)
       } catch (e) {
         console.log('Validation error', e)
         throw new Error('Invalid transaction')
@@ -69,6 +69,7 @@ export function createRouter({ signer, poolContract }: RouterConfig) {
       const nullifier = getTxProofField(txProof, 'nullifier')
       const outCommit = getTxProofField(txProof, 'out_commit')
       const delta = parseDelta(getTxProofField(txProof, 'delta'))
+
       const rootAfter = treeProof.inputs[1]
 
       const txData: TxData = {
@@ -84,11 +85,19 @@ export function createRouter({ signer, poolContract }: RouterConfig) {
         },
         txType: message.txType,
         memo: message.memo,
-        depositSignature: null,
+        depositSignature: message.depositSignature,
       }
-      const calldata = truncateHexPrefix(buildTxData(txData))
-      const signature = await signer.signMessage(calldata)
 
+      const transferRoot = numToHex(toBN(getTxProofField(txProof, 'root')))
+      const currentRoot = numToHex(toBN(treeProof.inputs[0]))
+
+      let calldata = buildTxData(txData)
+      calldata += transferRoot + currentRoot + numToHex(poolId)
+
+      const digest = getBytes(keccak256(calldata))
+      const signature = packSignature(await signer.signMessage(digest))
+
+      console.log('Signed', signature)
       res.json({ signature })
     })
   )

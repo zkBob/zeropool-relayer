@@ -12,6 +12,8 @@ const schema = z.object({
   GUARD_TOKEN_ADDRESS: z.string(),
   COMMON_REQUIRE_RPC_HTTPS: zBooleanString().default('false'),
   COMMON_POOL_ADDRESS: z.string(),
+  GUARD_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
+  GUARD_TREE_VK_PATH: z.string().default('../params/tree_verification_key.json'),
 })
 
 const config = schema.parse(process.env)

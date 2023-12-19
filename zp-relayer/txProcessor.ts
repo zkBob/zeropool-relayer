@@ -10,6 +10,7 @@ import { numToHex, flattenProof, truncateHexPrefix, encodeProof, truncateMemoTxP
 import { Delta, getTxProofField, parseDelta } from './utils/proofInputs'
 import type { DirectDeposit, WorkerTx, WorkerTxType } from './queue/poolTxQueue'
 import type { Circuit, IProver } from './prover/IProver'
+import { TxDataMPC } from './validation/tx/validateTx'
 
 // @ts-ignore
 // Used only to get `transact` method selector
@@ -146,18 +147,28 @@ export async function buildTx(
   let mpc = false
   const mpcSignatures = []
   if (mpcGuards) {
+    const txDataMPC: TxDataMPC = {
+      txProof,
+      treeProof,
+      memo: rawMemo,
+      txType,
+      depositSignature,
+    }
+    logger.debug('Collecting signatures from MPC guards...')
     for (const [, guardHttp] of mpcGuards) {
       const rawRes = await fetch(guardHttp, {
         headers: {
           'Content-type': 'application/json',
         },
         method: 'POST',
-        body: JSON.stringify(txData),
+        body: JSON.stringify(txDataMPC),
       })
       const res = await rawRes.json()
       const signature = truncateHexPrefix(res.signature)
       mpcSignatures.push(signature)
     }
+    logger.debug('Collected %d signatures', mpcSignatures.length)
+    console.log(mpcSignatures)
     mpc = true
   }
 

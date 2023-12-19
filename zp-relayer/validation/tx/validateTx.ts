@@ -14,7 +14,7 @@ import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondi
 import type { PermitRecover } from '@/utils/permit/types'
 import type { FeeManager } from '@/services/fee'
 import type { NetworkBackend } from '@/services/network/NetworkBackend'
-import type { Network, NetworkContract } from '@/services/network/types'
+import type { Network } from '@/services/network/types'
 
 const ZERO = toBN(0)
 
@@ -326,10 +326,7 @@ export type TxDataMPC = {
 
 export async function validateTxMPC(
   { memo: rawMemo, txType, txProof, depositSignature, treeProof }: TxDataMPC,
-  relayerAddress: string,
-  poolContract: NetworkContract<Network>,
   poolId: BN,
-  denominator: BN,
   treeVK: VK,
   txVK: VK
 ) {
@@ -338,8 +335,6 @@ export async function validateTxMPC(
   const buf = Buffer.from(rawMemo, 'hex')
   const txData = getTxData(buf, txType)
 
-  const root = getTxProofField(txProof, 'root')
-  const nullifier = getTxProofField(txProof, 'nullifier')
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
   const fee = toBN(txData.fee)
 
@@ -351,22 +346,6 @@ export async function validateTxMPC(
   )
 
   await checkAssertion(() => checkPoolId(delta.poolId, poolId))
-  await checkAssertion(async () => {
-    const res = await poolContract.callRetry('roots', [delta.transferIndex])
-    if (res !== root) {
-      return new TxValidationError(`Incorrect root at index ${delta.transferIndex}: given ${root}, expected ${res}`)
-    }
-    return null
-  })
-  await checkAssertion(async () => {
-    const res = await poolContract.callRetry('nullifiers', [nullifier])
-    if (res !== '0') {
-      return new TxValidationError(`DoubleSpend detected in contract`)
-    }
-    return null
-  })
-  // TODO: handle index
-  // await checkAssertion(() => checkTransferIndex(toBN(pool.optimisticState.getNextIndex()), delta.transferIndex))
   await checkAssertion(() => checkProof(txProof, (p, i) => Proof.verify(txVK, p, i)))
   await checkAssertion(() => checkProof(treeProof, (p, i) => Proof.verify(treeVK, p, i)))
 
@@ -374,39 +353,14 @@ export async function validateTxMPC(
   const tokenAmountWithFee = tokenAmount.add(fee)
   const energyAmount = delta.energyAmount
 
-  let userAddress: string
-
   if (txType === TxType.WITHDRAWAL) {
     checkCondition(tokenAmountWithFee.lte(ZERO) && energyAmount.lte(ZERO), 'Incorrect withdraw amounts')
-
-    const { receiver } = txData as TxData<TxType.WITHDRAWAL>
-    userAddress = bytesToHex(Array.from(receiver))
-    logger.info('Withdraw address: %s', userAddress)
-    await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
   } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
     checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
     checkCondition(depositSignature !== null, 'Deposit signature is required')
-
-    const requiredTokenAmount = applyDenominator(tokenAmountWithFee, denominator)
-    // userAddress = await getRecoveredAddress(
-    //   txType,
-    //   nullifier,
-    //   txData,
-    //   pool.network,
-    //   requiredTokenAmount,
-    //   depositSignature as string,
-    //   pool.permitRecover
-    // )
-    // logger.info('Deposit address: %s', userAddress)
-    // TODO check for approve in case of deposit
-    // await checkAssertion(() => checkDepositEnoughBalance(pool.network, userAddress, requiredTokenAmount))
   } else if (txType === TxType.TRANSFER) {
-    userAddress = relayerAddress
     checkCondition(tokenAmountWithFee.eq(ZERO) && energyAmount.eq(ZERO), 'Incorrect transfer amounts')
   } else {
     throw new TxValidationError('Unsupported TxType')
   }
-
-  // const limits = await pool.getLimitsFor(userAddress)
-  // await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
 }

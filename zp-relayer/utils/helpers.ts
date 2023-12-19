@@ -55,6 +55,26 @@ export function numToHex(num: BN, pad = 64) {
   return padLeft(hex, pad)
 }
 
+export function packSignature(signature: string): string {
+  signature = truncateHexPrefix(signature)
+
+  if (signature.length > 128) {
+    let v = signature.slice(128, 130)
+    if (v == '1c') {
+      return `${signature.slice(0, 64)}${(parseInt(signature[64], 16) | 8).toString(16)}${signature.slice(65, 128)}`
+    } else if (v != '1b') {
+      throw 'invalid signature: v should be 27 or 28'
+    }
+
+    return signature.slice(0, 128)
+  } else if (signature.length < 128) {
+    throw 'invalid signature: it should consist at least 64 bytes (128 chars)'
+  }
+
+  return signature
+}
+
+
 export function unpackSignature(packedSign: string) {
   if (packedSign.length === 130) {
     return '0x' + packedSign
