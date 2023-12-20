@@ -90,14 +90,16 @@ export function createRouter({ poolContract }: RouterConfig) {
 
       const transferRoot = numToHex(toBN(getTxProofField(txProof, 'root')))
       const currentRoot = numToHex(toBN(treeProof.inputs[0]))
+      logger.debug(`Using transferRoot: ${transferRoot}; Current root: ${currentRoot}; PoolId ${poolId}`)
 
       let calldata = buildTxData(txData)
       calldata += transferRoot + currentRoot + numToHex(poolId)
 
+      logger.debug(`Signing ${calldata}`)
       const digest = getBytes(keccak256(calldata))
       const signature = packSignature(await TronWeb.Trx.signMessageV2(digest, config.GUARD_ADDRESS_PRIVATE_KEY))
 
-      logger.info('Signed', signature)
+      logger.info(`Signed ${signature}}`)
       res.json({ signature })
     })
   )
