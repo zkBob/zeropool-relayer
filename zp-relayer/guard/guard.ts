@@ -6,8 +6,8 @@ import config from '@/configs/guardConfig'
 
 const app = express()
 
-init().then(({ signer, poolContract }) => {
-  app.use(createRouter({ signer, poolContract }))
+init().then(({ poolContract }) => {
+  app.use(createRouter({ poolContract }))
   const PORT = config.GUARD_PORT
   app.listen(PORT, () => logger.info(`Started guard on port ${PORT}`))
 })

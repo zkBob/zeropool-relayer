@@ -1,6 +1,7 @@
 // @ts-ignore
+import TronWeb from 'tronweb'
 import cors from 'cors'
-import { Signer, keccak256, getBytes } from 'ethers'
+import { keccak256, getBytes } from 'ethers'
 import { toBN } from 'web3-utils'
 import express, { NextFunction, Request, Response } from 'express'
 import { checkSignMPCSchema, validateBatch } from '../validation/api/validation'
@@ -25,11 +26,10 @@ function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Prom
 }
 
 interface RouterConfig {
-  signer: Signer
   poolContract: NetworkContract<Network>
 }
 
-export function createRouter({ signer, poolContract }: RouterConfig) {
+export function createRouter({ poolContract }: RouterConfig) {
   const router = express.Router()
 
   router.use(cors())
@@ -60,7 +60,7 @@ export function createRouter({ signer, poolContract }: RouterConfig) {
       try {
         await validateTxMPC(message, poolId, treeVK, txVK)
       } catch (e) {
-        console.log('Validation error', e)
+        logger.error('Validation error', e)
         throw new Error('Invalid transaction')
       }
 
@@ -95,9 +95,9 @@ export function createRouter({ signer, poolContract }: RouterConfig) {
       calldata += transferRoot + currentRoot + numToHex(poolId)
 
       const digest = getBytes(keccak256(calldata))
-      const signature = packSignature(await signer.signMessage(digest))
+      const signature = packSignature(await TronWeb.Trx.signMessageV2(digest, config.GUARD_ADDRESS_PRIVATE_KEY))
 
-      console.log('Signed', signature)
+      logger.info('Signed', signature)
       res.json({ signature })
     })
   )

@@ -74,7 +74,6 @@ export function packSignature(signature: string): string {
   return signature
 }
 
-
 export function unpackSignature(packedSign: string) {
   if (packedSign.length === 130) {
     return '0x' + packedSign
