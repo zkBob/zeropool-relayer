@@ -35,14 +35,21 @@ export class TronTxManager implements TransactionManager<Network.Tron> {
       const txObject = await this.tronWeb.transactionBuilder.triggerSmartContract(txDesc.to, txDesc.func, options, [])
       const signedTx = await this.tronWeb.trx.sign(txObject.transaction, this.pk)
 
-      let info
+      let info = null
       const res = await this.tronWeb.trx.sendRawTransaction(signedTx)
       const txHash = res.transaction.txID
       await onSend(txHash)
 
       while (1) {
-        await sleep(1000)
-        info = await this.confirmTx(txHash)
+        await sleep(5000)
+
+        try {
+          info = await this.confirmTx(txHash)
+        } catch (e) {
+          logger.error('Failed to fetch transaction info, waiting...:', e)
+          continue
+        }
+
         if (info === null) {
           logger.info('Tx not included, waiting...')
           continue
