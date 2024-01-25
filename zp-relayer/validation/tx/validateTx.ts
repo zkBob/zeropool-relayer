@@ -9,7 +9,7 @@ import type { Limits, Pool } from '@/pool'
 import type { NullifierSet } from '@/state/nullifierSet'
 import { web3 } from '@/services/web3'
 import { applyDenominator, contractCallRetry, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
-import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1, MOCK_CALLDATA } from '@/utils/constants'
+import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1, MESSAGE_PREFIX_COMMON_V2, MOCK_CALLDATA } from '@/utils/constants'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
 import type { PoolState } from '@/state/PoolState'
@@ -189,7 +189,7 @@ function checkPoolId(deltaPoolId: BN, contractPoolId: BN) {
 
 function checkMemoPrefix(memo: string, txType: TxType) {
   const numItemsSuffix = truncateMemoTxPrefix(memo, txType).substring(4, 8)
-  if (numItemsSuffix === MESSAGE_PREFIX_COMMON_V1) {
+  if (numItemsSuffix === MESSAGE_PREFIX_COMMON_V1 || numItemsSuffix === MESSAGE_PREFIX_COMMON_V2) {
     return null
   }
   return new TxValidationError(`Memo prefix is incorrect: ${numItemsSuffix}`)
