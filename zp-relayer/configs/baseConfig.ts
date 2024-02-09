@@ -1,17 +1,9 @@
 import { z } from 'zod'
-
-export const zBooleanString = () => z.enum(['true', 'false']).transform(value => value === 'true')
-export const zNullishString = () =>
-  z
-    .string()
-    .optional()
-    .transform(x => x ?? null)
+import { zBooleanString, zNullishString } from './common/utils'
 
 const schema = z.object({
   COMMON_POOL_ADDRESS: z.string(),
   COMMON_START_BLOCK: z.coerce.number().default(0),
-  COMMON_COLORIZE_LOGS: zBooleanString().default('false'),
-  COMMON_LOG_LEVEL: z.string().default('debug'),
   COMMON_REDIS_URL: z.string(),
   COMMON_RPC_URL: z.string().transform(us => us.split(' ').filter(url => url.length > 0)),
   COMMON_REQUIRE_RPC_HTTPS: zBooleanString().default('false'),

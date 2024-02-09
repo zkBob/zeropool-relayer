@@ -1,7 +1,7 @@
 import { logger } from '@/services/appLogger'
-import { getNonce } from './web3'
-import type Web3 from 'web3'
 import type { Redis } from 'ioredis'
+import type Web3 from 'web3'
+import { getNonce } from './web3'
 
 export enum RelayerKeys {
   NONCE = `relayer:nonce`,

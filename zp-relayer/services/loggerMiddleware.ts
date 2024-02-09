@@ -1,6 +1,6 @@
-import { format, transports } from 'winston'
-import expressWinston from 'express-winston'
 import config from '@/configs/relayerConfig'
+import expressWinston from 'express-winston'
+import { format, transports } from 'winston'
 import { logger } from './appLogger'
 
 export function createPersistentLoggerMiddleware(filename: string = 'zp.log') {

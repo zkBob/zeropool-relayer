@@ -1,6 +1,6 @@
-import type { HttpProvider } from 'web3-core'
 import type BN from 'bn.js'
 import Redis from 'ioredis'
+import type { HttpProvider } from 'web3-core'
 import { toBN } from 'web3-utils'
 import { web3 } from './web3'
 

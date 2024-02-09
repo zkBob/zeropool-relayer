@@ -1,5 +1,5 @@
 import type BN from 'bn.js'
-import { FeeManager, FeeEstimate, IFeeManagerConfig, FeeOptions } from './FeeManager'
+import { FeeEstimate, FeeManager, FeeOptions, IFeeManagerConfig } from './FeeManager'
 
 export class StaticFeeManager extends FeeManager {
   constructor(config: IFeeManagerConfig, private readonly staticFee: BN) {

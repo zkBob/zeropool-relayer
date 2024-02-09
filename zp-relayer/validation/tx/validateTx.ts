@@ -1,20 +1,20 @@
-import BN from 'bn.js'
-import { toBN, toChecksumAddress, bytesToHex } from 'web3-utils'
-import { TxType, TxData, getTxData } from 'zp-memo-parser'
-import { Proof, SnarkProof, VK } from 'libzkbob-rs-node'
-import { logger } from '@/services/appLogger'
 import type { Limits, Pool } from '@/pool'
-import type { NullifierSet } from '@/state/nullifierSet'
-import { applyDenominator, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
-import { ZERO_ADDRESS, MESSAGE_PREFIX_COMMON_V1, MOCK_CALLDATA } from '@/utils/constants'
-import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import type { TxPayload } from '@/queue/poolTxQueue'
-import type { PoolState } from '@/state/PoolState'
-import { checkAssertion, TxValidationError, checkSize, checkScreener, checkCondition } from './common'
-import type { PermitRecover } from '@/utils/permit/types'
+import { logger } from '@/services/appLogger'
 import type { FeeManager } from '@/services/fee'
 import type { NetworkBackend } from '@/services/network/NetworkBackend'
 import type { Network } from '@/services/network/types'
+import type { NullifierSet } from '@/state/nullifierSet'
+import type { PoolState } from '@/state/PoolState'
+import { MESSAGE_PREFIX_COMMON_V1, MOCK_CALLDATA, ZERO_ADDRESS } from '@/utils/constants'
+import { applyDenominator, numToHex, truncateMemoTxPrefix, unpackSignature } from '@/utils/helpers'
+import type { PermitRecover } from '@/utils/permit/types'
+import { getTxProofField, parseDelta } from '@/utils/proofInputs'
+import BN from 'bn.js'
+import { Proof, SnarkProof, VK } from 'libzkbob-rs-node'
+import { bytesToHex, toBN, toChecksumAddress } from 'web3-utils'
+import { getTxData, TxData, TxType } from 'zp-memo-parser'
+import { checkAssertion, checkCondition, checkScreener, checkSize, TxValidationError } from './common'
 
 const ZERO = toBN(0)
 
@@ -224,7 +224,7 @@ export async function validateTx(
   const root = getTxProofField(txProof, 'root')
   const nullifier = getTxProofField(txProof, 'nullifier')
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
-  const fee = toBN(txData.fee)
+  const fee = toBN(txData.transactFee)
 
   logger.info(
     'Delta tokens: %s, Energy tokens: %s, Fee: %s',
@@ -336,7 +336,7 @@ export async function validateTxMPC(
   const txData = getTxData(buf, txType)
 
   const delta = parseDelta(getTxProofField(txProof, 'delta'))
-  const fee = toBN(txData.fee)
+  const fee = toBN(txData.transactFee)
 
   logger.info(
     'Delta tokens: %s, Energy tokens: %s, Fee: %s',

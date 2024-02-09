@@ -1,7 +1,7 @@
-import { logger } from '@/services/appLogger'
-import { redis } from '@/services/redisClient'
 import config from '@/configs/baseConfig'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
+import { logger } from '@/services/appLogger'
+import { redis } from '@/services/redisClient'
 
 const serviceKey = 'direct-deposit'
 const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`

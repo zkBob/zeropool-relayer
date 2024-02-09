@@ -1,21 +1,25 @@
+import { GasPriceConfig } from '@/configs/common/gasPriceConfig'
+import { TxManagerConfig } from '@/configs/common/txManagerConfig'
+import { RelayPool } from '@/pool/RelayPool'
+import { GasPrice } from '@/services/gas-price'
+import { EvmTxManager } from '@/services/network/evm/EvmTxManager'
+import { createSentTxWorker } from '@/workers/sentTxWorker'
 import { Mutex } from 'async-mutex'
 import { Params } from 'libzkbob-rs-node'
-import { Pool } from '../pool'
 import config from '../configs/relayerConfig'
-import { createPoolTxWorker } from '../workers/poolTxWorker'
-import { createDirectDepositWorker } from '../workers/directDepositWorker'
-import { redis } from '../services/redisClient'
-import { validateTx } from '../validation/tx/validateTx'
 import { Circuit, IProver, LocalProver, ProverType, RemoteProver } from '../prover'
-import { FeeManagerType, FeeManager, StaticFeeManager, DynamicFeeManager, OptimismFeeManager } from '../services/fee'
-import type { IPriceFeed } from '../services/price-feed/IPriceFeed'
-import type { IWorkerBaseConfig } from '../workers/workerTypes'
+import { DynamicFeeManager, FeeManager, FeeManagerType, OptimismFeeManager, StaticFeeManager } from '../services/fee'
+import { EvmBackend, isEthereum, Network, NetworkBackend, TransactionManager } from '../services/network'
 import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from '../services/price-feed'
-import { Network, TronBackend, EvmBackend, NetworkBackend, isEthereum } from '../services/network'
+import type { IPriceFeed } from '../services/price-feed/IPriceFeed'
+import { redis } from '../services/redisClient'
+import { createPoolTxWorker } from '../workers/poolTxWorker'
+import type { IWorkerBaseConfig } from '../workers/workerTypes'
 
 function buildProver<T extends Circuit>(circuit: T, type: ProverType, path: string): IProver<T> {
   switch (type) {
     case ProverType.Local: {
+      console.log(path)
       const params = Params.fromFile(path, config.RELAYER_PRECOMPUTE_PARAMS)
       return new LocalProver(circuit, params)
     }
@@ -41,44 +45,60 @@ function buildPriceFeed(network: NetworkBackend<Network>): IPriceFeed {
   }
 }
 
-export async function init() {
+function initNetwork(): [NetworkBackend<Network>, TransactionManager<any>] {
   let networkBackend: NetworkBackend<Network>
+  let txManager: TransactionManager<any>
   const baseConfig = {
     poolAddress: config.COMMON_POOL_ADDRESS,
     tokenAddress: config.RELAYER_TOKEN_ADDRESS,
-    pk: config.RELAYER_ADDRESS_PRIVATE_KEY,
     rpcUrls: config.COMMON_RPC_URL,
     requireHTTPS: config.COMMON_REQUIRE_RPC_HTTPS,
   }
   if (config.RELAYER_NETWORK === Network.Ethereum) {
-    networkBackend = new EvmBackend({
+    const evmBackend = new EvmBackend({
       ...baseConfig,
       rpcRequestTimeout: config.COMMON_RPC_REQUEST_TIMEOUT,
       rpcSyncCheckInterval: config.COMMON_RPC_SYNC_STATE_CHECK_INTERVAL,
       jsonRpcErrorCodes: config.COMMON_JSONRPC_ERROR_CODES,
-      relayerTxRedundancy: config.RELAYER_TX_REDUNDANCY,
-
-      gasPriceFallback: config.RELAYER_GAS_PRICE_FALLBACK,
-      gasPriceUpdateInterval: config.RELAYER_GAS_PRICE_UPDATE_INTERVAL,
-      gasPriceEstimationType: config.RELAYER_GAS_PRICE_ESTIMATION_TYPE,
-      gasPriceSpeedType: config.RELAYER_GAS_PRICE_SPEED_TYPE,
-      gasPriceFactor: config.RELAYER_GAS_PRICE_FACTOR,
-      gasPriceMaxFeeLimit: config.RELAYER_MAX_FEE_PER_GAS_LIMIT,
-      gasPriceBumpFactor: config.RELAYER_MIN_GAS_PRICE_BUMP_FACTOR,
-      gasPriceSurplus: config.RELAYER_GAS_PRICE_SURPLUS,
+      withRedundantProvider: config.RELAYER_TX_REDUNDANCY,
+    })
+    const gasPriceConfig = config.gasPrice as GasPriceConfig<Network.Ethereum>
+    const gasPrice = new GasPrice(
+      evmBackend.web3,
+      { gasPrice: gasPriceConfig.GAS_PRICE_FALLBACK },
+      gasPriceConfig.GAS_PRICE_UPDATE_INTERVAL,
+      gasPriceConfig.GAS_PRICE_ESTIMATION_TYPE,
+      {
+        speedType: gasPriceConfig.GAS_PRICE_SPEED_TYPE,
+        factor: gasPriceConfig.GAS_PRICE_FACTOR,
+        maxFeeLimit: gasPriceConfig.MAX_FEE_PER_GAS_LIMIT,
+      }
+    )
+    const txManagerConfig = config.txManager as TxManagerConfig<Network.Ethereum>
+    txManager = new EvmTxManager(evmBackend.web3Redundant, txManagerConfig.TX_PRIVATE_KEY, gasPrice, {
       redis,
+      gasPriceBumpFactor: txManagerConfig.TX_MIN_GAS_PRICE_BUMP_FACTOR,
+      gasPriceSurplus: txManagerConfig.TX_GAS_PRICE_SURPLUS,
+      gasPriceMaxFeeLimit: txManagerConfig.TX_MAX_FEE_PER_GAS_LIMIT,
     })
+    networkBackend = evmBackend
   } else if (config.RELAYER_NETWORK === Network.Tron) {
-    networkBackend = new TronBackend({
-      ...baseConfig,
-    })
+    throw new Error('Unsupported network backend')
   } else {
     throw new Error('Unsupported network backend')
   }
-  await networkBackend.init()
+  return [networkBackend, txManager]
+}
 
-  const pool = new Pool(networkBackend)
-  await pool.init()
+export async function init() {
+  const [networkBackend, txManager] = initNetwork()
+  const pool = new RelayPool(networkBackend, {
+    statePath: config.RELAYER_STATE_DIR_PATH,
+    txVkPath: config.RELAYER_TX_VK_PATH,
+    eventsBatchSize: config.COMMON_EVENTS_PROCESSING_BATCH_SIZE,
+  })
+
+  await Promise.all([txManager.init(), networkBackend.init(), pool.init()])
 
   const mutex = new Mutex()
 
@@ -86,18 +106,6 @@ export async function init() {
     pool,
     redis,
   }
-
-  const treeProver = buildProver(
-    Circuit.Tree,
-    config.RELAYER_TREE_PROVER_TYPE,
-    config.RELAYER_TREE_UPDATE_PARAMS_PATH as string
-  )
-
-  const directDepositProver = buildProver(
-    Circuit.DirectDeposit,
-    config.RELAYER_DD_PROVER_TYPE,
-    config.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH as string
-  )
 
   const priceFeed = buildPriceFeed(networkBackend)
   await priceFeed.init()
@@ -114,12 +122,11 @@ export async function init() {
       feeManager = new StaticFeeManager(managerConfig, config.RELAYER_FEE)
       break
     case FeeManagerType.Dynamic: {
-      if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is only supported for Ethereum')
-      feeManager = new DynamicFeeManager(managerConfig, networkBackend.gasPrice)
-      break
+      if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is supported only for Ethereum')
+      feeManager = new DynamicFeeManager(managerConfig, (txManager as EvmTxManager).gasPrice)
     }
     case FeeManagerType.Optimism: {
-      if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is only supported for Ethereum')
+      if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is supported only for Ethereum')
       feeManager = new OptimismFeeManager(managerConfig, networkBackend)
       break
     }
@@ -131,14 +138,13 @@ export async function init() {
   const workerPromises = [
     createPoolTxWorker({
       ...workerBaseConfig,
-      validateTx,
-      treeProver,
       mutex,
-      feeManager,
+      txManager,
     }),
-    createDirectDepositWorker({
+    createSentTxWorker({
       ...workerBaseConfig,
-      directDepositProver,
+      mutex,
+      txManager,
     }),
   ]
 

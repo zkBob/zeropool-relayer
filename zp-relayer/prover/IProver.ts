@@ -1,11 +1,4 @@
-import type {
-  TreePub,
-  TreeSec,
-  Proof,
-  DelegatedDepositBatchPub,
-  DelegatedDepositBatchSec,
-  Params,
-} from 'libzkbob-rs-node'
+import type { DelegatedDepositBatchPub, DelegatedDepositBatchSec, Proof, TreePub, TreeSec } from 'libzkbob-rs-node'
 
 // TODO: add support for DD
 export enum Circuit {

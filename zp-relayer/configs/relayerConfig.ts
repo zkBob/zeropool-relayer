@@ -1,25 +1,19 @@
-import Web3 from 'web3'
-import { toBN } from 'web3-utils'
-import baseConfig, { zBooleanString, zNullishString } from './baseConfig'
-import { FeeManagerType } from '@/services/fee'
-import { PriceFeedType } from '@/services/price-feed'
-import { EstimationType } from '@/services/gas-price'
 import { ProverType } from '@/prover'
-import { countryCodes } from '@/utils/countryCodes'
 import { logger } from '@/services/appLogger'
-import { PermitType } from '@/utils/permit/types'
-import { TxType } from 'zp-memo-parser'
-import { z } from 'zod'
+import { FeeManagerType } from '@/services/fee'
 import { Network } from '@/services/network/types'
-
-const relayerAddress = new Web3().eth.accounts.privateKeyToAccount(
-  process.env.RELAYER_ADDRESS_PRIVATE_KEY as string
-).address
+import { PriceFeedType } from '@/services/price-feed'
+import { countryCodes } from '@/utils/countryCodes'
+import { PermitType } from '@/utils/permit/types'
+import { z } from 'zod'
+import { TxType } from 'zp-memo-parser'
+import baseConfig from './baseConfig'
+import { getGasPriceSchema } from './common/gasPriceConfig'
+import { getTxManagerSchema } from './common/txManagerConfig'
+import { zBN, zBooleanString, zNullishString } from './common/utils'
 
 const defaultHeaderBlacklist =
   'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
-
-const zBN = () => z.string().transform(toBN)
 
 const zTreeProver = z.discriminatedUnion('RELAYER_TREE_PROVER_TYPE', [
   z.object({ RELAYER_TREE_PROVER_TYPE: z.literal(ProverType.Local) }),
@@ -72,25 +66,6 @@ const zFeeManager = z
     ])
   )
 
-const zGasPrice = z.object({
-  RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.nativeEnum(EstimationType).default(EstimationType.Web3),
-  RELAYER_GAS_PRICE_UPDATE_INTERVAL: z.coerce.number().default(5000),
-  RELAYER_GAS_PRICE_SURPLUS: z.coerce.number().default(0.1),
-  RELAYER_MIN_GAS_PRICE_BUMP_FACTOR: z.coerce.number().default(0.1),
-  RELAYER_GAS_PRICE_FACTOR: z.coerce.number().default(1),
-  RELAYER_GAS_PRICE_SPEED_TYPE: z.string().default('fast'),
-  RELAYER_GAS_PRICE_FALLBACK: z.string(),
-  RELAYER_MAX_FEE_PER_GAS_LIMIT: zBN().nullable().default(null),
-})
-z.discriminatedUnion('RELAYER_GAS_PRICE_ESTIMATION_TYPE', [
-  z.object({ RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.literal(EstimationType.EIP1559) }),
-  z.object({ RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.literal(EstimationType.Web3) }),
-  z.object({
-    RELAYER_GAS_PRICE_ESTIMATION_TYPE: z.literal(EstimationType.Oracle),
-    RELAYER_GAS_PRICE_FALLBACK: z.string(),
-  }),
-])
-
 const zGuards = z.object({
   RELAYER_GUARDS_CONFIG_PATH: z.string().optional(),
   RELAYER_MPC_GUARD_CONTRACT: z.string().optional(),
@@ -102,18 +77,16 @@ const zSchema = z
     RELAYER_REF: zNullishString(),
     RELAYER_SHA: zNullishString(),
     RELAYER_PORT: z.coerce.number().default(8000),
-    RELAYER_ADDRESS_PRIVATE_KEY: z.string(),
     RELAYER_TOKEN_ADDRESS: z.string(),
     RELAYER_GAS_LIMIT: zBN(),
     RELAYER_MIN_BASE_FEE: zBN().default('0'),
     RELAYER_MAX_NATIVE_AMOUNT: zBN().default('0'),
-    RELAYER_TREE_UPDATE_PARAMS_PATH: z.string().default('./params/tree_params.bin'),
-    RELAYER_TRANSFER_PARAMS_PATH: z.string().default('./params/transfer_params.bin'),
-    RELAYER_DIRECT_DEPOSIT_PARAMS_PATH: z.string().default('./params/delegated_deposit_params.bin'),
-    RELAYER_TX_VK_PATH: z.string().default('./params/transfer_verification_key.json'),
+    RELAYER_TREE_UPDATE_PARAMS_PATH: z.string().default('../params/tree_params.bin'),
+    RELAYER_TRANSFER_PARAMS_PATH: z.string().default('../params/transfer_params.bin'),
+    RELAYER_DIRECT_DEPOSIT_PARAMS_PATH: z.string().default('../params/delegated_deposit_params.bin'),
+    RELAYER_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
     RELAYER_REQUEST_LOG_PATH: z.string().default('./zp.log'),
     RELAYER_STATE_DIR_PATH: z.string().default('./POOL_STATE'),
-    RELAYER_GAS_PRICE_FALLBACK: z.string(),
     RELAYER_TX_REDUNDANCY: zBooleanString().default('false'),
     RELAYER_SENT_TX_DELAY: z.coerce.number().default(30000),
     RELAYER_SENT_TX_ERROR_THRESHOLD: z.coerce.number().default(3),
@@ -152,13 +125,16 @@ const zSchema = z
   .and(zPriceFeed)
   .and(zBaseTxGas)
   .and(zFeeManager)
-  .and(zGasPrice)
   .and(zGuards)
 
 const config = zSchema.parse(process.env)
 
+const txManager = getTxManagerSchema(config.RELAYER_NETWORK)
+const gasPrice = getGasPriceSchema(config.RELAYER_NETWORK)
+
 export default {
   ...config,
   ...baseConfig,
-  RELAYER_ADDRESS: relayerAddress,
+  txManager,
+  gasPrice,
 }

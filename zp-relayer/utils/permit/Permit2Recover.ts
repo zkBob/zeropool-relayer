@@ -1,6 +1,6 @@
-import { toBN, AbiItem } from 'web3-utils'
-import { CommonMessageParams, IPermitRecover, PreconditionError, TypedMessage } from './IPermitRecover'
 import Permit2Abi from '@/abi/permit2.json'
+import { AbiItem, toBN } from 'web3-utils'
+import { CommonMessageParams, IPermitRecover, PreconditionError, TypedMessage } from './IPermitRecover'
 
 export interface ITokenPermissions {
   token: string

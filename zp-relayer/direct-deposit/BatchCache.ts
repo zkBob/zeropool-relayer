@@ -1,11 +1,11 @@
-import type Redis from 'ioredis'
-import { Mutex } from 'async-mutex'
 import { logger } from '@/services/appLogger'
 import {
   DIRECT_DEPOSIT_REPROCESS_INTERVAL,
   DIRECT_DEPOSIT_REPROCESS_NAME,
   DIRECT_DEPOSIT_SET_NAME,
 } from '@/utils/constants'
+import { Mutex } from 'async-mutex'
+import type Redis from 'ioredis'
 
 export class BatchCache<T extends { nonce: string }> {
   private timer: NodeJS.Timeout | null = null

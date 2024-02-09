@@ -1,5 +1,5 @@
-import { HttpProvider } from 'web3-core'
 import type { OperationOptions } from 'retry'
+import { HttpProvider } from 'web3-core'
 
 export interface ProviderOptions {
   name: string

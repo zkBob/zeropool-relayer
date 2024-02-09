@@ -1,89 +1,73 @@
-// Reference implementation:
-// https://github.com/omni/tokenbridge/blob/master/oracle/src/watcher.js
-import type Web3 from 'web3'
-import type { AbiItem } from 'web3-utils'
-import type { DirectDeposit } from '@/queue/poolTxQueue'
-import { web3 } from '@/services/web3'
-import PoolAbi from '@/abi/pool-abi.json'
 import DirectDepositQueueAbi from '@/abi/direct-deposit-queue-abi.json'
 import config from '@/configs/watcherConfig'
-import { logger } from '@/services/appLogger'
-import { redis } from '@/services/redisClient'
-import { lastProcessedBlock, getLastProcessedBlock, updateLastProcessedBlock, parseDirectDepositEvent } from './utils'
-import { BatchCache } from './BatchCache'
-import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
-import { getBlockNumber, getEvents } from '@/utils/web3'
 import { directDepositQueue } from '@/queue/directDepositQueue'
+import type { DirectDeposit } from '@/queue/poolTxQueue'
+import { logger } from '@/services/appLogger'
+import { EvmBackend, Network, NetworkBackend, TronBackend } from '@/services/network'
+import { redis } from '@/services/redisClient'
+import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
+import { Watcher } from '@/watcher/watcher'
+import { BatchCache } from './BatchCache'
+import { parseDirectDepositEvent } from './utils'
 
-const PoolInstance = new web3.eth.Contract(PoolAbi as AbiItem[], config.poolAddress)
-const DirectDepositQueueInstance = new web3.eth.Contract(DirectDepositQueueAbi as AbiItem[])
-
-const eventName = 'SubmitDirectDeposit'
-
-const batch = new BatchCache<DirectDeposit>(
-  config.directDepositBatchSize,
-  config.directDepositBatchTtl,
-  ds => {
-    logger.info('Adding direct-deposit events to queue', { count: ds.length })
-    directDepositQueue.add('', ds)
-  },
-  dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
-  redis
-)
+async function initNetwork() {
+  let networkBackend: NetworkBackend<Network>
+  if (config.COMMITMENT_WATCHER_NETWORK === Network.Ethereum) {
+    networkBackend = new EvmBackend({
+      rpcRequestTimeout: '' as any,
+      rpcSyncCheckInterval: '' as any,
+      jsonRpcErrorCodes: '' as any,
+      poolAddress: '' as any,
+      tokenAddress: '' as any,
+      pk: '' as any,
+      rpcUrls: '' as any,
+      requireHTTPS: '' as any,
+    })
+  } else if (config.COMMITMENT_WATCHER_NETWORK === Network.Tron) {
+    networkBackend = new TronBackend({} as any)
+  } else {
+    throw new Error('Unsupported network backend')
+  }
+  return networkBackend
+}
 
 async function init() {
-  await getLastProcessedBlock()
-  await batch.init()
-  const queueAddress = await PoolInstance.methods.direct_deposit_queue().call()
-  DirectDepositQueueInstance.options.address = queueAddress
-  runWatcher()
-}
+  const network = await initNetwork()
 
-async function getLastBlockToProcess(web3: Web3) {
-  const lastBlockNumber = await getBlockNumber(web3)
-  return lastBlockNumber - config.blockConfirmations
-}
+  const queueAddress = await network.pool.call('direct_deposit_queue')
+  const DirectDepositQueueInstance = network.contract(DirectDepositQueueAbi, queueAddress)
 
-async function watch() {
-  const lastBlockToProcess = await getLastBlockToProcess(web3)
+  const batchCache = new BatchCache<DirectDeposit>(
+    config.directDepositBatchSize,
+    config.directDepositBatchTtl,
+    ds => {
+      logger.info('Adding direct-deposit events to queue', { count: ds.length })
+      directDepositQueue.add('', ds)
+    },
+    dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
+    redis
+  )
+  await batchCache.init()
 
-  if (lastBlockToProcess <= lastProcessedBlock) {
-    logger.debug('All blocks already processed')
-    return
-  }
+  const watcher = new Watcher(network, DirectDepositQueueInstance, 'direct-deposit', {
+    event: 'SubmitDirectDeposit',
+    blockConfirmations: config.blockConfirmations,
+    startBlock: config.COMMON_START_BLOCK,
+    eventPollingInterval: config.eventPollingInterval,
+    batchSize: config.COMMON_EVENTS_PROCESSING_BATCH_SIZE,
+    processor: async batch => {
+      const directDeposits: [string, DirectDeposit][] = []
+      for (let event of batch) {
+        const dd = parseDirectDepositEvent(event.values)
+        directDeposits.push([dd.nonce, dd])
+      }
 
-  const fromBlock = lastProcessedBlock + 1
-  const rangeEndBlock = fromBlock + config.eventsProcessingBatchSize
-  let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
-
-  let events = await getEvents(DirectDepositQueueInstance, eventName, {
-    fromBlock,
-    toBlock,
+      await batchCache.add(directDeposits)
+    },
   })
-  logger.info(`Found ${events.length} direct-deposit events`)
 
-  const directDeposits: [string, DirectDeposit][] = []
-  for (let event of events) {
-    const dd = parseDirectDepositEvent(event.returnValues)
-    directDeposits.push([dd.nonce, dd])
-  }
-
-  await batch.add(directDeposits)
-
-  logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })
-  await updateLastProcessedBlock(toBlock)
-}
-
-async function runWatcher() {
-  try {
-    await watch()
-  } catch (e) {
-    logger.error(e)
-  }
-
-  setTimeout(() => {
-    runWatcher()
-  }, config.eventPollingInterval)
+  await watcher.init()
+  watcher.run()
 }
 
 init()

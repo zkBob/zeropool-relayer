@@ -1,5 +1,5 @@
-import { z } from 'zod'
 import { Network } from '@/services/network/types'
+import { z } from 'zod'
 
 export const zBooleanString = () => z.enum(['true', 'false']).transform(value => value === 'true')
 

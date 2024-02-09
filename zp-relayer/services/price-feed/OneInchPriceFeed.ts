@@ -1,13 +1,11 @@
-import type Web3 from 'web3'
-import type BN from 'bn.js'
-import type { Contract } from 'web3-eth-contract'
-import type { IPriceFeed } from './IPriceFeed'
-import { toBN, toWei, AbiItem } from 'web3-utils'
-import { ZERO_ADDRESS } from '@/utils/constants'
 import Erc20Abi from '@/abi/erc20.json'
 import OracleAbi from '@/abi/one-inch-oracle.json'
+import { ZERO_ADDRESS } from '@/utils/constants'
+import type BN from 'bn.js'
+import { toBN, toWei } from 'web3-utils'
 import { NetworkBackend } from '../network/NetworkBackend'
 import { Network, NetworkContract } from '../network/types'
+import type { IPriceFeed } from './IPriceFeed'
 
 // 1Inch price feed oracle: https://github.com/1inch/spot-price-aggregator
 export class OneInchPriceFeed implements IPriceFeed {

@@ -1,11 +1,11 @@
+import config from '@/configs/relayerConfig'
+import { applyDenominator, setIntervalAndRun } from '@/utils/helpers'
 import BN from 'bn.js'
 import { toBN } from 'web3-utils'
-import type { IPriceFeed } from '../price-feed/IPriceFeed'
-import { getMaxRequiredGasPrice, GasPriceValue } from '../gas-price'
-import { applyDenominator, setIntervalAndRun } from '@/utils/helpers'
-import { logger } from '../appLogger'
 import { TxType } from 'zp-memo-parser'
-import config from '@/configs/relayerConfig'
+import { logger } from '../appLogger'
+import { GasPriceValue, getMaxRequiredGasPrice } from '../gas-price'
+import type { IPriceFeed } from '../price-feed/IPriceFeed'
 
 export interface IFeeEstimateParams {
   txType: TxType

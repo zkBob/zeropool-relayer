@@ -1,9 +1,9 @@
 // @ts-ignore
-import TronWeb from 'tronweb'
 import config from '@/configs/guardConfig'
 import { Network, NetworkContract } from '@/services/network'
 import { EthereumContract } from '@/services/network/evm/EvmContract'
 import { TronContract } from '@/services/network/tron/TronContract'
+import TronWeb from 'tronweb'
 import Web3 from 'web3'
 import PoolAbi from '../abi/pool-abi.json'
 

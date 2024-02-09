@@ -1,8 +1,8 @@
 // Reference implementation:
 // https://github.com/omni/tokenbridge/blob/master/oracle/src/services/HttpListProvider.js
-import { hexToNumber } from 'web3-utils'
-import promiseRetry from 'promise-retry'
 import { FALLBACK_RPC_URL_SWITCH_TIMEOUT } from '@/utils/constants'
+import promiseRetry from 'promise-retry'
+import { hexToNumber } from 'web3-utils'
 import { logger } from '../appLogger'
 import BaseHttpProvider, { ProviderOptions } from './BaseHttpProvider'
 

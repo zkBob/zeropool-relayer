@@ -1,9 +1,6 @@
-import BN from 'bn.js'
 import type { TransactionConfig } from 'web3-core'
 import type { EthereumContract } from './evm/EvmContract'
 import type { TronContract } from './tron/TronContract'
-import { EstimationType } from '../gas-price'
-import type { Redis } from 'ioredis'
 
 export enum Network {
   Tron = 'tron',
@@ -13,7 +10,6 @@ export enum Network {
 interface BaseBackendConfig {
   poolAddress: string
   tokenAddress: string
-  pk: string
   rpcUrls: string[]
   requireHTTPS: boolean
 }
@@ -22,18 +18,7 @@ interface EvmBackendConfig extends BaseBackendConfig {
   rpcRequestTimeout: number
   rpcSyncCheckInterval: number
   jsonRpcErrorCodes: number[]
-  relayerTxRedundancy: boolean
-
-  gasPriceFallback: string
-  gasPriceUpdateInterval: number
-  gasPriceEstimationType: EstimationType
-  gasPriceSpeedType: string
-  gasPriceFactor: number
-  gasPriceMaxFeeLimit: BN | null
-  gasPriceBumpFactor: number
-  gasPriceSurplus: number
-
-  redis: Redis
+  withRedundantProvider: boolean
 }
 
 interface TronBackendConfig extends BaseBackendConfig {}
@@ -43,38 +28,53 @@ export type NetworkBackendConfig<N extends Network> = N extends Network.Tron ? T
 export type NetworkContract<N extends Network> = N extends Network.Tron ? TronContract : EthereumContract
 
 type BaseTxDesc = Required<Pick<TransactionConfig, 'to' | 'value' | 'data'>>
-type EvmTxDesc = TransactionConfig
-type TronTxDesc = BaseTxDesc
 
-export type TxDesc<N extends Network> = N extends Network.Tron
-  ? TronTxDesc & {
-      func: string
-      feeLimit: number
-    }
-  : EvmTxDesc & {
-      isResend?: boolean
-      shouldUpdateGasPrice?: boolean
-    }
+export type TxDesc = BaseTxDesc
 
-export interface EvmTx extends TransactionConfig {}
-export interface TronTx {
-  tx: {}
-}
-export type Tx<N extends Network> = N extends Network.Tron ? TronTx : EvmTx
-
-export interface SendTx<N extends Network> {
-  txDesc: TxDesc<N>
-  onSend: (txHash: string) => Promise<void>
-  onIncluded: (txHash: string) => Promise<void>
-  onRevert: (txHash: string) => Promise<void>
-  onResend?: (txHash: string) => Promise<void>
+export type TxOptions = {
+  func?: string
+  isResend?: boolean
+  shouldUpdateGasPrice?: boolean
+  maxFeeLimit?: number
 }
 
-export interface TransactionManager<N extends Network> {
-  txQueue: SendTx<N>[]
+export type PreparedTx = {
+  rawTransaction: string
+}
+
+export interface SendTx<E> {
+  txDesc: TxDesc
+  extraData: E | null
+  options: TxOptions
+}
+
+export interface TxInfo {
+  blockNumber: number
+  txHash: string
+  success: boolean
+}
+
+export interface SendAttempt<E> {
+  txHash: string
+  extraData: E
+}
+
+export enum SendError {
+  INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE',
+  NONCE_ERROR = 'NONCE_ERROR',
+  GAS_PRICE_ERROR = 'GAS_PRICE_ERROR',
+}
+
+export interface TransactionManager<E> {
   init(): Promise<void>
-  sendTx(sendTx: SendTx<N>): Promise<void>
-  // sendTx(tx: Tx<N>): Promise<void>
+  confirmTx(txHashes: string[]): Promise<[TxInfo | null, boolean]>
+  prepareTx(sendTx: SendTx<E>): Promise<[PreparedTx, SendAttempt<E>]>
+  sendTx(sendTx: SendTx<E>): Promise<[PreparedTx, SendAttempt<E>]>
+  sendPreparedTx(preparedTx: [PreparedTx, SendAttempt<E>]): Promise<[PreparedTx, SendAttempt<E>]>
+  resendTx(sendAttempts: SendAttempt<E>[]): Promise<{
+    attempt?: SendAttempt<E>
+    error?: SendError
+  }>
 }
 
 export interface INetworkContract {

@@ -1,10 +1,10 @@
-import type { Redis } from 'ioredis'
 import { logger } from '@/services/appLogger'
 import { OUTPLUSONE } from '@/utils/constants'
-import { MerkleTree, TxStorage, MerkleProof, Constants, Helpers } from 'libzkbob-rs-node'
-import { NullifierSet } from './nullifierSet'
-import { JobIdsMapping } from './jobIdsMapping'
 import { Mutex } from 'async-mutex'
+import type { Redis } from 'ioredis'
+import { Constants, Helpers, MerkleProof, MerkleTree, TxStorage } from 'libzkbob-rs-node'
+import { JobIdsMapping } from './jobIdsMapping'
+import { NullifierSet } from './nullifierSet'
 
 export class PoolState {
   private tree: MerkleTree

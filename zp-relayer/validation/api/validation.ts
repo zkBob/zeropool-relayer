@@ -1,12 +1,11 @@
 // @ts-ignore
-import TronWeb from 'tronweb'
-import Ajv, { JSONSchemaType } from 'ajv'
-import { isAddress } from 'web3-utils'
-import { Proof, SnarkProof } from 'libzkbob-rs-node'
-import { TxType } from 'zp-memo-parser'
-import type { PoolTx } from '@/pool'
-import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
+import { BasePoolTx } from '@/queue/poolTxQueue'
 import { logger } from '@/services/appLogger'
+import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
+import Ajv, { JSONSchemaType } from 'ajv'
+import { Proof, SnarkProof } from 'libzkbob-rs-node'
+import { isAddress } from 'web3-utils'
+import { TxType } from 'zp-memo-parser'
 import { TxDataMPC } from '../tx/validateTx'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
@@ -72,7 +71,7 @@ const AjvProofSchema: JSONSchemaType<Proof> = {
   required: ['inputs', 'proof'],
 }
 
-const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
+const AjvSendTransactionSchema: JSONSchemaType<BasePoolTx> = {
   type: 'object',
   properties: {
     proof: AjvProofSchema,
@@ -101,7 +100,7 @@ const AjvSignMPCSchema: JSONSchemaType<TxDataMPC> = {
   required: ['txProof', 'treeProof', 'txType', 'memo'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
+const AjvSendTransactionsSchema: JSONSchemaType<BasePoolTx[]> = {
   type: 'array',
   items: AjvSendTransactionSchema,
 }

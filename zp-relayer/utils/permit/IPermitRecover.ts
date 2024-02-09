@@ -1,6 +1,6 @@
-import { ethers } from 'ethers'
-import { Network, NetworkContract } from '@/services/network/types'
 import { NetworkBackend } from '@/services/network/NetworkBackend'
+import { Network, NetworkContract } from '@/services/network/types'
+import { ethers } from 'ethers'
 
 export class PreconditionError extends Error {
   name = 'PreconditionError'

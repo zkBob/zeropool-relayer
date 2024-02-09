@@ -1,18 +1,18 @@
-import express, { NextFunction, Request, Response } from 'express'
-import cors from 'cors'
-import semver from 'semver'
-import endpoints, { inject } from './endpoints'
-import { logger } from '@/services/appLogger'
-import { ValidationError } from '@/validation/api/validation'
 import config from '@/configs/relayerConfig'
-import { HEADER_LIBJS, HEADER_TRACE_ID, LIBJS_MIN_VERSION } from '../utils/constants'
-import { getFileHash } from '@/utils/helpers'
+import type { BasePool } from '@/pool/BasePool'
+import { logger } from '@/services/appLogger'
 import type { FeeManager } from '@/services/fee'
-import type { Pool } from '@/pool'
+import { getFileHash } from '@/utils/helpers'
+import { ValidationError } from '@/validation/api/validation'
+import cors from 'cors'
+import express, { NextFunction, Request, Response } from 'express'
+import semver from 'semver'
+import { HEADER_LIBJS, HEADER_TRACE_ID, LIBJS_MIN_VERSION } from '../utils/constants'
+import endpoints, { inject } from './endpoints'
 
 interface IRouterConfig {
   feeManager: FeeManager
-  pool: Pool
+  pool: BasePool
 }
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {
@@ -83,10 +83,7 @@ export function createRouter({ feeManager, pool }: IRouterConfig) {
     '/params/hash/tx',
     wrapErr(inject({ hash: getFileHash(config.RELAYER_TRANSFER_PARAMS_PATH) }, endpoints.getParamsHash))
   )
-  router.get(
-    '/params/hash/direct-deposit',
-    wrapErr(inject({ hash: getFileHash(config.RELAYER_DIRECT_DEPOSIT_PARAMS_PATH) }, endpoints.getParamsHash))
-  )
+  router.get('/params/hash/direct-deposit', wrapErr(inject({ hash: getFileHash(null) }, endpoints.getParamsHash)))
 
   // Error handler middleware
   router.use((error: any, req: Request, res: Response, next: NextFunction) => {

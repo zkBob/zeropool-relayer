@@ -1,14 +1,14 @@
-import fs from 'fs'
-import crypto from 'crypto'
-import type BN from 'bn.js'
-import type Web3 from 'web3'
-import type { Mutex } from 'async-mutex'
-import type { Contract } from 'web3-eth-contract'
-import type { SnarkProof } from 'libzkbob-rs-node'
-import { TxType } from 'zp-memo-parser'
-import promiseRetry from 'promise-retry'
-import { padLeft, toBN } from 'web3-utils'
 import { logger } from '@/services/appLogger'
+import type { Mutex } from 'async-mutex'
+import type BN from 'bn.js'
+import crypto from 'crypto'
+import fs from 'fs'
+import type { SnarkProof } from 'libzkbob-rs-node'
+import promiseRetry from 'promise-retry'
+import type Web3 from 'web3'
+import type { Contract } from 'web3-eth-contract'
+import { padLeft, toBN } from 'web3-utils'
+import { TxType } from 'zp-memo-parser'
 import { isContractCallError } from './web3Errors'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
@@ -33,6 +33,20 @@ const txTypePrefixLen = {
 
 export function truncateMemoTxPrefix(memo: string, txType: TxType) {
   const txSpecificPrefixLen = txTypePrefixLen[txType]
+  return memo.slice(txSpecificPrefixLen)
+}
+
+const txTypePrefixLenV2 = {
+  [TxType.DEPOSIT]: 20,
+  [TxType.TRANSFER]: 20,
+  [TxType.WITHDRAWAL]: 76,
+  [TxType.PERMITTABLE_DEPOSIT]: 76,
+}
+
+export function truncateMemoTxPrefixProverV2(memo: string, txType: TxType) {
+  // 20 - prover address
+  // 8 - fee
+  const txSpecificPrefixLen = txTypePrefixLenV2[txType] + 28 * 2
   return memo.slice(txSpecificPrefixLen)
 }
 

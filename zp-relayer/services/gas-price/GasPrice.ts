@@ -1,24 +1,24 @@
-import BN from 'bn.js'
-import type Web3 from 'web3'
-import type { TransactionConfig } from 'web3-core'
-import { AbiItem, toWei, toBN } from 'web3-utils'
-import BigNumber from 'bignumber.js'
+import OracleAbi from '@/abi/op-oracle.json'
+import { logger } from '@/services/appLogger'
 import constants from '@/utils/constants'
 import { contractCallRetry, setIntervalAndRun } from '@/utils/helpers'
 import { estimateFees } from '@mycrypto/gas-estimation'
+import BigNumber from 'bignumber.js'
+import BN from 'bn.js'
 import { GasPriceOracle } from 'gas-price-oracle'
-import { logger } from '@/services/appLogger'
-import OracleAbi from '@/abi/op-oracle.json'
+import type Web3 from 'web3'
+import type { TransactionConfig } from 'web3-core'
+import { AbiItem, toBN, toWei } from 'web3-utils'
 import {
+  EIP1559GasPrice,
+  EstimationOptions,
   EstimationType,
   FetchFunc,
-  EstimationOptions,
-  GasPriceValue,
-  PolygonGSV2Response,
-  PolygonGSV2GasPriceKey,
   GasPriceKey,
+  GasPriceValue,
   LegacyGasPrice,
-  EIP1559GasPrice,
+  PolygonGSV2GasPriceKey,
+  PolygonGSV2Response,
 } from './types'
 
 const polygonGasPriceKeyMapping: Record<GasPriceKey, PolygonGSV2GasPriceKey> = {

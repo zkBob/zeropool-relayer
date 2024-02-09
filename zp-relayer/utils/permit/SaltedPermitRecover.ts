@@ -1,5 +1,4 @@
 import { CommonMessageParams, IPermitRecover, TypedMessage } from './IPermitRecover'
-import { contractCallRetry } from '../helpers'
 
 type SaltedPermitMessage = {
   owner: string

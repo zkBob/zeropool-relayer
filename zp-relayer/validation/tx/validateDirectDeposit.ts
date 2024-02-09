@@ -1,10 +1,10 @@
-import { toBN } from 'web3-utils'
-import type { Contract } from 'web3-eth-contract'
-import type { DirectDeposit } from '@/queue/poolTxQueue'
-import { Helpers } from 'libzkbob-rs-node'
-import { contractCallRetry } from '@/utils/helpers'
-import { checkAssertion, checkScreener, TxValidationError } from './common'
 import config from '@/configs/baseConfig'
+import type { DirectDeposit } from '@/queue/poolTxQueue'
+import { contractCallRetry } from '@/utils/helpers'
+import { Helpers } from 'libzkbob-rs-node'
+import type { Contract } from 'web3-eth-contract'
+import { toBN } from 'web3-utils'
+import { checkAssertion, checkScreener, TxValidationError } from './common'
 
 const SNARK_SCALAR_FIELD = toBN('21888242871839275222246405745257275088548364400416034343698204186575808495617')
 

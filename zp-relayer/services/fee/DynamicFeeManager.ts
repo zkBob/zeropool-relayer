@@ -1,8 +1,8 @@
-import { toBN } from 'web3-utils'
-import { FeeManager, FeeEstimate, IFeeEstimateParams, IFeeManagerConfig, DynamicFeeOptions } from './FeeManager'
-import { NZERO_BYTE_GAS } from '@/utils/constants'
 import relayerConfig from '@/configs/relayerConfig'
+import { NZERO_BYTE_GAS } from '@/utils/constants'
+import { toBN } from 'web3-utils'
 import type { EstimationType, GasPrice } from '../gas-price'
+import { DynamicFeeOptions, FeeEstimate, FeeManager, IFeeEstimateParams, IFeeManagerConfig } from './FeeManager'
 
 export class DynamicFeeManager extends FeeManager {
   constructor(config: IFeeManagerConfig, private gasPrice: GasPrice<EstimationType>) {

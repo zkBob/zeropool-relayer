@@ -1,27 +1,24 @@
-import Web3 from 'web3'
-import { AbiItem } from 'web3-utils'
-import type { HttpProvider } from 'web3-core'
+import RedundantHttpListProvider from '@/services/providers/RedundantHttpListProvider'
 import { RETRY_CONFIG } from '@/utils/constants'
 import { checkHTTPS } from '@/utils/helpers'
-import HttpListProvider from '../../providers/HttpListProvider'
-import { SafeEthLogsProvider } from '../../providers/SafeEthLogsProvider'
-import type { INetworkBackend } from '../NetworkBackend'
+import { getEvents } from '@/utils/web3'
+import Web3 from 'web3'
+import type { HttpProvider } from 'web3-core'
+import { AbiItem } from 'web3-utils'
 import PoolAbi from '../../../abi/pool-abi.json'
 import TokenAbi from '../../../abi/token-abi.json'
-import { Network, NetworkBackendConfig, TransactionManager } from '../types'
-import { EvmTxManager } from './EvmTxManager'
-import { EstimationType, GasPrice } from '@/services/gas-price'
-import RedundantHttpListProvider from '@/services/providers/RedundantHttpListProvider'
+import HttpListProvider from '../../providers/HttpListProvider'
+import { SafeEthLogsProvider } from '../../providers/SafeEthLogsProvider'
+import type { GetEventsConfig, INetworkBackend } from '../NetworkBackend'
+import { Network, NetworkBackendConfig } from '../types'
 import { EthereumContract } from './EvmContract'
 
 export class EvmBackend implements INetworkBackend<Network.Ethereum> {
   type: Network.Ethereum = Network.Ethereum
   web3: Web3
-  private web3Redundant: Web3
+  web3Redundant: Web3
   pool: EthereumContract
   token: EthereumContract
-  txManager: TransactionManager<Network.Ethereum>
-  public gasPrice: GasPrice<EstimationType>
 
   constructor(config: NetworkBackendConfig<Network.Ethereum>) {
     const providerOptions = {
@@ -35,7 +32,7 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
     this.web3 = new Web3(SafeEthLogsProvider(provider as HttpProvider))
     this.web3Redundant = this.web3
 
-    if (config.relayerTxRedundancy && config.rpcUrls.length > 1) {
+    if (config.withRedundantProvider && config.rpcUrls.length > 1) {
       const redundantProvider = new RedundantHttpListProvider(config.rpcUrls, {
         ...providerOptions,
         name: 'redundant',
@@ -43,31 +40,32 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
       this.web3Redundant = new Web3(redundantProvider)
     }
 
-    this.gasPrice = new GasPrice(
-      this.web3,
-      { gasPrice: config.gasPriceFallback },
-      config.gasPriceUpdateInterval,
-      config.gasPriceEstimationType,
-      {
-        speedType: config.gasPriceSpeedType,
-        factor: config.gasPriceFactor,
-        maxFeeLimit: config.gasPriceMaxFeeLimit,
-      }
-    )
-
     this.pool = this.contract(PoolAbi as AbiItem[], config.poolAddress)
     this.token = this.contract(TokenAbi as AbiItem[], config.tokenAddress)
-    this.txManager = new EvmTxManager(this.web3Redundant, config.pk, this.gasPrice, {
-      gasPriceBumpFactor: config.gasPriceBumpFactor,
-      gasPriceMaxFeeLimit: config.gasPriceMaxFeeLimit,
-      gasPriceSurplus: config.gasPriceSurplus,
-      redis: config.redis,
-    })
+  }
+
+  async *getEvents({ startBlock, lastBlock, event, batchSize, contract }: GetEventsConfig<Network.Ethereum>) {
+    let toBlock = startBlock
+    for (let fromBlock = startBlock; toBlock < lastBlock; fromBlock = toBlock) {
+      toBlock = Math.min(toBlock + batchSize, lastBlock)
+      const events = await getEvents(contract.instance, event, {
+        fromBlock,
+        toBlock: toBlock - 1,
+        filter: {
+          // index: missedIndices,
+        },
+      })
+
+      yield events.map(e => ({
+        txHash: e.transactionHash,
+        values: e.returnValues,
+      }))
+    }
   }
 
   async init() {
-    await this.gasPrice.start()
-    await this.txManager.init()
+    // await this.gasPrice.start()
+    // await this.txManager.init()
   }
 
   recover(msg: string, sig: string): Promise<string> {

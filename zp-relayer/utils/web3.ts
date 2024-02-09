@@ -1,8 +1,8 @@
-import type Web3 from 'web3'
-import type { Contract, PastEventOptions } from 'web3-eth-contract'
 import { logger } from '@/services/appLogger'
 import { NetworkBackend } from '@/services/network/NetworkBackend'
 import { Network } from '@/services/network/types'
+import type Web3 from 'web3'
+import type { Contract, PastEventOptions } from 'web3-eth-contract'
 
 export async function getNonce(web3: Web3, address: string) {
   try {

@@ -1,11 +1,10 @@
+import PoolAbi from '@/abi/pool-abi.json'
+import TokenAbi from '@/abi/token-abi.json'
 // @ts-ignore
 import TronWeb from 'tronweb'
 import { hexToBytes } from 'web3-utils'
-import type { INetworkBackend } from '../NetworkBackend'
-import { Network, NetworkBackendConfig, TransactionManager } from '../types'
-import { TronTxManager } from './TronTxManager'
-import PoolAbi from '@/abi/pool-abi.json'
-import TokenAbi from '@/abi/token-abi.json'
+import type { GetEventsConfig, INetworkBackend } from '../NetworkBackend'
+import { Network, NetworkBackendConfig } from '../types'
 import { TronContract } from './TronContract'
 
 export class TronBackend implements INetworkBackend<Network.Tron> {
@@ -13,22 +12,48 @@ export class TronBackend implements INetworkBackend<Network.Tron> {
   tronWeb: any
   pool: TronContract
   token: TronContract
-  txManager: TransactionManager<Network.Tron>
 
   constructor(config: NetworkBackendConfig<Network.Tron>) {
     this.tronWeb = new TronWeb(config.rpcUrls[0], config.rpcUrls[0], config.rpcUrls[0])
-    const pk = config.pk.slice(2)
-    const callerAddress = this.tronWeb.address.fromPrivateKey(pk)
-    // Workaround for https://github.com/tronprotocol/tronweb/issues/90
-    this.tronWeb.setAddress(callerAddress)
-    this.txManager = new TronTxManager(this.tronWeb, pk)
+
+    // TODO: Workaround for https://github.com/tronprotocol/tronweb/issues/90
+    // Example:
+    // const pk = config.pk.slice(2)
+    // const callerAddress = this.tronWeb.address.fromPrivateKey(pk)
+    // this.tronWeb.setAddress(callerAddress)
 
     this.pool = new TronContract(this.tronWeb, PoolAbi, config.poolAddress)
     this.token = new TronContract(this.tronWeb, TokenAbi, config.tokenAddress)
   }
 
+  async *getEvents({ startBlock, event, batchSize, contract }: GetEventsConfig<Network.Tron>) {
+    const block = await this.tronWeb.trx.getBlockByNumber(startBlock)
+    const sinceTimestamp = block.block_header.raw_data.timestamp
+
+    let fingerprint = null
+    do {
+      const events = await this.tronWeb.getEventResult(contract.address(), {
+        sinceTimestamp,
+        eventName: event,
+        onlyConfirmed: true,
+        sort: 'block_timestamp',
+        size: batchSize,
+      })
+      if (events.length === 0) {
+        break
+      }
+
+      yield events.map((e: any) => ({
+        txHash: e.transaction,
+        values: e.result,
+      }))
+
+      fingerprint = events[events.length - 1].fingerprint || null
+    } while (fingerprint !== null)
+  }
+
   async init() {
-    await this.txManager.init()
+    // await this.txManager.init()
   }
 
   async recover(msg: string, sig: string): Promise<string> {
@@ -41,8 +66,9 @@ export class TronBackend implements INetworkBackend<Network.Tron> {
     return new TronContract(this.tronWeb, abi, address)
   }
 
-  getBlockNumber(): Promise<number> {
-    throw new Error('Method not implemented.')
+  async getBlockNumber(): Promise<number> {
+    const block = await this.tronWeb.trx.getCurrentBlock()
+    return block.block_header.raw_data.number
   }
 
   public async getTxCalldata(hash: string): Promise<string> {

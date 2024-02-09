@@ -1,16 +1,12 @@
-import type Web3 from 'web3'
-import type BN from 'bn.js'
-import type { Contract } from 'web3-eth-contract'
-import { OP_GAS_ORACLE_ADDRESS } from '@/utils/constants'
-import { AbiItem, toBN, hexToBytes } from 'web3-utils'
 import OracleAbi from '@/abi/op-oracle.json'
-import { contractCallRetry } from '@/utils/helpers'
-import { FeeManager, FeeEstimate, IFeeEstimateParams, IFeeManagerConfig, DynamicFeeOptions } from './FeeManager'
 import relayerConfig from '@/configs/relayerConfig'
-import { ZERO_BYTE_GAS, NZERO_BYTE_GAS } from '@/utils/constants'
+import { NZERO_BYTE_GAS, OP_GAS_ORACLE_ADDRESS, ZERO_BYTE_GAS } from '@/utils/constants'
+import type BN from 'bn.js'
+import { hexToBytes, toBN } from 'web3-utils'
 import type { EstimationType, GasPrice } from '../gas-price'
 import { NetworkBackend } from '../network/NetworkBackend'
 import { Network, NetworkContract } from '../network/types'
+import { DynamicFeeOptions, FeeEstimate, FeeManager, IFeeEstimateParams, IFeeManagerConfig } from './FeeManager'
 
 export class OptimismFeeManager extends FeeManager {
   private oracle: NetworkContract<Network.Ethereum>
@@ -21,6 +17,7 @@ export class OptimismFeeManager extends FeeManager {
 
   constructor(config: IFeeManagerConfig, network: NetworkBackend<Network.Ethereum>) {
     super(config)
+    // @ts-ignore
     this.gasPrice = network.gasPrice
     this.oracle = network.contract(OracleAbi, OP_GAS_ORACLE_ADDRESS)
   }

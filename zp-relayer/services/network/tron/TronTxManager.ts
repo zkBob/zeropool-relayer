@@ -1,84 +1,72 @@
-import { sleep } from '@/utils/helpers'
-import { Network, SendTx, TransactionManager } from '../types'
-import { logger } from '@/services/appLogger'
+import { PreparedTx, SendAttempt, SendError, SendTx, TransactionManager, TxInfo } from '../types'
 
-export class TronTxManager implements TransactionManager<Network.Tron> {
+interface ExtraInfo {}
+
+export class TronTxManager implements TransactionManager<ExtraInfo> {
   constructor(private tronWeb: any, private pk: string) {}
 
   async init() {}
 
-  async confirmTx(txHash: string) {
-    const info = await this.tronWeb.trx.getTransactionInfo(txHash)
-    if (typeof info.blockNumber !== 'number') {
-      return null
+  async confirmTx(txHashes: string[]): Promise<[TxInfo | null, boolean]> {
+    for (let i = txHashes.length - 1; i >= 0; i--) {
+      const txHash = txHashes[i]
+      const info = await this.tronWeb.trx.getTransactionInfo(txHash)
+      if (typeof info.blockNumber !== 'number') {
+        return [null, false]
+      }
+      return [
+        {
+          blockNumber: info.blockNumber,
+          txHash: info.id,
+          success: info.receipt.result === 'SUCCESS',
+        },
+        false,
+      ]
     }
-    return info
+
+    return [null, false]
   }
 
-  txQueue: SendTx<Network.Tron>[] = []
-  private isSending = false
-
-  // TODO: is a race condition possible here?
-  async runConsumer() {
-    this.isSending = true
-    while (this.txQueue.length !== 0) {
-      const tx = this.txQueue.shift()
-      if (!tx) {
-        return // TODO
-      }
-      const { txDesc, onSend, onIncluded, onRevert } = tx
-      const options = {
-        feeLimit: txDesc.feeLimit,
-        callValue: txDesc.value,
-        rawParameter: txDesc.data.slice(10), // TODO: cut off selector
-      }
-      const txObject = await this.tronWeb.transactionBuilder.triggerSmartContract(txDesc.to, txDesc.func, options, [])
-      const signedTx = await this.tronWeb.trx.sign(txObject.transaction, this.pk)
-
-      let info = null
-      const res = await this.tronWeb.trx.sendRawTransaction(signedTx)
-      const txHash = res.transaction.txID
-      await onSend(txHash)
-
-      while (1) {
-        await sleep(5000)
-
-        try {
-          info = await this.confirmTx(txHash)
-        } catch (e) {
-          logger.error('Failed to fetch transaction info, waiting...:', e)
-          continue
-        }
-
-        if (info === null) {
-          logger.info('Tx not included, waiting...')
-          continue
-        } else {
-          break
-        }
-      }
-
-      if (info.receipt.result === 'SUCCESS') {
-        await onIncluded(info.id)
-      } else {
-        await onRevert(info.id)
-      }
+  async prepareTx({
+    txDesc,
+    options: { maxFeeLimit, func },
+  }: SendTx<ExtraInfo>): Promise<[PreparedTx, SendAttempt<ExtraInfo>]> {
+    const options = {
+      feeLimit: maxFeeLimit,
+      callValue: txDesc.value,
+      rawParameter: txDesc.data.slice(10),
     }
-    this.isSending = false
+    const txObject = await this.tronWeb.transactionBuilder.triggerSmartContract(txDesc.to, func, options, [])
+    // XXX: this is not a string, but an object
+    const signedTx = await this.tronWeb.trx.sign(txObject.transaction, this.pk)
+
+    return [
+      {
+        rawTransaction: signedTx,
+      },
+      {
+        txHash: signedTx.txID,
+        extraData: {},
+      },
+    ]
   }
 
-  async safeRunConsumer() {
-    try {
-      await this.runConsumer()
-    } catch (e) {
-      logger.error(e)
-    }
+  async sendPreparedTx(
+    preparedTx: [PreparedTx, SendAttempt<ExtraInfo>]
+  ): Promise<[PreparedTx, SendAttempt<ExtraInfo>]> {
+    await this.tronWeb.trx.sendRawTransaction(preparedTx[0].rawTransaction)
+    return preparedTx
   }
 
-  async sendTx(a: SendTx<Network.Tron>) {
-    this.txQueue.push(a)
-    if (!this.isSending) {
-      this.safeRunConsumer()
-    }
+  async resendTx(
+    sendAttempts: SendAttempt<ExtraInfo>[]
+  ): Promise<{ attempt?: SendAttempt<ExtraInfo> | undefined; error?: SendError | undefined }> {
+    // TODO: check tx timestamp to resend
+    throw new Error('Method not implemented.')
+  }
+
+  async sendTx(sendTx: SendTx<ExtraInfo>) {
+    const preparedTx = await this.prepareTx(sendTx)
+    return this.sendPreparedTx(preparedTx)
   }
 }

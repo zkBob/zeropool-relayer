@@ -1,10 +1,11 @@
-import { Job, Worker } from 'bullmq'
+import { DirectDeposit, JobState, WorkerTxType, WorkerTxTypePriority, poolTxQueue } from '@/queue/poolTxQueue'
 import { logger } from '@/services/appLogger'
-import { withErrorLog } from '@/utils/helpers'
-import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'
-import { DirectDeposit, JobState, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
-import type { IDirectDepositWorkerConfig } from './workerTypes'
+// @ts-ignore
 import { getDirectDepositProof } from '@/txProcessor'
+import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'
+import { withErrorLog } from '@/utils/helpers'
+import { Job, Worker } from 'bullmq'
+import type { IDirectDepositWorkerConfig } from './workerTypes'
 
 export async function createDirectDepositWorker({ redis, directDepositProver }: IDirectDepositWorkerConfig) {
   const workerLogger = logger.child({ worker: 'dd-prove' })

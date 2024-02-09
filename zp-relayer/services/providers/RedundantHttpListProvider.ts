@@ -1,8 +1,8 @@
 // Reference implementation:
 // https://github.com/omni/tokenbridge/blob/master/oracle/src/services/RedundantHttpListProvider.js
 import promiseRetry from 'promise-retry'
-import { HttpListProviderError } from './HttpListProvider'
 import BaseHttpProvider, { ProviderOptions } from './BaseHttpProvider'
+import { HttpListProviderError } from './HttpListProvider'
 
 export default class RedundantHttpListProvider extends BaseHttpProvider {
   urls: string[]

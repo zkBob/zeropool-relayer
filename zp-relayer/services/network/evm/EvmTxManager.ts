@@ -1,6 +1,4 @@
-import Web3 from 'web3'
-import BN from 'bn.js'
-import { isSameTransactionError } from '@/utils/web3Errors'
+import { logger } from '@/services/appLogger'
 import {
   addExtraGasPrice,
   chooseGasPriceOptions,
@@ -9,15 +7,23 @@ import {
   GasPriceValue,
   getGasPriceValue,
 } from '@/services/gas-price'
-import { getChainId, getNonce } from '@/utils/web3'
-import { Mutex } from 'async-mutex'
-import { logger } from '@/services/appLogger'
+import {
+  SendError,
+  type PreparedTx,
+  type SendAttempt,
+  type SendTx,
+  type TransactionManager,
+  type TxInfo,
+} from '@/services/network/types'
 import { readNonce, updateNonce } from '@/utils/redisFields'
-import type { Network, SendTx, TransactionManager, TxDesc } from '@/services/network/types'
-import { Logger } from 'winston'
-import { sleep } from '@/utils/helpers'
-import type { TransactionReceipt, TransactionConfig } from 'web3-core'
+import { getChainId } from '@/utils/web3'
+import { isGasPriceError, isInsufficientBalanceError, isNonceError, isSameTransactionError } from '@/utils/web3Errors'
+import { Mutex } from 'async-mutex'
+import BN from 'bn.js'
 import type { Redis } from 'ioredis'
+import Web3 from 'web3'
+import type { TransactionConfig } from 'web3-core'
+import { Logger } from 'winston'
 
 export interface EvmTxManagerConfig {
   redis: Redis
@@ -26,9 +32,9 @@ export interface EvmTxManagerConfig {
   gasPriceMaxFeeLimit: BN | null
 }
 
-export class EvmTxManager implements TransactionManager<Network.Ethereum> {
-  txQueue: SendTx<Network.Ethereum>[] = []
-  private isSending = false
+type ExtraInfo = TransactionConfig
+
+export class EvmTxManager implements TransactionManager<ExtraInfo> {
   nonce!: number
   chainId!: number
   mutex: Mutex
@@ -38,7 +44,7 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
   constructor(
     private web3: Web3,
     private pk: string,
-    private gasPrice: GasPrice<EstimationType>,
+    public gasPrice: GasPrice<EstimationType>,
     private config: EvmTxManagerConfig
   ) {
     this.mutex = new Mutex()
@@ -64,13 +70,16 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
     }
   }
 
-  async prepareTx(
-    txDesc: TxDesc<Network.Ethereum>,
-    { isResend = false, shouldUpdateGasPrice = true }: { isResend?: boolean; shouldUpdateGasPrice?: boolean }
-  ) {
+  async prepareTx({ txDesc, options, extraData }: SendTx<ExtraInfo>): Promise<[PreparedTx, SendAttempt<ExtraInfo>]> {
+    const txConfig = {
+      ...txDesc,
+      ...extraData,
+      gas: extraData?.gas,
+    }
+
     const release = await this.mutex.acquire()
     try {
-      const gasPriceValue = shouldUpdateGasPrice ? await this.gasPrice.fetchOnce() : this.gasPrice.getPrice()
+      const gasPriceValue = options.shouldUpdateGasPrice ? await this.gasPrice.fetchOnce() : this.gasPrice.getPrice()
       const newGasPriceWithExtra = addExtraGasPrice(
         gasPriceValue,
         this.config.gasPriceSurplus,
@@ -80,11 +89,11 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
       let updatedTxConfig: TransactionConfig = {}
       let newGasPrice: GasPriceValue
 
-      if (isResend) {
-        if (typeof txDesc.nonce === 'undefined') {
+      if (options.isResend) {
+        if (typeof txConfig.nonce === 'undefined') {
           throw new Error('Nonce should be set for re-send')
         }
-        const [oldGasPrice, updatedGasPrice] = await this.updateAndBumpGasPrice(txDesc, newGasPriceWithExtra)
+        const [oldGasPrice, updatedGasPrice] = await this.updateAndBumpGasPrice(txConfig, newGasPriceWithExtra)
         newGasPrice = updatedGasPrice
         logger.info('Updating tx gasPrice: %o -> %o', oldGasPrice, newGasPrice)
       } else {
@@ -97,29 +106,110 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
 
       updatedTxConfig = {
         ...updatedTxConfig,
-        ...txDesc,
+        ...txConfig,
         ...newGasPrice,
       }
-      const { transactionHash, rawTransaction } = await this.web3.eth.accounts.signTransaction(updatedTxConfig, this.pk)
 
-      return {
-        txHash: transactionHash as string,
-        rawTransaction: rawTransaction as string,
-        gasPrice: newGasPrice,
-        txConfig: updatedTxConfig,
-      }
+      const { transactionHash, rawTransaction } = await this.web3.eth.accounts.signTransaction(updatedTxConfig, this.pk)
+      return [
+        {
+          rawTransaction: rawTransaction as string,
+        },
+        {
+          txHash: transactionHash as string,
+          extraData: updatedTxConfig,
+        },
+      ]
     } finally {
       release()
     }
   }
 
-  async confirmTx(txHashes: string[], txNonce: number): Promise<TransactionReceipt | null> {
-    // Transaction was not mined
-    const actualNonce = await getNonce(this.web3, this.address)
-    logger.info('Nonce value from RPC: %d; tx nonce: %d', actualNonce, txNonce)
-    if (actualNonce <= txNonce) {
-      return null
+  async resendTx(prevAttempts: SendAttempt<ExtraInfo>[]) {
+    if (prevAttempts.length === 0) {
+      throw new Error('No previous attempts')
     }
+
+    const { txHash, extraData } = prevAttempts.at(-1)!
+    logger.info('Resending tx %s ', txHash)
+
+    const preparedTx = await this.prepareTx({
+      txDesc: {
+        to: extraData.to as string,
+        value: extraData.value as number,
+        data: extraData.data as string,
+      },
+      extraData,
+      options: {
+        isResend: true,
+        shouldUpdateGasPrice: true,
+      },
+    })
+
+    try {
+      await new Promise((res, rej) =>
+        // prettier-ignore
+        this.web3.eth.sendSignedTransaction(preparedTx[0].rawTransaction)
+        .once('transactionHash', () => res(preparedTx))
+        .once('error', e => {
+          // Consider 'already known' errors as a successful send
+          if (isSameTransactionError(e)){
+            res(preparedTx)
+          } else {
+            rej(e)
+          }
+        })
+      )
+      return {
+        attempt: preparedTx[1],
+      }
+    } catch (e) {
+      const err = e as Error
+      // jobLogger.warn('Tx resend failed', { error: err.message, txHash })
+      if (isGasPriceError(err) || isSameTransactionError(err)) {
+        // Tx wasn't sent successfully, but still update last attempt's
+        // gasPrice to be accounted in the next iteration
+        return {
+          attempt: preparedTx[1],
+          error: SendError.GAS_PRICE_ERROR,
+        }
+        // await job.update({
+        //   ...job.data,
+        // })
+      } else if (isInsufficientBalanceError(err)) {
+        return {
+          attempt: preparedTx[1],
+          error: SendError.INSUFFICIENT_BALANCE,
+        }
+        // We don't want to take into account last gasPrice increase
+        // job.data.prevAttempts.at(-1)![1] = lastGasPrice
+
+        // const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(gasPrice)))
+        // jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+      } else if (isNonceError(err)) {
+        return {
+          attempt: preparedTx[1],
+          error: SendError.NONCE_ERROR,
+        }
+        // jobLogger.warn('Nonce error', { error: err.message, txHash })
+        // // Throw suppressed error to be treated as a warning
+        // throw new Error(RECHECK_ERROR)
+      }
+    }
+
+    return {
+      attempt: preparedTx[1],
+      error: SendError.GAS_PRICE_ERROR,
+    }
+  }
+
+  async confirmTx(txHashes: string[]): Promise<[TxInfo | null, boolean]> {
+    // Transaction was not mined
+    // const actualNonce = await getNonce(this.web3, this.address)
+    // logger.info('Nonce value from RPC: %d; tx nonce: %d', actualNonce, txNonce)
+    // if (actualNonce <= txNonce) {
+    //   return null
+    // }
 
     let tx = null
     // Iterate in reverse order to check the latest hash first
@@ -133,9 +223,10 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
         // Exception should be caught by `withLoop` to re-run job
         throw e
       }
-      if (tx && tx.blockNumber) return tx
+      if (tx && tx.blockNumber)
+        return [{ txHash: tx.transactionHash, success: tx.status, blockNumber: tx.blockNumber }, false]
     }
-    return null
+    return [null, false]
   }
 
   async _sendTx(rawTransaction: string): Promise<void> {
@@ -153,53 +244,24 @@ export class EvmTxManager implements TransactionManager<Network.Ethereum> {
         })
     )
   }
-
-  async consumer() {
-    this.isSending = true
-    while (this.txQueue.length !== 0) {
-      const a = this.txQueue.shift()
-      if (!a) {
-        return // TODO
-      }
-      const { txDesc, onSend, onIncluded, onRevert } = a
-
-      let isResend = false
-      const sendAttempts: string[] = []
-      while (1) {
-        const { txConfig } = await this.prepareTx(txDesc, {
-          isResend,
-          shouldUpdateGasPrice: false,
-        })
-        const signedTx = await this.web3.eth.accounts.signTransaction(txConfig, this.pk)
-        const txHash = signedTx.transactionHash as string
-
-        sendAttempts.push(txHash)
-        logger.info('Sending tx', { txHash })
-        await this._sendTx(signedTx.rawTransaction as string)
-        await onSend(txHash)
-
-        await sleep(1000)
-
-        const receipt = await this.confirmTx(sendAttempts, txConfig.nonce as number)
-        if (receipt === null) {
-          continue
-        }
-        if (receipt.status) {
-          await onIncluded(txHash)
-        } else {
-          await onRevert(txHash)
-        }
-        break
-      }
-    }
-    this.isSending = false
+  async sendTx({ txDesc, options, extraData }: SendTx<ExtraInfo>): Promise<[PreparedTx, SendAttempt<ExtraInfo>]> {
+    const preparedTx = await this.prepareTx({ txDesc, options, extraData })
+    return this.sendPreparedTx(preparedTx)
   }
 
-  async sendTx(sendTx: SendTx<Network.Ethereum>) {
-    logger.info('Adding tx to queue', { txDesc: sendTx.txDesc })
-    this.txQueue.push(sendTx)
-    if (!this.isSending) {
-      this.consumer()
-    }
+  sendPreparedTx(preparedTx: [PreparedTx, SendAttempt<ExtraInfo>]): Promise<[PreparedTx, SendAttempt<ExtraInfo>]> {
+    return new Promise((res, rej) =>
+      // prettier-ignore
+      this.web3.eth.sendSignedTransaction(preparedTx[0].rawTransaction)
+        .once('transactionHash', () => res(preparedTx))
+        .once('error', e => {
+          // Consider 'already known' errors as a successful send
+          if (isSameTransactionError(e)){
+            res(preparedTx)
+          } else {
+            rej(e)
+          }
+        })
+    )
   }
 }

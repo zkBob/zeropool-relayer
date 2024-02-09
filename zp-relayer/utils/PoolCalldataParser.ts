@@ -18,3 +18,24 @@ export class PoolCalldataParser {
     return '0x' + this.calldata.subarray(start, start + size).toString('hex')
   }
 }
+
+const FIELDSV2 = {
+  selector: { start: 0, size: 4 },
+  nullifier: { start: 5, size: 32 },
+  outCommit: { start: 37, size: 32 },
+  txType: { start: 353, size: 2 },
+  memoSize: { start: 355, size: 2 },
+  memo: { start: 357, size: 0 },
+}
+
+type FieldV2 = keyof typeof FIELDSV2
+
+export class PoolCalldataV2Parser {
+  constructor(private calldata: Buffer) {}
+
+  getField(f: FieldV2, defaultSize?: number) {
+    let { start, size } = FIELDSV2[f]
+    size = defaultSize || size
+    return '0x' + this.calldata.subarray(start, start + size).toString('hex')
+  }
+}

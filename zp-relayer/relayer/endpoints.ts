@@ -1,10 +1,11 @@
+import type { BasePool, LimitsFetch } from '@/pool/BasePool'
 import type { Queue } from 'bullmq'
 import { Request, Response } from 'express'
-import type { LimitsFetch, Pool, PoolTx } from '../pool'
-import { JobState, PoolTx as Tx, WorkerTxType, poolTxQueue } from '../queue/poolTxQueue'
 import config from '../configs/relayerConfig'
+import { BasePoolTx, JobState, PoolTx as Tx, poolTxQueue, WorkerTxType } from '../queue/poolTxQueue'
+import type { FeeManager } from '../services/fee'
+import { HEADER_TRACE_ID } from '../utils/constants'
 import {
-  validateCountryIP,
   checkGetLimits,
   checkGetSiblings,
   checkGetTransactionsV2,
@@ -12,13 +13,12 @@ import {
   checkSendTransactionsErrors,
   checkTraceId,
   validateBatch,
+  validateCountryIP,
   ValidationFunction,
 } from '../validation/api/validation'
-import { HEADER_TRACE_ID } from '../utils/constants'
-import type { FeeManager } from '../services/fee'
 
 interface PoolInjection {
-  pool: Pool
+  pool: BasePool
 }
 
 interface FeeManagerInjection {
@@ -44,7 +44,7 @@ async function sendTransactions(req: Request, res: Response, { pool }: PoolInjec
 
   await validateCountryIP(req.ip, config.RELAYER_BLOCKED_COUNTRIES)
 
-  const rawTxs = req.body as PoolTx[]
+  const rawTxs = req.body as BasePoolTx[]
   const traceId = req.headers[HEADER_TRACE_ID] as string
 
   const txs = rawTxs.map(tx => {

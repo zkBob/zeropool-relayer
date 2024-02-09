@@ -1,8 +1,8 @@
+import config from '@/configs/guardConfig'
 import express from 'express'
 import { logger } from '../services/appLogger'
-import { createRouter } from './router'
 import { init } from './init'
-import config from '@/configs/guardConfig'
+import { createRouter } from './router'
 
 const app = express()
 
