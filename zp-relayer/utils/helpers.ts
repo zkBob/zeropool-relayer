@@ -37,16 +37,14 @@ export function truncateMemoTxPrefix(memo: string, txType: TxType) {
 }
 
 const txTypePrefixLenV2 = {
-  [TxType.DEPOSIT]: 20,
-  [TxType.TRANSFER]: 20,
-  [TxType.WITHDRAWAL]: 76,
-  [TxType.PERMITTABLE_DEPOSIT]: 76,
+  [TxType.DEPOSIT]: 76,
+  [TxType.TRANSFER]: 76,
+  [TxType.WITHDRAWAL]: 132,
+  [TxType.PERMITTABLE_DEPOSIT]: 132,
 }
 
 export function truncateMemoTxPrefixProverV2(memo: string, txType: TxType) {
-  // 20 - prover address
-  // 8 - fee
-  const txSpecificPrefixLen = txTypePrefixLenV2[txType] + 28 * 2
+  const txSpecificPrefixLen = txTypePrefixLenV2[txType]
   return memo.slice(txSpecificPrefixLen)
 }
 

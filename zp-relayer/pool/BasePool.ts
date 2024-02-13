@@ -11,7 +11,7 @@ import { FeeManager } from '@/services/fee'
 import { NetworkBackend } from '@/services/network/NetworkBackend'
 import { Network } from '@/services/network/types'
 import { OUTPLUSONE } from '@/utils/constants'
-import { buildPrefixedMemo, toTxType, truncateHexPrefix, truncateMemoTxPrefix } from '@/utils/helpers'
+import { buildPrefixedMemo, toTxType, truncateHexPrefix, truncateMemoTxPrefix, truncateMemoTxPrefixProverV2 } from '@/utils/helpers'
 import { PoolCalldataParser, PoolCalldataV2Parser } from '@/utils/PoolCalldataParser'
 import AbiCoder from 'web3-eth-abi'
 import { hexToNumber, hexToNumberString } from 'web3-utils'
@@ -352,17 +352,12 @@ export abstract class BasePool<N extends Network = Network> {
 
       outCommit = hexToNumberString(parser.getField('outCommit'))
 
-      // 5fd28f8c0217e380eca3f50c819c900dde6c809db935b9f471d57f2b31391a943d7e3554bf1e7d3dd3237cf9673c71cea95a74632c1eb79b1eba56909e75771592aa918aa20000000000000000000000000000000000000000000000000000000522b08ce75c21923bf98cb8fd4c3061c1479d41f9a79e3c35b2627bfcc900b32215c850cc5d20f15f5764b965606ebe3e514ab927c3fcb4158619da175ddb17152456a55075ece0da172381cf00c8bfa2162ef9c6285c9c10f500c98d754301bb0f5d3988ea8e9f90bbb1e95de3b0801d4e8fea677ce6c2395cb4714e731407d418bc4450e27980ce787c29cede37c6fe513b9dfc3e613d82220c997024d1d06b229e7fbd7b09608c098b1755a810a12d5a76309049721f967b6ae371454a140902d0602a964d6941a18a95da76a6ea6a3314496821f5edc070c8288cdacc6c47078ae9db620375bcb71e116c06bfccdb995e7b9cd861c7915ae3fb61188c9cfa0003010cfec49782fe8e11de9fb3ba645a76fe914fffe3cb00000000000000000000000005f5e1000000000078905e1a21101bf0d989a3b194a291d018bdf73279f0e0bd01000000000259b1a0be6d4c3149211ce7eaa4c2758500e6ae26812c3fe58782ca617799f81bf9217e4ab0d08aea652eb228a13c5cf4a629f864547c03f4507c8f935621041a423b7dec7d962a9f3a5d4686b2b471a472d883cf312654bf1d37d916ae32afa88c479317a765b0a7d0cf6f9843878dd9d253686fe381f956d5acfa91f85c7b9605fae2f4f6f666fc7f2eb3519e4de356e030b00630c2f41d53ddcc4c5a9749f7c7baeb2318a98eba073502867b8e90e1622dccd1872fec1adafdd77915b8993156c238d37686d85db4535dab52b7b2a9fb09fc1a38af8edc9c92a750937a743baa36510a191b4227e51e9b05b6668e7127a3131c11bb22420ec86fffcb33bcf08670c0189269
-      // 1750c9dc0cef35c8c47c3d5ab1864c93052b3b37c730f7287c25f1d360bcd5ea
-      // 81e7d3dd3237cf9673c71cea95a74632c1eb79b1eba56909e75771592aa918aa
-      // 20000000078905e1a21101bf0d989a3b194a291d018bdf73279f0e0bd01000000000259b1a0be6d4c3149211ce7eaa4c2758500e6ae26812c3fe58782ca617799f81bf9217e4ab0d08aea652eb228a13c5cf4a629f864547c03f4507c8f935621041a423b7dec7d962a9f3a5d4686b2b471a472d883cf312654bf1d37d916ae32afa88c479317a765b0a7d0cf6f9843878dd9d253686fe381f956d5acfa91f85c7b9605fae2f4f6f666fc7f2eb3519e4de356e030b00630c2f41d53ddcc4c5a9749f7c7baeb2318a98eba073502867b8e90e1622dccd1872fec1adafdd77915b8993156c238d37686
-      console.log(calldata.toString('hex'))
       const txType = toTxType(parser.getField('txType'))
 
       const memoSize = hexToNumber(parser.getField('memoSize'))
       const memoRaw = truncateHexPrefix(parser.getField('memo', memoSize))
 
-      memo = truncateMemoTxPrefix(memoRaw, txType)
+      memo = truncateMemoTxPrefixProverV2(memoRaw, txType)
 
       // Save nullifier in confirmed state
       const nullifier = parser.getField('nullifier')
