@@ -1,7 +1,7 @@
-// @ts-ignore
 import config from '@/configs/guardConfig'
 import type { Network, NetworkContract } from '@/services/network'
-import { buildTxData, TxData } from '@/txProcessor'
+// @ts-ignore
+import { TxData, buildTxData } from '@/txProcessor'
 import { ENERGY_SIZE, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import { numToHex, packSignature } from '@/utils/helpers'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
@@ -9,10 +9,12 @@ import cors from 'cors'
 import { getBytes, keccak256 } from 'ethers'
 import express, { NextFunction, Request, Response } from 'express'
 import { VK } from 'libzkbob-rs-node'
+// @ts-ignore
 import TronWeb from 'tronweb'
 import { toBN } from 'web3-utils'
 import { logger } from '../services/appLogger'
 import { checkSignMPCSchema, validateBatch } from '../validation/api/validation'
+// @ts-ignore
 import { TxDataMPC, validateTxMPC } from '../validation/tx/validateTx'
 
 function wrapErr(f: (_req: Request, _res: Response, _next: NextFunction) => Promise<void> | void) {

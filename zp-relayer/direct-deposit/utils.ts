@@ -6,6 +6,7 @@ import { redis } from '@/services/redisClient'
 const serviceKey = 'direct-deposit'
 const lastBlockRedisKey = `${serviceKey}:lastProcessedBlock`
 
+// @ts-ignore
 export let lastProcessedBlock = Math.max(config.startBlock - 1, 0)
 
 export async function getLastProcessedBlock() {

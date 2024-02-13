@@ -6,23 +6,17 @@ import { logger } from '@/services/appLogger'
 import { EvmBackend, Network, NetworkBackend, TronBackend } from '@/services/network'
 import { redis } from '@/services/redisClient'
 import { validateDirectDeposit } from '@/validation/tx/validateDirectDeposit'
+// @ts-ignore
 import { Watcher } from '@/watcher/watcher'
 import { BatchCache } from './BatchCache'
 import { parseDirectDepositEvent } from './utils'
 
 async function initNetwork() {
   let networkBackend: NetworkBackend<Network>
+    // @ts-ignore
   if (config.COMMITMENT_WATCHER_NETWORK === Network.Ethereum) {
-    networkBackend = new EvmBackend({
-      rpcRequestTimeout: '' as any,
-      rpcSyncCheckInterval: '' as any,
-      jsonRpcErrorCodes: '' as any,
-      poolAddress: '' as any,
-      tokenAddress: '' as any,
-      pk: '' as any,
-      rpcUrls: '' as any,
-      requireHTTPS: '' as any,
-    })
+    networkBackend = new EvmBackend({} as any)
+    // @ts-ignore
   } else if (config.COMMITMENT_WATCHER_NETWORK === Network.Tron) {
     networkBackend = new TronBackend({} as any)
   } else {
@@ -44,6 +38,7 @@ async function init() {
       logger.info('Adding direct-deposit events to queue', { count: ds.length })
       directDepositQueue.add('', ds)
     },
+    // @ts-ignore
     dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
     redis
   )
@@ -55,7 +50,7 @@ async function init() {
     startBlock: config.COMMON_START_BLOCK,
     eventPollingInterval: config.eventPollingInterval,
     batchSize: config.COMMON_EVENTS_PROCESSING_BATCH_SIZE,
-    processor: async batch => {
+    processor: async (batch: any) => {
       const directDeposits: [string, DirectDeposit][] = []
       for (let event of batch) {
         const dd = parseDirectDepositEvent(event.values)

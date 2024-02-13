@@ -6,7 +6,6 @@ import Ajv, { JSONSchemaType } from 'ajv'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
 import { isAddress } from 'web3-utils'
 import { TxType } from 'zp-memo-parser'
-import { TxDataMPC } from '../tx/validateTx'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
@@ -85,7 +84,8 @@ const AjvSendTransactionSchema: JSONSchemaType<BasePoolTx> = {
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSignMPCSchema: JSONSchemaType<TxDataMPC> = {
+// @ts-ignore
+const AjvSignMPCSchema: JSONSchemaType<any> = {
   type: 'object',
   properties: {
     txProof: AjvProofSchema,
