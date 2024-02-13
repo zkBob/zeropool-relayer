@@ -1,7 +1,6 @@
 import config from '@/configs/baseConfig'
 import { logger } from '@/services/appLogger'
 import { flattenProof } from '@/utils/helpers'
-import { Proof } from 'libzkbob-rs-node'
 import AbiCoder from 'web3-eth-abi'
 import { toBN } from 'web3-utils'
 import { BasePool, ProcessResult } from './BasePool'
@@ -50,14 +49,6 @@ export class FinalizerPool extends BasePool {
       AbiCoder.encodeParameters(['uint256', 'uint256[8]', 'uint256'], [outCommit, treeFlatProof, rootAfter]).slice(2)
 
     return {
-      // data,
-      // func: '',
-      // commitIndex,
-      // outCommit,
-      // memo: '',
-      // nullifier: '',
-      // mpc: false,
-
       data,
       func,
       commitIndex,
@@ -73,12 +64,6 @@ export class FinalizerPool extends BasePool {
 
     logger.debug(`Proving tree...`)
     const treeProof = await this.treeProver.prove(pub, sec)
-    const res = Proof.verify(
-      require('/Users/leonidtyurin/projects/zeropool-relayer/zp-relayer/params/tree_verification_key.json'),
-      treeProof.proof,
-      treeProof.inputs
-    )
-    console.log(res)
     logger.debug(`Tree proved`)
     return { treeProof, commitIndex }
   }
