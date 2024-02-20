@@ -392,7 +392,7 @@ export abstract class BasePool<N extends Network = Network> {
   }
 
   async getLimitsFor(address: string): Promise<Limits> {
-    const limits = await this.network.pool.callRetry('getLimitsFor', [address])
+    const limits = await this.network.accounting.callRetry('getLimitsFor', [address])
     return {
       tvlCap: toBN(limits.tvlCap),
       tvl: toBN(limits.tvl),

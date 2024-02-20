@@ -24,7 +24,7 @@ export interface INetworkBackend<N extends Network> {
   type: N
   pool: NetworkContract<N>
   token: NetworkContract<N>
-  // txManager: TransactionManager<N> | null
+  accounting: NetworkContract<N>
 
   init(): Promise<void>
   contract(abi: any[], address: string): NetworkContract<N>

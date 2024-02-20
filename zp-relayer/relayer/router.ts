@@ -71,7 +71,7 @@ export function createRouter({ feeManager, pool }: IRouterConfig) {
   router.get('/merkle/root/:index?', wrapErr(inject({ pool }, endpoints.merkleRoot)))
   router.get('/job/:id', wrapErr(inject({ pool }, endpoints.getJob)))
   router.get('/info', wrapErr(inject({ pool }, endpoints.relayerInfo)))
-  router.get('/fee', wrapErr(endpoints.inject({ pool, feeManager }, endpoints.getFee)))
+  router.get('/fee', wrapErr(inject({ pool, feeManager }, endpoints.getFee)))
   router.get('/limits', wrapErr(inject({ pool }, endpoints.getLimits)))
   router.get('/maxNativeAmount', wrapErr(endpoints.getMaxNativeAmount))
   router.get('/siblings', wrapErr(inject({ pool }, endpoints.getSiblings)))

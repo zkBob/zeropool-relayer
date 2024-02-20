@@ -2,10 +2,11 @@ import type { BasePool, LimitsFetch } from '@/pool/BasePool'
 import type { Queue } from 'bullmq'
 import { Request, Response } from 'express'
 import config from '../configs/relayerConfig'
-import { BasePoolTx, JobState, PoolTx as Tx, poolTxQueue, WorkerTxType } from '../queue/poolTxQueue'
+import { BasePoolTx, JobState, PoolTx as Tx, WorkerTxType, poolTxQueue } from '../queue/poolTxQueue'
 import type { FeeManager } from '../services/fee'
 import { HEADER_TRACE_ID } from '../utils/constants'
 import {
+  ValidationFunction,
   checkGetLimits,
   checkGetSiblings,
   checkGetTransactionsV2,
@@ -14,7 +15,6 @@ import {
   checkTraceId,
   validateBatch,
   validateCountryIP,
-  ValidationFunction,
 } from '../validation/api/validation'
 
 interface PoolInjection {

@@ -1,3 +1,4 @@
+import AccountingAbi from '@/abi/accounting-abi.json'
 import PoolAbi from '@/abi/pool-abi.json'
 import TokenAbi from '@/abi/token-abi.json'
 // @ts-ignore
@@ -12,6 +13,7 @@ export class TronBackend implements INetworkBackend<Network.Tron> {
   tronWeb: any
   pool: TronContract
   token: TronContract
+  accounting: TronContract
 
   constructor(config: NetworkBackendConfig<Network.Tron>) {
     this.tronWeb = new TronWeb(config.rpcUrls[0], config.rpcUrls[0], config.rpcUrls[0])
@@ -24,6 +26,7 @@ export class TronBackend implements INetworkBackend<Network.Tron> {
 
     this.pool = new TronContract(this.tronWeb, PoolAbi, config.poolAddress)
     this.token = new TronContract(this.tronWeb, TokenAbi, config.tokenAddress)
+    this.accounting = new TronContract(this.tronWeb, AccountingAbi, config.poolAddress)
   }
 
   async *getEvents({ startBlock, event, batchSize, contract }: GetEventsConfig<Network.Tron>) {
@@ -53,7 +56,10 @@ export class TronBackend implements INetworkBackend<Network.Tron> {
   }
 
   async init() {
-    // await this.txManager.init()
+    try {
+      const accountingAddress = await this.pool.call('accounting')
+      this.accounting = this.contract(AccountingAbi, accountingAddress)
+    } catch (_) {}
   }
 
   async recover(msg: string, sig: string): Promise<string> {

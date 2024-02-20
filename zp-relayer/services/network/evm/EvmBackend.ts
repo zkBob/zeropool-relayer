@@ -1,3 +1,6 @@
+import AccountingAbi from '@/abi/accounting-abi.json'
+import PoolAbi from '@/abi/pool-abi.json'
+import TokenAbi from '@/abi/token-abi.json'
 import RedundantHttpListProvider from '@/services/providers/RedundantHttpListProvider'
 import { RETRY_CONFIG } from '@/utils/constants'
 import { checkHTTPS } from '@/utils/helpers'
@@ -5,8 +8,6 @@ import { getEvents } from '@/utils/web3'
 import Web3 from 'web3'
 import type { HttpProvider } from 'web3-core'
 import { AbiItem } from 'web3-utils'
-import PoolAbi from '../../../abi/pool-abi.json'
-import TokenAbi from '../../../abi/token-abi.json'
 import HttpListProvider from '../../providers/HttpListProvider'
 import { SafeEthLogsProvider } from '../../providers/SafeEthLogsProvider'
 import type { GetEventsConfig, INetworkBackend } from '../NetworkBackend'
@@ -19,6 +20,7 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
   web3Redundant: Web3
   pool: EthereumContract
   token: EthereumContract
+  accounting: EthereumContract
 
   constructor(config: NetworkBackendConfig<Network.Ethereum>) {
     const providerOptions = {
@@ -42,6 +44,7 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
 
     this.pool = this.contract(PoolAbi as AbiItem[], config.poolAddress)
     this.token = this.contract(TokenAbi as AbiItem[], config.tokenAddress)
+    this.accounting = this.contract(AccountingAbi as AbiItem[], config.poolAddress)
   }
 
   async *getEvents({ startBlock, lastBlock, event, batchSize, contract }: GetEventsConfig<Network.Ethereum>) {
@@ -64,8 +67,10 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
   }
 
   async init() {
-    // await this.gasPrice.start()
-    // await this.txManager.init()
+    try {
+      const accountingAddress = await this.pool.call('accounting')
+      this.accounting = this.contract(AccountingAbi as AbiItem[], accountingAddress)
+    } catch (_) {}
   }
 
   recover(msg: string, sig: string): Promise<string> {
