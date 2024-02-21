@@ -1,4 +1,5 @@
 import config from '@/configs/commitmentWatcherConfig'
+import { poolTxQueue, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { logger } from '@/services/appLogger'
 import { ValidationError } from '@/validation/api/validation'
 import cors from 'cors'
@@ -26,6 +27,26 @@ export function createRouter() {
 
   router.get('/fee', (req, res) => {
     res.json({ fee: config.COMMITMENT_WATCHER_FEE })
+  })
+
+  router.get('/job/:commitment', async (req, res) => {
+    const jobId = req.params.commitment
+    const job = await poolTxQueue.getJob(jobId)
+    if (job) {
+      const { outCommit, privilegedProver, fee, timestamp, gracePeriodEnd, txHash, state } = job.data
+        .transaction as WorkerTx<WorkerTxType.Finalize>
+      res.json({
+        outCommit,
+        privilegedProver,
+        fee,
+        timestamp,
+        gracePeriodEnd,
+        txHash,
+        state,
+      })
+    } else {
+      res.json(`Job ${jobId} not found`)
+    }
   })
 
   // Error handler middleware

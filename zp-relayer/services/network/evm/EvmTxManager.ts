@@ -71,10 +71,14 @@ export class EvmTxManager implements TransactionManager<ExtraInfo> {
   }
 
   async prepareTx({ txDesc, options, extraData }: SendTx<ExtraInfo>): Promise<[PreparedTx, SendAttempt<ExtraInfo>]> {
+    // TODO: this is a temporary solution for decentralized prover setup,
+    // as they share one private key
+    const nonce = await readNonce(this.config.redis, this.web3, this.address)(true)
     const txConfig = {
       ...txDesc,
       ...extraData,
       gas: extraData?.gas,
+      nonce,
     }
 
     const release = await this.mutex.acquire()

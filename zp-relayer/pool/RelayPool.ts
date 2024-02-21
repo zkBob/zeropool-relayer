@@ -1,23 +1,23 @@
 import config from '@/configs/relayerConfig'
 import { logger } from '@/services/appLogger'
-import { ENERGY_SIZE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
-import { encodeProof, numToHex, truncateHexPrefix, truncateMemoTxPrefix } from '@/utils/helpers'
+import { ENERGY_SIZE, OUTPLUSONE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
+import { encodeProof, numToHex, sleep, truncateHexPrefix, truncateMemoTxPrefixProverV2 } from '@/utils/helpers'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import AbiCoder from 'web3-eth-abi'
 import { bytesToHex, toBN } from 'web3-utils'
-import { getTxDataProverV2, TxType } from 'zp-memo-parser'
+import { TxType, getTxDataProverV2 } from 'zp-memo-parser'
 import { BasePool, OptionalChecks, ProcessResult } from './BasePool'
 
 import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from '@/utils/permit'
 import { PermitType, type PermitRecover } from '@/utils/permit/types'
 import {
+  TxValidationError,
   checkAssertion,
   checkCondition,
   checkMemoPrefixProverV2,
   checkPoolId,
   checkProof,
-  TxValidationError,
 } from '@/validation/tx/common'
 
 const ZERO = toBN(0)
@@ -133,7 +133,7 @@ export class RelayPool extends BasePool {
 
     const calldata = data.join('')
 
-    const memoTruncated = truncateMemoTxPrefix(memo, txType)
+    const memoTruncated = truncateMemoTxPrefixProverV2(memo, txType)
 
     const {
       pub: { root_after },
@@ -150,5 +150,27 @@ export class RelayPool extends BasePool {
       mpc: false,
       root: root_after,
     }
+  }
+
+  async onConfirmed(res: ProcessResult, txHash: string, callback?: () => Promise<void>): Promise<void> {
+    // Start watching for prover to finalize the tree update
+    ;(async () => {
+      const poolIndex = (res.commitIndex + 1) * OUTPLUSONE
+      while (true) {
+        // TODO: until prover deadline is not reached
+        // we can poll the job directly from prover
+        const root = await this.network.pool.call('roots', [poolIndex]).then(toBN)
+
+        if (!root.eq(ZERO)) {
+          logger.debug('Tx is finalized', { poolIndex, root: root.toString(10) })
+          await super.onConfirmed(res, txHash, callback)
+          return
+        } else {
+          logger.debug('Waiting for prover to finalize the tree update', { poolIndex })
+          await sleep(5000)
+          continue
+        }
+      }
+    })()
   }
 }

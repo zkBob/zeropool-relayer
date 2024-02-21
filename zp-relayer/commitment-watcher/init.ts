@@ -3,7 +3,7 @@ import { GasPriceConfig } from '@/configs/common/gasPriceConfig'
 import { TxManagerConfig } from '@/configs/common/txManagerConfig'
 import { FinalizerPool, PendingCommitment } from '@/pool/FinalizerPool'
 import { Circuit, IProver, LocalProver, ProverType } from '@/prover'
-import { JobState, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
+import { JobState, WorkerTxType, poolTxQueue } from '@/queue/poolTxQueue'
 import { logger } from '@/services/appLogger'
 import { GasPrice } from '@/services/gas-price'
 import { EvmBackend, Network, NetworkBackend, TransactionManager } from '@/services/network'
@@ -114,8 +114,6 @@ async function runWatcher(pool: FinalizerPool) {
     const pendingCommitment = await pool.fetchCommitment()
     if (pendingCommitment) {
       await processCommitment(pendingCommitment)
-    } else {
-      logger.info('No pending commitments, waiting...')
     }
   } catch (e) {
     logger.error(e)

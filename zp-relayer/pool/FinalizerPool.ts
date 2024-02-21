@@ -43,7 +43,6 @@ export class FinalizerPool extends BasePool {
 
     const treeFlatProof = flattenProof(treeProof.proof)
 
-    console.log('Building')
     const data =
       AbiCoder.encodeFunctionSignature(func) +
       AbiCoder.encodeParameters(['uint256', 'uint256[8]', 'uint256'], [outCommit, treeFlatProof, rootAfter]).slice(2)

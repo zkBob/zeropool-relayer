@@ -1,4 +1,4 @@
-import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import { JobState, PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { logger } from '@/services/appLogger'
 import { TX_QUEUE_NAME } from '@/utils/constants'
@@ -83,6 +83,10 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
       logger.debug('Adding nullifier %s to OS', nullifier)
       await pool.optimisticState.nullifiers.add([nullifier])
     }
+
+    job.data.transaction.state = JobState.SENT
+    job.data.transaction.txHash = txHash
+    await job.update(job.data)
 
     await sentTxQueue.add(txHash, {
       poolJobId: job.id as string,

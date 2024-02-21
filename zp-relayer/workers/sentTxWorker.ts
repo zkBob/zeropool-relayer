@@ -1,3 +1,4 @@
+import { JobState, poolTxQueue } from '@/queue/poolTxQueue'
 import { SentTxPayload } from '@/queue/sentTxQueue'
 import { logger } from '@/services/appLogger'
 import { SendError } from '@/services/network'
@@ -20,7 +21,8 @@ export async function createSentTxWorker({ redis, mutex, pool, txManager }: ISen
     const jobId = job.id as string
     const jobLogger = workerLogger.child({ jobId, resendNum })
 
-    jobLogger.info('Verifying job %s', job.data.poolJobId)
+    const poolJobId = job.data.poolJobId
+    jobLogger.info('Verifying job %s', poolJobId)
     const { prevAttempts, processResult } = job.data
     // Any thrown web3 error will re-trigger re-send loop iteration
 
@@ -68,13 +70,25 @@ export async function createSentTxWorker({ redis, mutex, pool, txManager }: ISen
       throw new Error(RECHECK_ERROR)
     }
 
+    const txHash = tx.txHash
+    const updatePoolJobState = async () => {
+      const poolJob = await poolTxQueue.getJob(poolJobId)
+      if (!poolJob) {
+        jobLogger.error('Pool job not found', { poolJobId })
+      } else {
+        poolJob.data.transaction.state = JobState.COMPLETED
+        poolJob.data.transaction.txHash = txHash
+        await poolJob.update(poolJob.data)
+      }
+    }
     if (tx.success) {
       // Successful
-      jobLogger.info('Transaction was successfully mined', { txHash: tx.txHash, blockNumber: tx.blockNumber })
+      jobLogger.info('Transaction was successfully mined', { txHash, blockNumber: tx.blockNumber })
 
-      await pool.onConfirmed(processResult, tx.txHash)
+      await pool.onConfirmed(processResult, txHash, updatePoolJobState)
     } else {
-      await pool.onFailed(tx.txHash)
+      await pool.onFailed(txHash)
+      await updatePoolJobState()
     }
   }
 

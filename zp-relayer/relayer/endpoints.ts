@@ -135,6 +135,7 @@ async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
     if (poolJobState === 'unknown') return null
 
     const job = await safeGetJob(poolTxQueue, jobId)
+    const { txHash, state } = job.data.transaction
 
     // Default result object
     let result: GetJobResponse = {
@@ -142,20 +143,9 @@ async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
       createdOn: job.timestamp,
       failedReason: null,
       finishedOn: null,
-      state: JobState.WAITING,
-      txHash: null,
+      state,
+      txHash,
     }
-
-    if (poolJobState === 'completed') {
-      // Transaction was included in optimistic state, waiting to be mined
-
-      // Sanity check
-      // if (job.returnvalue === null) throw new Error(INCONSISTENCY_ERR)
-      result.state = job.data.transaction.state
-    }
-    // Other states mean that transaction is either waiting in queue
-    // or being processed by worker
-    // So, no need to update `result` object
 
     return result
   }

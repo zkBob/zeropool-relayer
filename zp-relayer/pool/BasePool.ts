@@ -11,7 +11,13 @@ import { FeeManager } from '@/services/fee'
 import { NetworkBackend } from '@/services/network/NetworkBackend'
 import { Network } from '@/services/network/types'
 import { OUTPLUSONE } from '@/utils/constants'
-import { buildPrefixedMemo, toTxType, truncateHexPrefix, truncateMemoTxPrefix, truncateMemoTxPrefixProverV2 } from '@/utils/helpers'
+import {
+  buildPrefixedMemo,
+  toTxType,
+  truncateHexPrefix,
+  truncateMemoTxPrefix,
+  truncateMemoTxPrefixProverV2,
+} from '@/utils/helpers'
 import { PoolCalldataParser, PoolCalldataV2Parser } from '@/utils/PoolCalldataParser'
 import AbiCoder from 'web3-eth-abi'
 import { hexToNumber, hexToNumberString } from 'web3-utils'
@@ -122,10 +128,11 @@ export abstract class BasePool<N extends Network = Network> {
     this.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
   }
 
-  async onConfirmed({ outCommit, memo, commitIndex, nullifier, root }: ProcessResult, txHash: string): Promise<void> {
-    // Successful
-    logger.info('Transaction was successfully mined', { txHash })
-
+  async onConfirmed(
+    { outCommit, memo, commitIndex, nullifier, root }: ProcessResult,
+    txHash: string,
+    callback?: () => Promise<void>
+  ): Promise<void> {
     const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
     this.state.updateState(commitIndex, outCommit, prefixedMemo)
     // Update tx hash in optimistic state tx db
@@ -152,6 +159,10 @@ export abstract class BasePool<N extends Network = Network> {
       // TODO: Should be impossible but in such case
       // we should recover from some checkpoint
       logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
+    }
+
+    if (callback) {
+      await callback()
     }
   }
 
@@ -224,7 +235,7 @@ export abstract class BasePool<N extends Network = Network> {
       sentJobId: null,
       state: JobState.WAITING,
     }
-    console.log(queueTx)
+
     const job = await poolTxQueue.add(
       'tx',
       { type: WorkerTxType.Normal, transaction: queueTx, traceId },
@@ -261,8 +272,12 @@ export abstract class BasePool<N extends Network = Network> {
     const contractIndex = await this.getContractIndex()
     const contractRoot = await this.getContractMerkleRoot(contractIndex)
 
-    logger.debug(`LOCAL ROOT: ${localRoot}; LOCAL INDEX: ${localIndex}`)
-    logger.debug(`CONTRACT ROOT: ${contractRoot}; CONTRACT INDEX: ${contractIndex}`)
+    logger.debug('State info', {
+      localRoot,
+      localIndex,
+      contractRoot,
+      contractIndex,
+    })
 
     if (contractRoot === localRoot && contractIndex === localIndex) {
       logger.info('State is ok, no need to resync')
@@ -289,14 +304,21 @@ export abstract class BasePool<N extends Network = Network> {
       batchSize: this.config.eventsBatchSize,
     })) {
       for (const e of es) {
-        await this.addTxToState(e.txHash, e.values.index, e.values.message)
+        // Filter pending txs in case of decentralized relay pool
+        if (toBN(e.values.index).lte(toBN(contractIndex))) {
+          await this.addTxToState(e.txHash, e.values.index, e.values.message)
+        }
       }
     }
 
+    const newLocalIndex = this.state.getNextIndex()
     const newLocalRoot = this.state.getMerkleRoot()
-    logger.debug(`LOCAL ROOT AFTER UPDATE ${newLocalRoot}`)
+    logger.debug('Local state after update', {
+      newLocalRoot,
+      newLocalIndex,
+    })
     if (newLocalRoot !== contractRoot) {
-      logger.error('State is corrupted, roots mismatch')
+      throw new Error('State is corrupted, roots mismatch')
     }
   }
 
