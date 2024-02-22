@@ -9,7 +9,7 @@ import { Params } from 'libzkbob-rs-node'
 import config from '../configs/relayerConfig'
 import { Circuit, IProver, LocalProver, ProverType, RemoteProver } from '../prover'
 import { DynamicFeeManager, FeeManager, FeeManagerType, OptimismFeeManager, StaticFeeManager } from '../services/fee'
-import { EvmBackend, isEthereum, Network, NetworkBackend, TransactionManager } from '../services/network'
+import { EvmBackend, Network, NetworkBackend, TransactionManager, isEthereum } from '../services/network'
 import { NativePriceFeed, OneInchPriceFeed, PriceFeedType } from '../services/price-feed'
 import type { IPriceFeed } from '../services/price-feed/IPriceFeed'
 import { redis } from '../services/redisClient'
@@ -124,6 +124,7 @@ export async function init() {
     case FeeManagerType.Dynamic: {
       if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is supported only for Ethereum')
       feeManager = new DynamicFeeManager(managerConfig, (txManager as EvmTxManager).gasPrice)
+      break
     }
     case FeeManagerType.Optimism: {
       if (!isEthereum(networkBackend)) throw new Error('Dynamic fee manager is supported only for Ethereum')
