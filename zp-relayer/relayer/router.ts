@@ -66,6 +66,13 @@ export function createRouter({ feeManager, pool }: IRouterConfig) {
 
   router.get('/', endpoints.root)
   router.get('/version', endpoints.relayerVersion)
+  router.get(
+    '/address',
+    wrapErr((_, res) => {
+      res.json({ address: config.txManager.TX_ADDRESS })
+    })
+  )
+  router.get('/proverFee', wrapErr(endpoints.getProverFee))
   router.post('/sendTransactions', wrapErr(inject({ pool }, endpoints.sendTransactions)))
   router.get('/transactions/v2', wrapErr(inject({ pool }, endpoints.getTransactionsV2)))
   router.get('/merkle/root/:index?', wrapErr(inject({ pool }, endpoints.merkleRoot)))

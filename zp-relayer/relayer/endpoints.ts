@@ -236,6 +236,12 @@ function relayerVersion(req: Request, res: Response) {
   })
 }
 
+async function getProverFee(req: Request, res: Response) {
+  const url = new URL('/fee', config.RELAYER_PROVER_URL)
+  const fee = await fetch(url.toString()).then(r => r.json())
+  res.json(fee)
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
@@ -257,6 +263,7 @@ export default {
   getMaxNativeAmount,
   getSiblings,
   getParamsHash,
+  getProverFee,
   relayerVersion,
   root,
   inject,

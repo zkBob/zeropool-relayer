@@ -96,6 +96,7 @@ const zSchema = z
     RELAYER_REQUIRE_LIBJS_VERSION: zBooleanString().default('false'),
     RELAYER_EXPRESS_TRUST_PROXY: zBooleanString().default('false'),
     RELAYER_PRECOMPUTE_PARAMS: zBooleanString().default('false'),
+    RELAYER_PROVER_URL: z.string(),
     RELAYER_LOG_IGNORE_ROUTES: z
       .string()
       .default('')
