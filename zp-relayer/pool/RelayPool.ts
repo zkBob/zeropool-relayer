@@ -77,7 +77,7 @@ export class RelayPool extends BasePool {
     await checkAssertion(() => checkProof(proof, (p, i) => this.verifyProof(p, i)))
 
     const tokenAmount = delta.tokenAmount
-    const tokenAmountWithFee = tokenAmount.add(transactFee)
+    const tokenAmountWithFee = tokenAmount.add(transactFee).add(treeUpdateFee)
     const energyAmount = delta.energyAmount
 
     if (txType === TxType.WITHDRAWAL) {

@@ -15,7 +15,7 @@ const zSchema = z.object({
   COMMITMENT_WATCHER_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
   COMMITMENT_WATCHER_FETCH_INTERVAL: z.coerce.number().default(10000),
   COMMITMENT_WATCHER_TX_REDUNDANCY: zBooleanString().default('false'),
-  COMMITMENT_WATCHER_FEE: z.coerce.number().default(50_000_000),
+  COMMITMENT_WATCHER_FEE: z.coerce.number().default(100_000_000),
 })
 
 const config = zSchema.parse(process.env)
