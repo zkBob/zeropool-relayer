@@ -78,7 +78,7 @@ async function processCommitment(pendingCommitment: PendingCommitment) {
 
   const currentTimestamp = new BN(Math.floor(Date.now() / 1000))
 
-  if (privilegedProver !== config.txManager.TX_ADDRESS && toBN(timestamp).lt(currentTimestamp)) {
+  if (privilegedProver !== config.txManager.TX_ADDRESS && currentTimestamp.lt(toBN(gracePeriodEnd))) {
     logger.info('Not allowed to submit the proof yet, waiting...')
     return
   }
