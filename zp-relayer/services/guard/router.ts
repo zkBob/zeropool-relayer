@@ -9,9 +9,9 @@ import cors from 'cors'
 import { getBytes, keccak256 } from 'ethers'
 import express, { NextFunction, Request, Response } from 'express'
 import { VK } from 'libzkbob-rs-node'
-// @ts-ignore
 import { logger } from '@/lib/appLogger'
 import { checkSignMPCSchema, validateBatch } from '@/validation/api/validation'
+// @ts-ignore
 import TronWeb from 'tronweb'
 import { toBN } from 'web3-utils'
 // @ts-ignore
