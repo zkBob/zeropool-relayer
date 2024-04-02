@@ -1,4 +1,4 @@
-import { logger } from '@/services/appLogger'
+import { logger } from '@/lib/appLogger'
 import type { Redis } from 'ioredis'
 import type Web3 from 'web3'
 import { getNonce } from './web3'

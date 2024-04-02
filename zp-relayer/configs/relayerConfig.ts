@@ -1,15 +1,15 @@
+import { logger } from '@/lib/appLogger'
+import { FeeManagerType } from '@/lib/fee'
 import { ProverType } from '@/prover'
-import { logger } from '@/services/appLogger'
-import { FeeManagerType } from '@/services/fee'
-import { Network } from '@/services/network/types'
-import { PriceFeedType } from '@/services/price-feed'
 import { countryCodes } from '@/utils/countryCodes'
 import { PermitType } from '@/utils/permit/types'
 import { z } from 'zod'
 import { TxType } from 'zp-memo-parser'
-import baseConfig from './baseConfig'
-import { getGasPriceSchema } from './common/gasPriceConfig'
-import { getTxManagerSchema } from './common/txManagerConfig'
+import { getBaseConfig } from './baseConfig'
+import { getGasPriceConfig } from './common/gasPriceConfig'
+import { getNetworkConfig } from './common/networkConfig'
+import { getPriceFeedConfig } from './common/priceFeedConfig'
+import { getTxManagerConfig } from './common/txManagerConfig'
 import { zBN, zBooleanString, zNullishString } from './common/utils'
 
 const defaultHeaderBlacklist =
@@ -23,15 +23,6 @@ const zTreeProver = z.discriminatedUnion('RELAYER_TREE_PROVER_TYPE', [
 const zDirectDepositProver = z.discriminatedUnion('RELAYER_DD_PROVER_TYPE', [
   z.object({ RELAYER_DD_PROVER_TYPE: z.literal(ProverType.Local) }),
   z.object({ RELAYER_DD_PROVER_TYPE: z.literal(ProverType.Remote) }), // TODO remote prover url
-])
-
-const zPriceFeed = z.discriminatedUnion('RELAYER_PRICE_FEED_TYPE', [
-  z.object({ RELAYER_PRICE_FEED_TYPE: z.literal(PriceFeedType.Native) }),
-  z.object({
-    RELAYER_PRICE_FEED_TYPE: z.literal(PriceFeedType.OneInch),
-    RELAYER_PRICE_FEED_CONTRACT_ADDRESS: z.string(),
-    RELAYER_PRICE_FEED_BASE_TOKEN_ADDRESS: z.string(),
-  }),
 ])
 
 const zBaseTxGas = z
@@ -73,7 +64,6 @@ const zGuards = z.object({
 
 const zSchema = z
   .object({
-    RELAYER_NETWORK: z.nativeEnum(Network),
     RELAYER_REF: zNullishString(),
     RELAYER_SHA: zNullishString(),
     RELAYER_PORT: z.coerce.number().default(8000),
@@ -123,19 +113,17 @@ const zSchema = z
   })
   .and(zTreeProver)
   .and(zDirectDepositProver)
-  .and(zPriceFeed)
   .and(zBaseTxGas)
   .and(zFeeManager)
   .and(zGuards)
 
-const config = zSchema.parse(process.env)
-
-const txManager = getTxManagerSchema(config.RELAYER_NETWORK)
-const gasPrice = getGasPriceSchema(config.RELAYER_NETWORK)
+const network = getNetworkConfig()
 
 export default {
-  ...config,
-  ...baseConfig,
-  txManager,
-  gasPrice,
+  ...zSchema.parse(process.env),
+  network,
+  base: getBaseConfig(),
+  txManager: getTxManagerConfig(network.NETWORK),
+  gasPrice: getGasPriceConfig(network.NETWORK),
+  priceFeed: getPriceFeedConfig(),
 }

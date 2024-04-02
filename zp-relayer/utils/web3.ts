@@ -1,6 +1,6 @@
-import { logger } from '@/services/appLogger'
-import { NetworkBackend } from '@/services/network/NetworkBackend'
-import { Network } from '@/services/network/types'
+import { logger } from '@/lib/appLogger'
+import { NetworkBackend } from '@/lib/network/NetworkBackend'
+import { Network } from '@/lib/network/types'
 import type Web3 from 'web3'
 import type { Contract, PastEventOptions } from 'web3-eth-contract'
 

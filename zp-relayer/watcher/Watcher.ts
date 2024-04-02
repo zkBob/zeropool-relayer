@@ -1,6 +1,6 @@
-import { logger } from '@/services/appLogger'
-import { Event, Network, NetworkBackend, NetworkContract } from '@/services/network'
-import { redis } from '@/services/redisClient'
+import { logger } from '@/lib/appLogger'
+import { Event, Network, NetworkBackend, NetworkContract } from '@/lib/network'
+import { redis } from '@/lib/redisClient'
 import { getBlockNumber } from '@/utils/web3'
 
 interface WatcherConfig {
@@ -36,30 +36,34 @@ export class Watcher<N extends Network> {
     const lastBlockNumber = await getBlockNumber(this.network)
     const lastBlockToProcess = lastBlockNumber - this.config.blockConfirmations
 
-    if (lastBlockToProcess <= this.lastProcessedBlock) {
+    const fromBlock = this.lastProcessedBlock + 1
+
+    if (fromBlock <= this.lastProcessedBlock) {
       logger.debug('All blocks already processed')
       return
     }
 
-    const fromBlock = this.lastProcessedBlock + 1
     const rangeEndBlock = fromBlock + this.config.batchSize
     let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
 
-    for await (const batch of this.network.getEvents({
-      startBlock: fromBlock,
-      lastBlock: toBlock,
-      event: this.config.event,
-      batchSize: this.config.batchSize,
-      contract: this.contract,
-    })) {
-      logger.info(`Found ${batch.length} direct-deposit events`)
-      await this.config.processor(batch)
+    try {
+      for await (const batch of this.network.getEvents({
+        startBlock: fromBlock,
+        lastBlock: toBlock,
+        event: this.config.event,
+        batchSize: this.config.batchSize,
+        contract: this.contract,
+      })) {
+        logger.info(`Found ${batch.events.length} ${this.config.event} events`)
+        await this.config.processor(batch.events)
+        logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })
+
+        this.lastProcessedBlock = batch.toBlock
+        await redis.set(this.lastBlockRedisKey, this.lastProcessedBlock)
+      }
+    } catch (e) {
+      logger.error('Error processing events, continuing...', e)
     }
-
-    logger.debug('Updating last processed block', { lastProcessedBlock: toBlock.toString() })
-
-    this.lastProcessedBlock = toBlock
-    return redis.set(this.lastBlockRedisKey, this.lastProcessedBlock)
   }
 
   async run() {

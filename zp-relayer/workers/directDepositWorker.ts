@@ -1,5 +1,5 @@
-import { DirectDeposit, JobState, WorkerTxType, WorkerTxTypePriority, poolTxQueue } from '@/queue/poolTxQueue'
-import { logger } from '@/services/appLogger'
+import { logger } from '@/lib/appLogger'
+import { DirectDeposit, JobState, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
 // @ts-ignore
 import { getDirectDepositProof } from '@/txProcessor'
 import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'

@@ -1,51 +1,52 @@
-import config from '@/configs/relayerConfig'
-import { logger } from '@/services/appLogger'
-import { ENERGY_SIZE, OUTPLUSONE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
-import { encodeProof, numToHex, sleep, truncateHexPrefix, truncateMemoTxPrefixProverV2 } from '@/utils/helpers'
-import { getTxProofField, parseDelta } from '@/utils/proofInputs'
-import AbiCoder from 'web3-eth-abi'
-import { bytesToHex, toBN } from 'web3-utils'
-import { TxType, getTxDataProverV2 } from 'zp-memo-parser'
-import { BasePool, OptionalChecks, ProcessResult } from './BasePool'
-
+import { logger } from '@/lib/appLogger'
 import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import { ENERGY_SIZE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
+import { encodeProof, numToHex, truncateHexPrefix, truncateMemoTxPrefixProverV2 } from '@/utils/helpers'
 import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from '@/utils/permit'
 import { PermitType, type PermitRecover } from '@/utils/permit/types'
+import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import {
-  TxValidationError,
+  checkAddressEq,
   checkAssertion,
   checkCondition,
   checkMemoPrefixProverV2,
   checkPoolId,
   checkProof,
+  TxValidationError,
 } from '@/validation/tx/common'
+import AbiCoder from 'web3-eth-abi'
+import { bytesToHex, toBN } from 'web3-utils'
+import { getTxDataProverV2, TxType } from 'zp-memo-parser'
+import { BasePool } from './BasePool'
+import { OptionalChecks, PermitConfig, ProcessResult } from './types'
 
 const ZERO = toBN(0)
 
 export class RelayPool extends BasePool {
   public permitRecover: PermitRecover | null = null
+  private proxyAddress!: string
 
-  async init(sync: boolean = true) {
+  async init(permitConfig: PermitConfig, proxyAddress: string) {
     if (this.isInitialized) return
+
+    this.proxyAddress = proxyAddress
 
     this.denominator = toBN(await this.network.pool.call('denominator'))
     this.poolId = toBN(await this.network.pool.call('pool_id'))
 
-    if (config.RELAYER_PERMIT_TYPE === PermitType.SaltedPermit) {
-      this.permitRecover = new SaltedPermitRecover(this.network, config.RELAYER_TOKEN_ADDRESS)
-    } else if (config.RELAYER_PERMIT_TYPE === PermitType.Permit2) {
+    if (permitConfig.permitType === PermitType.SaltedPermit) {
+      this.permitRecover = new SaltedPermitRecover(this.network, permitConfig.token)
+    } else if (permitConfig.permitType === PermitType.Permit2) {
       this.permitRecover = new Permit2Recover(this.network, PERMIT2_CONTRACT)
-    } else if (config.RELAYER_PERMIT_TYPE === PermitType.TransferWithAuthorization) {
-      this.permitRecover = new TransferWithAuthorizationRecover(this.network, config.RELAYER_TOKEN_ADDRESS)
-    } else if (config.RELAYER_PERMIT_TYPE === PermitType.None) {
+    } else if (permitConfig.permitType === PermitType.TransferWithAuthorization) {
+      this.permitRecover = new TransferWithAuthorizationRecover(this.network, permitConfig.token)
+    } else if (permitConfig.permitType === PermitType.None) {
       this.permitRecover = null
     } else {
       throw new Error("Cannot infer pool's permit standard")
     }
     await this.permitRecover?.initializeDomain()
-    if (sync) {
-      await this.syncState(config.COMMON_START_BLOCK)
-    }
+
     this.isInitialized = true
   }
 
@@ -63,6 +64,7 @@ export class RelayPool extends BasePool {
     const delta = parseDelta(getTxProofField(proof, 'delta'))
     const transactFee = toBN(txData.transactFee)
     const treeUpdateFee = toBN(txData.treeUpdateFee)
+    const proxyAddress = bytesToHex(Array.from(txData.proxyAddress))
     const proverAddress = bytesToHex(Array.from(txData.proverAddress))
 
     logger.info('TxData', {
@@ -70,8 +72,11 @@ export class RelayPool extends BasePool {
       deltaEnergy: delta.energyAmount.toString(10),
       transactFee: transactFee.toString(10),
       treeUpdateFee: treeUpdateFee.toString(10),
+      proxyAddress,
       proverAddress,
     })
+
+    await checkAssertion(() => checkAddressEq(proxyAddress, this.proxyAddress))
 
     await checkAssertion(() => checkPoolId(delta.poolId, this.poolId))
     await checkAssertion(() => checkProof(proof, (p, i) => this.verifyProof(p, i)))
@@ -94,7 +99,7 @@ export class RelayPool extends BasePool {
 
   async buildNormalTx({
     transaction: { proof, memo, depositSignature, txType },
-  }: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult> {
+  }: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult<RelayPool>> {
     const func = 'transactV2()'
     const version = 2
 
@@ -152,25 +157,7 @@ export class RelayPool extends BasePool {
     }
   }
 
-  async onConfirmed(res: ProcessResult, txHash: string, callback?: () => Promise<void>): Promise<void> {
-    // Start watching for prover to finalize the tree update
-    ;(async () => {
-      const poolIndex = (res.commitIndex + 1) * OUTPLUSONE
-      while (true) {
-        // TODO: until prover deadline is not reached
-        // we can poll the job directly from prover
-        const root = await this.network.pool.call('roots', [poolIndex]).then(toBN)
+  async onSend(p: ProcessResult<this>, txHash: string): Promise<void> {}
 
-        if (!root.eq(ZERO)) {
-          logger.debug('Tx is finalized', { poolIndex, root: root.toString(10) })
-          await super.onConfirmed(res, txHash, callback)
-          return
-        } else {
-          logger.debug('Waiting for prover to finalize the tree update', { poolIndex })
-          await sleep(5000)
-          continue
-        }
-      }
-    })()
-  }
+  async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>): Promise<void> {}
 }

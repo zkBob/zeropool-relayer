@@ -28,6 +28,7 @@ export type TxData<T extends TxType> = BaseTxData &
   (T extends TxType.WITHDRAWAL ? WithdrawTxData : T extends TxType.PERMITTABLE_DEPOSIT ? PermittableDepositTxData : {})
 
 interface BaseTxDataProverV2 {
+  proxyAddress: Uint8Array
   proverAddress: Uint8Array
   treeUpdateFee: string
 }
@@ -138,6 +139,9 @@ export function getTxData<T extends TxType>(m: Buffer, txType: Option<T>): TxDat
 export function getTxDataProverV2<T extends TxType>(m: Buffer, txType: Option<T>): TxDataProverV2<T> {
   let offset = 0
 
+  const proxyAddress = getAddress(m, offset)
+  offset += 20
+
   const proverAddress = getAddress(m, offset)
   offset += 20
 
@@ -148,6 +152,7 @@ export function getTxDataProverV2<T extends TxType>(m: Buffer, txType: Option<T>
   offset += 8
 
   const base = {
+    proxyAddress,
     proverAddress,
     transactFee,
     treeUpdateFee,

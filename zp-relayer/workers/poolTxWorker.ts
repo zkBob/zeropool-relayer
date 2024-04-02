@@ -1,8 +1,8 @@
+import { logger } from '@/lib/appLogger'
 import { JobState, PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { sentTxQueue } from '@/queue/sentTxQueue'
-import { logger } from '@/services/appLogger'
 import { TX_QUEUE_NAME } from '@/utils/constants'
-import { buildPrefixedMemo, withErrorLog, withMutex } from '@/utils/helpers'
+import { withErrorLog, withMutex } from '@/utils/helpers'
 import { TxValidationError } from '@/validation/tx/common'
 import { Job, Worker } from 'bullmq'
 import Redis from 'ioredis'
@@ -44,7 +44,7 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
       traceId
     )
     const processResult = await pool.buildTx(job.data)
-    const { data, memo, commitIndex, outCommit, func, nullifier } = processResult
+    const { data, func } = processResult
 
     const preparedTx = await txManager.prepareTx({
       txDesc: {
@@ -75,14 +75,7 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
     const txHash = sendAttempt.txHash
     logger.info('Tx sent', { txHash })
 
-    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
-
-    pool.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
-
-    if (nullifier) {
-      logger.debug('Adding nullifier %s to OS', nullifier)
-      await pool.optimisticState.nullifiers.add([nullifier])
-    }
+    await pool.onSend(processResult, txHash)
 
     job.data.transaction.state = JobState.SENT
     job.data.transaction.txHash = txHash

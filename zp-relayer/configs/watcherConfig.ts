@@ -1,11 +1,17 @@
-import baseConfig from './baseConfig'
+import { z } from 'zod'
+import { getBaseConfig } from './baseConfig'
 
-const config = {
-  ...baseConfig,
-  blockConfirmations: parseInt(process.env.WATCHER_BLOCK_CONFIRMATIONS || '1'),
-  eventPollingInterval: parseInt(process.env.WATCHER_EVENT_POLLING_INTERVAL || '600000'),
-  directDepositBatchSize: parseInt(process.env.DIRECT_DEPOSIT_BATCH_SIZE || '16'),
-  directDepositBatchTtl: parseInt(process.env.DIRECT_DEPOSIT_BATCH_TTL || '3600000'),
+const schema = z.object({
+  INDEXER_PORT: z.coerce.number().default(8000),
+  WATCHER_BLOCK_CONFIRMATIONS: z.coerce.number().default(1),
+  WATCHER_EVENT_POLLING_INTERVAL: z.coerce.number().default(600000),
+  DIRECT_DEPOSIT_BATCH_SIZE: z.coerce.number().default(16),
+  DIRECT_DEPOSIT_BATCH_TTL: z.coerce.number().default(3600000),
+})
+
+const config = schema.parse(process.env)
+
+export default {
+  ...config,
+  base: getBaseConfig(),
 }
-
-export default config

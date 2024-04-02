@@ -1,13 +1,12 @@
-import { Network } from '@/services/network/types'
 import { z } from 'zod'
-import baseConfig from './baseConfig'
-import { getGasPriceSchema } from './common/gasPriceConfig'
-import { getTxManagerSchema } from './common/txManagerConfig'
+import { getBaseConfig } from './baseConfig'
+import { getGasPriceConfig } from './common/gasPriceConfig'
+import { getNetworkConfig } from './common/networkConfig'
+import { getTxManagerConfig } from './common/txManagerConfig'
 import { zBooleanString } from './common/utils'
 
 const zSchema = z.object({
   COMMITMENT_WATCHER_PORT: z.coerce.number().default(8000),
-  COMMITMENT_WATCHER_NETWORK: z.nativeEnum(Network),
   COMMITMENT_WATCHER_TOKEN_ADDRESS: z.string(),
   COMMITMENT_WATCHER_PRECOMPUTE_PARAMS: zBooleanString().default('false'),
   COMMITMENT_WATCHER_TREE_UPDATE_PARAMS_PATH: z.string().default('../params/tree_params.bin'),
@@ -18,14 +17,12 @@ const zSchema = z.object({
   COMMITMENT_WATCHER_FEE: z.coerce.number().default(100_000_000),
 })
 
-const config = zSchema.parse(process.env)
-
-const txManager = getTxManagerSchema(config.COMMITMENT_WATCHER_NETWORK)
-const gasPrice = getGasPriceSchema(config.COMMITMENT_WATCHER_NETWORK)
+const network = getNetworkConfig()
 
 export default {
-  ...config,
-  ...baseConfig,
-  txManager,
-  gasPrice,
+  ...zSchema.parse(process.env),
+  network,
+  base: getBaseConfig(),
+  txManager: getTxManagerConfig(network.NETWORK),
+  gasPrice: getGasPriceConfig(network.NETWORK),
 }

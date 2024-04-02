@@ -1,7 +1,8 @@
-import { logger } from '@/services/appLogger'
+import { logger } from '@/lib/appLogger'
 import type { Mutex } from 'async-mutex'
 import type BN from 'bn.js'
 import crypto from 'crypto'
+import type { Request, Response } from 'express'
 import fs from 'fs'
 import type { SnarkProof } from 'libzkbob-rs-node'
 import promiseRetry from 'promise-retry'
@@ -37,10 +38,10 @@ export function truncateMemoTxPrefix(memo: string, txType: TxType) {
 }
 
 const txTypePrefixLenV2 = {
-  [TxType.DEPOSIT]: 76,
-  [TxType.TRANSFER]: 76,
-  [TxType.WITHDRAWAL]: 132,
-  [TxType.PERMITTABLE_DEPOSIT]: 132,
+  [TxType.DEPOSIT]: 116,
+  [TxType.TRANSFER]: 116,
+  [TxType.WITHDRAWAL]: 172,
+  [TxType.PERMITTABLE_DEPOSIT]: 172,
 }
 
 export function truncateMemoTxPrefixProverV2(memo: string, txType: TxType) {
@@ -286,4 +287,10 @@ export function getFileHash(path: string | null) {
 
 export function applyDenominator(n: BN, d: BN) {
   return d.testn(255) ? n.div(d.maskn(255)) : n.mul(d)
+}
+
+export function inject<T>(values: T, f: (req: Request, res: Response, e: T) => void) {
+  return (req: Request, res: Response) => {
+    return f(req, res, values)
+  }
 }

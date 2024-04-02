@@ -1,6 +1,6 @@
 // @ts-ignore
+import { logger } from '@/lib/appLogger'
 import { BasePoolTx } from '@/queue/poolTxQueue'
-import { logger } from '@/services/appLogger'
 import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
 import Ajv, { JSONSchemaType } from 'ajv'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'

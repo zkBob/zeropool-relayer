@@ -1,6 +1,6 @@
+import { TransactionManager } from '@/lib/network'
 import { BasePool } from '@/pool/BasePool'
 import type { Circuit, IProver } from '@/prover'
-import { TransactionManager } from '@/services/network'
 import type { Mutex } from 'async-mutex'
 import type { Redis } from 'ioredis'
 

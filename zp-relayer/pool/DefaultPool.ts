@@ -1,25 +1,27 @@
 import config from '@/configs/relayerConfig'
-import { logger } from '@/services/appLogger'
-import { ENERGY_SIZE, MOCK_CALLDATA, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
+import { logger } from '@/lib/appLogger'
+import type { Circuit, IProver } from '@/prover'
+import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import {
+  ENERGY_SIZE,
+  MOCK_CALLDATA,
+  OUTPLUSONE,
+  PERMIT2_CONTRACT,
+  TOKEN_SIZE,
+  TRANSFER_INDEX_SIZE,
+} from '@/utils/constants'
 import {
   applyDenominator,
+  buildPrefixedMemo,
   encodeProof,
   flattenProof,
   numToHex,
   truncateHexPrefix,
   truncateMemoTxPrefix,
 } from '@/utils/helpers'
-import { getTxProofField, parseDelta } from '@/utils/proofInputs'
-import { Proof } from 'libzkbob-rs-node'
-import AbiCoder from 'web3-eth-abi'
-import { bytesToHex, toBN } from 'web3-utils'
-import { getTxData, TxData, TxType } from 'zp-memo-parser'
-import { BasePool, OptionalChecks, ProcessResult } from './BasePool'
-
-import type { Circuit, IProver } from '@/prover'
-import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from '@/utils/permit'
 import { PermitType, type PermitRecover } from '@/utils/permit/types'
+import { getTxProofField, parseDelta } from '@/utils/proofInputs'
 import {
   checkAssertion,
   checkCondition,
@@ -39,6 +41,12 @@ import {
   getRecoveredAddress,
   TxValidationError,
 } from '@/validation/tx/common'
+import { Proof } from 'libzkbob-rs-node'
+import AbiCoder from 'web3-eth-abi'
+import { bytesToHex, toBN } from 'web3-utils'
+import { getTxData, TxData, TxType } from 'zp-memo-parser'
+import { BasePool } from './BasePool'
+import { OptionalChecks, ProcessResult } from './types'
 
 const ZERO = toBN(0)
 
@@ -46,7 +54,7 @@ export class DefaultPool extends BasePool {
   treeProver!: IProver<Circuit.Tree>
   public permitRecover: PermitRecover | null = null
 
-  async init(sync: boolean = true, treeProver: IProver<Circuit.Tree>) {
+  async init(startBlock: number | null = null, treeProver: IProver<Circuit.Tree>) {
     if (this.isInitialized) return
 
     this.treeProver = treeProver
@@ -66,13 +74,13 @@ export class DefaultPool extends BasePool {
       throw new Error("Cannot infer pool's permit standard")
     }
     await this.permitRecover?.initializeDomain()
-    if (sync) {
-      await this.syncState(config.COMMON_START_BLOCK)
+    if (startBlock) {
+      await this.syncState(startBlock)
     }
     this.isInitialized = true
   }
 
-  onIncluded(r: ProcessResult, txHash: string): Promise<void> {
+  onIncluded(r: ProcessResult<DefaultPool>, txHash: string): Promise<void> {
     throw new Error('Method not implemented.')
   }
 
@@ -194,7 +202,7 @@ export class DefaultPool extends BasePool {
 
   async buildNormalTx({
     transaction: { txType, proof, memo, depositSignature },
-  }: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult> {
+  }: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult<DefaultPool>> {
     const func = 'transact()'
 
     const nullifier = getTxProofField(proof, 'nullifier')
@@ -245,7 +253,7 @@ export class DefaultPool extends BasePool {
 
   async buildDirectDepositTx({
     transaction: { outCommit, txProof, deposits, memo },
-  }: PoolTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult> {
+  }: PoolTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult<DefaultPool>> {
     logger.info('Received direct deposit', { number: deposits.length })
 
     const func = 'appendDirectDeposits(uint256,uint256[],uint256,uint256[8],uint256[8])'
@@ -272,6 +280,54 @@ export class DefaultPool extends BasePool {
   ): Promise<void> {
     if (tx.transaction.deposits.length === 0) {
       throw new Error('Empty direct deposit batch, skipping')
+    }
+  }
+
+  async onSend({ outCommit, memo, commitIndex, nullifier }: ProcessResult<this>, txHash: string) {
+    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
+    this.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
+
+    if (nullifier) {
+      logger.debug('Adding nullifier %s to OS', nullifier)
+      await this.optimisticState.nullifiers.add([nullifier])
+    }
+  }
+
+  async onConfirmed(
+    { outCommit, memo, commitIndex, nullifier, root }: ProcessResult<this>,
+    txHash: string,
+    callback?: () => Promise<void>
+  ) {
+    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
+    this.state.updateState(commitIndex, outCommit, prefixedMemo)
+    // Update tx hash in optimistic state tx db
+    this.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
+
+    // Add nullifier to confirmed state and remove from optimistic one
+    if (nullifier) {
+      logger.info('Adding nullifier %s to PS', nullifier)
+      await this.state.nullifiers.add([nullifier])
+      logger.info('Removing nullifier %s from OS', nullifier)
+      await this.optimisticState.nullifiers.remove([nullifier])
+    }
+
+    const node1 = this.state.getCommitment(commitIndex)
+    const node2 = this.optimisticState.getCommitment(commitIndex)
+    logger.info('Assert commitments are equal: %s, %s', node1, node2)
+    if (node1 !== node2) {
+      logger.error('Commitments are not equal, state is corrupted')
+    }
+
+    const rootConfirmed = this.state.getMerkleRoot()
+    logger.info('Assert roots are equal')
+    if (rootConfirmed !== root) {
+      // TODO: Should be impossible but in such case
+      // we should recover from some checkpoint
+      logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
+    }
+
+    if (callback) {
+      await callback()
     }
   }
 }

@@ -1,4 +1,3 @@
-import config from '@/configs/baseConfig'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { contractCallRetry } from '@/utils/helpers'
 import { Helpers } from 'libzkbob-rs-node'
@@ -63,14 +62,17 @@ async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositCon
   return null
 }
 
-export async function validateDirectDeposit(dd: DirectDeposit, directDepositContract: Contract) {
+export interface TxScreener {
+  url: string
+  token: string
+}
+
+export async function validateDirectDeposit(dd: DirectDeposit, directDepositContract: Contract, screener?: TxScreener) {
   await checkAssertion(() => checkDirectDepositPK(dd.zkAddress.pk))
   await checkAssertion(() => checkDirectDepositConsistency(dd, directDepositContract))
 
-  const screenerUrl = config.COMMON_SCREENER_URL
-  const screenerToken = config.COMMON_SCREENER_TOKEN
-  if (screenerUrl && screenerToken) {
-    await checkAssertion(() => checkScreener(dd.sender, screenerUrl, screenerToken))
-    await checkAssertion(() => checkScreener(dd.fallbackUser, screenerUrl, screenerToken))
+  if (screener) {
+    await checkAssertion(() => checkScreener(dd.sender, screener.url, screener.token))
+    await checkAssertion(() => checkScreener(dd.fallbackUser, screener.url, screener.token))
   }
 }

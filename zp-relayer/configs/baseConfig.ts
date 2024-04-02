@@ -4,6 +4,7 @@ import { zBooleanString, zNullishString } from './common/utils'
 const schema = z.object({
   COMMON_POOL_ADDRESS: z.string(),
   COMMON_START_BLOCK: z.coerce.number().default(0),
+  COMMON_INDEXER_URL: z.string().optional(),
   COMMON_REDIS_URL: z.string(),
   COMMON_RPC_URL: z.string().transform(us => us.split(' ').filter(url => url.length > 0)),
   COMMON_REQUIRE_RPC_HTTPS: zBooleanString().default('false'),
@@ -23,6 +24,8 @@ const schema = z.object({
   COMMON_SCREENER_TOKEN: zNullishString(),
 })
 
-const config = schema.parse(process.env)
+export type BaseConfig = z.infer<typeof schema>
 
-export default config
+export function getBaseConfig(): BaseConfig {
+  return schema.parse(process.env)
+}

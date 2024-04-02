@@ -1,9 +1,9 @@
-import { EstimationType } from '@/services/gas-price'
-import { Network } from '@/services/network'
+import { EstimationType } from '@/lib/gas-price'
+import { Network } from '@/lib/network'
 import { z } from 'zod'
 import { zBN } from './utils'
 
-const zGasPrice = z.object({
+export const zGasPrice = z.object({
   GAS_PRICE_ESTIMATION_TYPE: z.nativeEnum(EstimationType).default(EstimationType.Web3),
   GAS_PRICE_UPDATE_INTERVAL: z.coerce.number().default(5000),
   GAS_PRICE_SURPLUS: z.coerce.number().default(0.1),
@@ -20,7 +20,7 @@ export type GasPriceConfig<N extends Network> = N extends Network.Ethereum
   ? {}
   : never
 
-export function getGasPriceSchema<N extends Network>(network: N): GasPriceConfig<N> {
+export function getGasPriceConfig<N extends Network>(network: N): GasPriceConfig<N> {
   if (network === Network.Ethereum) {
     return zGasPrice.parse(process.env) as GasPriceConfig<N>
   } else if (network === Network.Tron) {

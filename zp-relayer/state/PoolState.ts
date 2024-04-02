@@ -1,4 +1,4 @@
-import { logger } from '@/services/appLogger'
+import { logger } from '@/lib/appLogger'
 import { OUTPLUSONE } from '@/utils/constants'
 import { Mutex } from 'async-mutex'
 import type { Redis } from 'ioredis'
@@ -87,13 +87,11 @@ export class PoolState {
     this.tree.addHash(i, hash)
   }
 
-  getDbTx(i: number): [string, string] | null {
+  getDbTx(i: number): string | null {
     const buf = this.txs.get(i)
     if (!buf) return null
-    const data = buf.toString()
-    const outCommit = data.slice(0, 64)
-    const memo = data.slice(64)
-    return [outCommit, memo]
+    const data = buf.toString('hex')
+    return data
   }
 
   getMerkleRootAt(index: number): string | null {

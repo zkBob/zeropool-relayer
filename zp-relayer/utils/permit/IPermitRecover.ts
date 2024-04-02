@@ -1,5 +1,5 @@
-import { NetworkBackend } from '@/services/network/NetworkBackend'
-import { Network, NetworkContract } from '@/services/network/types'
+import { NetworkBackend } from '@/lib/network/NetworkBackend'
+import { Network, NetworkContract } from '@/lib/network/types'
 import { ethers } from 'ethers'
 
 export class PreconditionError extends Error {

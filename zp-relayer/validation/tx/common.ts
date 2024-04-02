@@ -1,7 +1,7 @@
-import type { Limits } from '@/pool/BasePool'
-import { logger } from '@/services/appLogger'
-import type { NetworkBackend } from '@/services/network/NetworkBackend'
-import type { Network } from '@/services/network/types'
+import { logger } from '@/lib/appLogger'
+import type { NetworkBackend } from '@/lib/network/NetworkBackend'
+import type { Network } from '@/lib/network/types'
+import { Limits } from '@/pool/types'
 import type { NullifierSet } from '@/state/nullifierSet'
 import type { PoolState } from '@/state/PoolState'
 import { HEADER_TRACE_ID, MESSAGE_PREFIX_COMMON_V1, MESSAGE_PREFIX_COMMON_V2, ZERO_ADDRESS } from '@/utils/constants'
@@ -250,4 +250,11 @@ export function checkMemoPrefixProverV2(memo: string, txType: TxType) {
     return null
   }
   return new TxValidationError(`Memo prefix is incorrect: ${numItemsSuffix}`)
+}
+
+export function checkAddressEq(address1: string, address2: string) {
+  if (address1.toLowerCase() === address2.toLowerCase()) {
+    return null
+  }
+  return new TxValidationError(`Addresses are not equal: ${address1} != ${address2}`)
 }

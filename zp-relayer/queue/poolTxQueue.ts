@@ -1,4 +1,4 @@
-import { redis } from '@/services/redisClient'
+import { redis } from '@/lib/redisClient'
 import { TX_QUEUE_NAME } from '@/utils/constants'
 import { Queue } from 'bullmq'
 import type { Proof } from 'libzkbob-rs-node'

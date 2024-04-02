@@ -1,15 +1,9 @@
+import { logger } from '@/lib/appLogger'
+import { NetworkBackend } from '@/lib/network/NetworkBackend'
+import { Network } from '@/lib/network/types'
+import { redis } from '@/lib/redisClient'
 import { BasePoolTx, JobState, PoolTx, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
-import { logger } from '@/services/appLogger'
-import { redis } from '@/services/redisClient'
 import { PoolState } from '@/state/PoolState'
-import { getBlockNumber } from '@/utils/web3'
-import BN from 'bn.js'
-import { Helpers, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
-import { toBN } from 'web3-utils'
-
-import { FeeManager } from '@/services/fee'
-import { NetworkBackend } from '@/services/network/NetworkBackend'
-import { Network } from '@/services/network/types'
 import { OUTPLUSONE } from '@/utils/constants'
 import {
   buildPrefixedMemo,
@@ -19,87 +13,12 @@ import {
   truncateMemoTxPrefixProverV2,
 } from '@/utils/helpers'
 import { PoolCalldataParser, PoolCalldataV2Parser } from '@/utils/PoolCalldataParser'
+import { getBlockNumber } from '@/utils/web3'
+import BN from 'bn.js'
+import { Helpers, Proof, SnarkProof, VK } from 'libzkbob-rs-node'
 import AbiCoder from 'web3-eth-abi'
-import { hexToNumber, hexToNumberString } from 'web3-utils'
-
-export interface Limits {
-  tvlCap: BN
-  tvl: BN
-  dailyDepositCap: BN
-  dailyDepositCapUsage: BN
-  dailyWithdrawalCap: BN
-  dailyWithdrawalCapUsage: BN
-  dailyUserDepositCap: BN
-  dailyUserDepositCapUsage: BN
-  depositCap: BN
-  tier: BN
-  dailyUserDirectDepositCap: BN
-  dailyUserDirectDepositCapUsage: BN
-  directDepositCap: BN
-}
-
-export interface LimitsFetch {
-  deposit: {
-    singleOperation: string
-    dailyForAddress: {
-      total: string
-      available: string
-    }
-    dailyForAll: {
-      total: string
-      available: string
-    }
-    poolLimit: {
-      total: string
-      available: string
-    }
-  }
-  withdraw: {
-    dailyForAll: {
-      total: string
-      available: string
-    }
-  }
-  dd: {
-    singleOperation: string
-    dailyForAddress: {
-      total: string
-      available: string
-    }
-  }
-  tier: string
-}
-
-export interface OptionalChecks {
-  treeProof?: {
-    proof: Proof
-    vk: VK
-  }
-  fee?: {
-    feeManager: FeeManager
-  }
-  screener?: {
-    screenerUrl: string
-    screenerToken: string
-  }
-}
-
-export interface ProcessResult {
-  data: string
-  func: string
-  commitIndex: number
-  outCommit: string
-  memo: string
-  nullifier?: string
-  root: string
-  mpc: boolean
-}
-
-export interface BasePoolConfig {
-  statePath: string
-  txVkPath: string
-  eventsBatchSize: number
-}
+import { hexToNumber, hexToNumberString, toBN } from 'web3-utils'
+import type { BasePoolConfig, Limits, LimitsFetch, OptionalChecks, ProcessResult } from './types'
 
 export abstract class BasePool<N extends Network = Network> {
   public txVK: VK
@@ -123,48 +42,8 @@ export abstract class BasePool<N extends Network = Network> {
 
   abstract init(...args: any): Promise<void>
 
-  async onSend({ outCommit, memo, commitIndex }: ProcessResult, txHash: string) {
-    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
-    this.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
-  }
-
-  async onConfirmed(
-    { outCommit, memo, commitIndex, nullifier, root }: ProcessResult,
-    txHash: string,
-    callback?: () => Promise<void>
-  ): Promise<void> {
-    const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
-    this.state.updateState(commitIndex, outCommit, prefixedMemo)
-    // Update tx hash in optimistic state tx db
-    this.optimisticState.addTx(commitIndex * OUTPLUSONE, Buffer.from(prefixedMemo, 'hex'))
-
-    // Add nullifier to confirmed state and remove from optimistic one
-    if (nullifier) {
-      logger.info('Adding nullifier %s to PS', nullifier)
-      await this.state.nullifiers.add([nullifier])
-      logger.info('Removing nullifier %s from OS', nullifier)
-      await this.optimisticState.nullifiers.remove([nullifier])
-    }
-
-    const node1 = this.state.getCommitment(commitIndex)
-    const node2 = this.optimisticState.getCommitment(commitIndex)
-    logger.info('Assert commitments are equal: %s, %s', node1, node2)
-    if (node1 !== node2) {
-      logger.error('Commitments are not equal, state is corrupted')
-    }
-
-    const rootConfirmed = this.state.getMerkleRoot()
-    logger.info('Assert roots are equal')
-    if (rootConfirmed !== root) {
-      // TODO: Should be impossible but in such case
-      // we should recover from some checkpoint
-      logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
-    }
-
-    if (callback) {
-      await callback()
-    }
-  }
+  abstract onSend(p: ProcessResult<BasePool>, txHash: string): Promise<void>
+  abstract onConfirmed(p: ProcessResult<BasePool>, txHash: string, callback?: () => Promise<void>): Promise<void>
 
   async onFailed(txHash: string): Promise<void> {
     logger.error('Transaction reverted', { txHash })
@@ -206,7 +85,7 @@ export abstract class BasePool<N extends Network = Network> {
     throw new Error('Method not implemented.')
   }
 
-  buildTx(tx: PoolTx<WorkerTxType>): Promise<ProcessResult> {
+  buildTx(tx: PoolTx<WorkerTxType>): Promise<ProcessResult<BasePool>> {
     switch (tx.type) {
       case WorkerTxType.Normal:
         return this.buildNormalTx(tx as PoolTx<WorkerTxType.Normal>)
@@ -218,13 +97,13 @@ export abstract class BasePool<N extends Network = Network> {
         throw new Error(`Unknown tx type: ${tx.type}`)
     }
   }
-  buildNormalTx(tx: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult> {
+  buildNormalTx(tx: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult<BasePool>> {
     throw new Error('Method not implemented.')
   }
-  buildDirectDepositTx(tx: PoolTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult> {
+  buildDirectDepositTx(tx: PoolTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult<BasePool>> {
     throw new Error('Method not implemented.')
   }
-  buildFinalizeTx(tx: PoolTx<WorkerTxType.Finalize>): Promise<ProcessResult> {
+  buildFinalizeTx(tx: PoolTx<WorkerTxType.Finalize>): Promise<ProcessResult<BasePool>> {
     throw new Error('Method not implemented.')
   }
 
@@ -263,7 +142,7 @@ export abstract class BasePool<N extends Network = Network> {
     return lastBlockNumber
   }
 
-  async syncState(startBlock: number) {
+  async syncState(startBlock?: number, indexerUrl?: string) {
     logger.debug('Syncing state; starting from block %d', startBlock)
 
     const localIndex = this.state.getNextIndex()
@@ -284,31 +163,12 @@ export abstract class BasePool<N extends Network = Network> {
       return
     }
 
-    const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
-    if (numTxs < 0) {
-      // TODO: rollback state
-      throw new Error('State is corrupted, contract index is less than local index')
-    }
-
-    const missedIndices = Array(numTxs)
-    for (let i = 0; i < numTxs; i++) {
-      missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
-    }
-
-    const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
-    for await (const es of this.network.getEvents({
-      contract: this.network.pool,
-      startBlock,
-      lastBlock: lastBlockNumber,
-      event: 'Message',
-      batchSize: this.config.eventsBatchSize,
-    })) {
-      for (const e of es) {
-        // Filter pending txs in case of decentralized relay pool
-        if (toBN(e.values.index).lte(toBN(contractIndex))) {
-          await this.addTxToState(e.txHash, e.values.index, e.values.message)
-        }
-      }
+    if (indexerUrl) {
+      await this.syncStateFromIndexer(indexerUrl)
+    } else if (startBlock) {
+      await this.syncStateFromContract(startBlock, contractIndex, localIndex)
+    } else {
+      throw new Error('Either startBlock or indexerUrl should be provided for sync')
     }
 
     const newLocalIndex = this.state.getNextIndex()
@@ -322,7 +182,76 @@ export abstract class BasePool<N extends Network = Network> {
     }
   }
 
-  async addTxToState(txHash: string, newPoolIndex: number, message: string) {
+  async syncStateFromIndexer(indexerUrl: string) {
+    let txs = []
+    let commitIndex = 0
+    do {
+      txs = await this.fetchTransactionsFromIndexer(indexerUrl, this.optimisticState.getNextIndex(), 200)
+      for (const tx of txs) {
+        const outCommit = hexToNumberString('0x' + tx.commitment)
+        this.optimisticState.addCommitment(commitIndex, Helpers.strToNum(outCommit))
+        if (tx.isMined) {
+          this.state.addCommitment(commitIndex, Helpers.strToNum(outCommit))
+        }
+        commitIndex++
+      }
+    } while (txs.length !== 0)
+  }
+
+  async fetchTransactionsFromIndexer(indexerUrl: string, offset: number, limit: number) {
+    const url = new URL('/transactions/v2', indexerUrl)
+    url.searchParams.set('limit', limit.toString())
+    url.searchParams.set('offset', offset.toString())
+
+    const res = await fetch(url)
+    if (!res.ok) {
+      throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
+    }
+
+    const txs: string[] = await res.json()
+
+    return txs.map((tx, txIdx) => {
+      // mined flag + txHash(32 bytes) + commitment(32 bytes) + memo
+      return {
+        isMined: tx.slice(0, 1) === '1',
+        txHash: '0x' + tx.slice(1, 65),
+        commitment: tx.slice(65, 129),
+        index: offset + txIdx * OUTPLUSONE,
+        memo: tx.slice(129),
+      }
+    })
+  }
+
+  async syncStateFromContract(startBlock: number, contractIndex: number, localIndex: number) {
+    const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
+    if (numTxs < 0) {
+      // TODO: rollback state
+      throw new Error('State is corrupted, contract index is less than local index')
+    }
+
+    const missedIndices = Array(numTxs)
+    for (let i = 0; i < numTxs; i++) {
+      missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
+    }
+
+    const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
+    for await (const batch of this.network.getEvents({
+      contract: this.network.pool,
+      startBlock,
+      lastBlock: lastBlockNumber,
+      event: 'Message',
+      batchSize: this.config.eventsBatchSize,
+    })) {
+      for (const e of batch.events) {
+        // Filter pending txs in case of decentralized relay pool
+        if (toBN(e.values.index).lte(toBN(contractIndex))) {
+          await this.addTxToState(e.txHash, e.values.index, e.values.message, 'all')
+        }
+      }
+    }
+  }
+
+  async addTxToState(txHash: string, newPoolIndex: number, message: string, state: 'optimistic' | 'confirmed' | 'all') {
     const transactSelector = '0xaf989083'
     const directDepositSelector = '0x1dc4cb33'
     const transactV2Selector = '0x5fd28f8c'
@@ -365,8 +294,10 @@ export abstract class BasePool<N extends Network = Network> {
       memo = truncateMemoTxPrefix(memoRaw, txType)
 
       // Save nullifier in confirmed state
-      const nullifier = parser.getField('nullifier')
-      await this.state.nullifiers.add([hexToNumberString(nullifier)])
+      if (state !== 'optimistic') {
+        const nullifier = parser.getField('nullifier')
+        await this.state.nullifiers.add([hexToNumberString(nullifier)])
+      }
     } else if (input.startsWith(transactV2Selector)) {
       const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
 
@@ -382,16 +313,36 @@ export abstract class BasePool<N extends Network = Network> {
       memo = truncateMemoTxPrefixProverV2(memoRaw, txType)
 
       // Save nullifier in confirmed state
-      const nullifier = parser.getField('nullifier')
-      await this.state.nullifiers.add([hexToNumberString(nullifier)])
+      if (state !== 'optimistic') {
+        const nullifier = parser.getField('nullifier')
+        await this.state.nullifiers.add([hexToNumberString(nullifier)])
+      }
     } else {
       throw new Error(`Unknown transaction type: ${input}`)
     }
 
+    const states = state === 'optimistic' ? [this.optimisticState] : [this.state, this.optimisticState]
     const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
-    for (let state of [this.state, this.optimisticState]) {
-      state.addCommitment(prevCommitIndex, Helpers.strToNum(outCommit))
-      state.addTx(prevPoolIndex, Buffer.from(prefixedMemo, 'hex'))
+    for (let state of states) {
+      state.updateState(prevCommitIndex, outCommit, prefixedMemo)
+    }
+  }
+
+  propagateOptimisticState(index: number) {
+    index = Math.floor(index / OUTPLUSONE)
+    const opIndex = Math.floor(this.optimisticState.getNextIndex() / OUTPLUSONE)
+    const stateIndex = Math.floor(this.state.getNextIndex() / OUTPLUSONE)
+    if (index > opIndex) {
+      throw new Error('Index is greater than optimistic state index')
+    }
+
+    for (let i = stateIndex; i < index; i++) {
+      const tx = this.optimisticState.getDbTx(i * OUTPLUSONE)
+      if (!tx) {
+        throw new Error(`Tx not found, index: ${i}`)
+      }
+      const outCommit = hexToNumberString('0x' + tx.slice(0, 64))
+      this.state.updateState(i, outCommit, tx)
     }
   }
 

@@ -1,4 +1,4 @@
-import { Network } from '@/services/network/types'
+import { Network } from '@/lib/network/types'
 import Web3 from 'web3'
 import { z } from 'zod'
 import { TxType } from 'zp-memo-parser'
@@ -48,7 +48,7 @@ export type TxManagerConfig<N extends Network> = N extends Network.Ethereum
   ? z.infer<typeof zTronConfig>
   : never
 
-export function getTxManagerSchema<N extends Network>(network: N): TxManagerConfig<N> {
+export function getTxManagerConfig<N extends Network>(network: N): TxManagerConfig<N> {
   if (network === Network.Ethereum) {
     return zEvmConfig.parse(process.env) as TxManagerConfig<N>
   } else if (network === Network.Tron) {
