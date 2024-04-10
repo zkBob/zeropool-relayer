@@ -1,7 +1,7 @@
 import config from '@/configs/guardConfig'
 import type { Network, NetworkContract } from '@/lib/network'
-// @ts-ignore
 import { logger } from '@/lib/appLogger'
+// @ts-ignore
 import { buildTxData, TxData } from '@/txProcessor'
 import { ENERGY_SIZE, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import { numToHex, packSignature } from '@/utils/helpers'
