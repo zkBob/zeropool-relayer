@@ -1,16 +1,16 @@
 import config from '@/configs/guardConfig'
 import type { Network, NetworkContract } from '@/lib/network'
 // @ts-ignore
+import { logger } from '@/lib/appLogger'
 import { buildTxData, TxData } from '@/txProcessor'
 import { ENERGY_SIZE, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import { numToHex, packSignature } from '@/utils/helpers'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
+import { checkSignMPCSchema, validateBatch } from '@/validation/api/validation'
 import cors from 'cors'
 import { getBytes, keccak256 } from 'ethers'
 import express, { NextFunction, Request, Response } from 'express'
 import { VK } from 'libzkbob-rs-node'
-import { logger } from '@/lib/appLogger'
-import { checkSignMPCSchema, validateBatch } from '@/validation/api/validation'
 // @ts-ignore
 import TronWeb from 'tronweb'
 import { toBN } from 'web3-utils'

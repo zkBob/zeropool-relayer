@@ -5,7 +5,13 @@ import { Limits } from '@/pool/types'
 import type { NullifierSet } from '@/state/nullifierSet'
 import type { PoolState } from '@/state/PoolState'
 import { HEADER_TRACE_ID, MESSAGE_PREFIX_COMMON_V1, MESSAGE_PREFIX_COMMON_V2, ZERO_ADDRESS } from '@/utils/constants'
-import { numToHex, truncateMemoTxPrefix, truncateMemoTxPrefixProverV2, unpackSignature } from '@/utils/helpers'
+import {
+  fetchJson,
+  numToHex,
+  truncateMemoTxPrefix,
+  truncateMemoTxPrefixProverV2,
+  unpackSignature,
+} from '@/utils/helpers'
 import type { PermitRecover } from '@/utils/permit/types'
 import BN from 'bn.js'
 import { Proof, SnarkProof } from 'libzkbob-rs-node'
@@ -80,7 +86,15 @@ export function checkProof(txProof: Proof, verify: (p: SnarkProof, i: Array<stri
 export async function checkNullifier(nullifier: string, nullifierSet: NullifierSet) {
   const inSet = await nullifierSet.isInSet(nullifier)
   if (inSet === 0) return null
-  return new TxValidationError(`Doublespend detected in ${nullifierSet.name}`)
+  return new TxValidationError(`Doublespend detected in ${nullifierSet.name}: ${nullifier}`)
+}
+
+export async function checkNullifierContract(nullifier: string, network: NetworkBackend<Network>) {
+  const isSet = await network.pool.callRetry('nullifiers', [nullifier])
+  if (!toBN(isSet).eqn(0)) {
+    return new TxValidationError(`Doublespend detected in contract ${nullifier}`)
+  }
+  return null
 }
 
 export function checkTransferIndex(contractPoolIndex: BN, transferIndex: BN) {
@@ -224,6 +238,17 @@ export function checkRoot(proofIndex: BN, proofRoot: string, state: PoolState) {
   const stateRoot = state.getMerkleRootAt(index)
   if (stateRoot !== proofRoot) {
     return new TxValidationError(`Incorrect root at index ${index}: given ${proofRoot}, expected ${stateRoot}`)
+  }
+
+  return null
+}
+
+export async function checkRootIndexer(proofIndex: BN, proofRoot: string, indexerUrl: string) {
+  const index = proofIndex.toNumber()
+  const { root } = await fetchJson(indexerUrl, '/root', [['index', index.toString()]])
+
+  if (root !== proofRoot) {
+    return new TxValidationError(`Incorrect root at index ${index}: given ${proofRoot}, expected ${root}`)
   }
 
   return null

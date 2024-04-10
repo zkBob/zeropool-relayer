@@ -167,6 +167,20 @@ const AjvTraceIdSchema: JSONSchemaType<{ [HEADER_TRACE_ID]: string }> = {
   required: [HEADER_TRACE_ID],
 }
 
+const AjvGetRootSchema: JSONSchemaType<{
+  index: string | number
+}> = {
+  type: 'object',
+  properties: {
+    index: {
+      type: 'integer',
+      minimum: 0,
+      isDivBy128: true,
+    },
+  },
+  required: ['index'],
+}
+
 function checkErrors<T>(schema: JSONSchemaType<T>) {
   const validate = ajv.compile(schema)
   return (data: any) => {
@@ -208,6 +222,7 @@ export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)
 export const checkTraceId = checkErrors(AjvTraceIdSchema)
+export const checkGetRoot = checkErrors(AjvGetRootSchema)
 
 async function fetchSafe(url: string) {
   const r = await fetch(url)

@@ -1,7 +1,19 @@
+import config from '@/configs/relayerConfig'
 import { logger } from '@/lib/appLogger'
+import { Network } from '@/lib/network'
+import { redis } from '@/lib/redisClient'
 import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
-import { ENERGY_SIZE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
-import { encodeProof, numToHex, truncateHexPrefix, truncateMemoTxPrefixProverV2 } from '@/utils/helpers'
+import { TxStore } from '@/state/TxStore'
+import { ENERGY_SIZE, MOCK_CALLDATA, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
+import {
+  applyDenominator,
+  buildPrefixedMemo,
+  encodeProof,
+  fetchJson,
+  numToHex,
+  truncateHexPrefix,
+  truncateMemoTxPrefixProverV2,
+} from '@/utils/helpers'
 import { Permit2Recover, SaltedPermitRecover, TransferWithAuthorizationRecover } from '@/utils/permit'
 import { PermitType, type PermitRecover } from '@/utils/permit/types'
 import { getTxProofField, parseDelta } from '@/utils/proofInputs'
@@ -9,27 +21,44 @@ import {
   checkAddressEq,
   checkAssertion,
   checkCondition,
+  checkDeadline,
+  checkDepositEnoughBalance,
+  checkFee,
+  checkLimits,
   checkMemoPrefixProverV2,
+  checkNativeAmount,
+  checkNonZeroWithdrawAddress,
+  checkNullifier,
+  checkNullifierContract,
   checkPoolId,
   checkProof,
+  checkRootIndexer,
+  checkScreener,
+  checkTransferIndex,
+  getRecoveredAddress,
   TxValidationError,
 } from '@/validation/tx/common'
 import AbiCoder from 'web3-eth-abi'
 import { bytesToHex, toBN } from 'web3-utils'
-import { getTxDataProverV2, TxType } from 'zp-memo-parser'
+import { getTxDataProverV2, TxDataProverV2, TxType } from 'zp-memo-parser'
 import { BasePool } from './BasePool'
 import { OptionalChecks, PermitConfig, ProcessResult } from './types'
 
 const ZERO = toBN(0)
 
-export class RelayPool extends BasePool {
+export class RelayPool extends BasePool<Network> {
   public permitRecover: PermitRecover | null = null
   private proxyAddress!: string
+  private indexerUrl!: string
+  txStore!: TxStore
 
-  async init(permitConfig: PermitConfig, proxyAddress: string) {
+  async init(permitConfig: PermitConfig, proxyAddress: string, indexerUrl: string) {
     if (this.isInitialized) return
 
+    this.txStore = new TxStore('tmp-tx-store', redis)
+
     this.proxyAddress = proxyAddress
+    this.indexerUrl = indexerUrl
 
     this.denominator = toBN(await this.network.pool.call('denominator'))
     this.poolId = toBN(await this.network.pool.call('pool_id'))
@@ -61,6 +90,8 @@ export class RelayPool extends BasePool {
     const buf = Buffer.from(memo, 'hex')
     const txData = getTxDataProverV2(buf, txType)
 
+    const root = getTxProofField(proof, 'root')
+    const nullifier = getTxProofField(proof, 'nullifier')
     const delta = parseDelta(getTxProofField(proof, 'delta'))
     const transactFee = toBN(txData.transactFee)
     const treeUpdateFee = toBN(txData.treeUpdateFee)
@@ -76,24 +107,88 @@ export class RelayPool extends BasePool {
       proverAddress,
     })
 
-    await checkAssertion(() => checkAddressEq(proxyAddress, this.proxyAddress))
+    const indexerInfo = await this.getIndexerInfo()
 
+    await checkAssertion(() => checkAddressEq(proxyAddress, this.proxyAddress))
     await checkAssertion(() => checkPoolId(delta.poolId, this.poolId))
+    await checkAssertion(() => checkRootIndexer(delta.transferIndex, root, this.indexerUrl))
+    await checkAssertion(() => checkNullifier(nullifier, this.optimisticState.nullifiers))
+    await checkAssertion(() => checkNullifierContract(nullifier, this.network))
+    await checkAssertion(() => checkTransferIndex(toBN(indexerInfo.optimisticDeltaIndex), delta.transferIndex))
     await checkAssertion(() => checkProof(proof, (p, i) => this.verifyProof(p, i)))
 
     const tokenAmount = delta.tokenAmount
-    const tokenAmountWithFee = tokenAmount.add(transactFee).add(treeUpdateFee)
+    const totalFee = transactFee.add(treeUpdateFee)
+    const tokenAmountWithFee = tokenAmount.add(totalFee)
     const energyAmount = delta.energyAmount
+
+    let nativeConvert = false
+    let userAddress: string
 
     if (txType === TxType.WITHDRAWAL) {
       checkCondition(tokenAmountWithFee.lte(ZERO) && energyAmount.lte(ZERO), 'Incorrect withdraw amounts')
+
+      const { nativeAmount, receiver } = txData as TxDataProverV2<TxType.WITHDRAWAL>
+      const nativeAmountBN = toBN(nativeAmount)
+      userAddress = bytesToHex(Array.from(receiver))
+      logger.info('Withdraw address: %s', userAddress)
+      await checkAssertion(() => checkNonZeroWithdrawAddress(userAddress))
+      await checkAssertion(() =>
+        checkNativeAmount(nativeAmountBN, tokenAmountWithFee.neg(), config.RELAYER_MAX_NATIVE_AMOUNT)
+      )
+
+      if (!nativeAmountBN.isZero()) {
+        nativeConvert = true
+      }
     } else if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT) {
       checkCondition(tokenAmount.gt(ZERO) && energyAmount.eq(ZERO), 'Incorrect deposit amounts')
       checkCondition(depositSignature !== null, 'Deposit signature is required')
+
+      const requiredTokenAmount = applyDenominator(tokenAmountWithFee, this.denominator)
+      userAddress = await getRecoveredAddress(
+        txType,
+        nullifier,
+        txData,
+        this.network,
+        requiredTokenAmount,
+        depositSignature as string,
+        this.permitRecover
+      )
+      logger.info('Deposit address: %s', userAddress)
+      // TODO check for approve in case of deposit
+      await checkAssertion(() => checkDepositEnoughBalance(this.network, userAddress, requiredTokenAmount))
     } else if (txType === TxType.TRANSFER) {
+      userAddress = this.proxyAddress
       checkCondition(tokenAmountWithFee.eq(ZERO) && energyAmount.eq(ZERO), 'Incorrect transfer amounts')
     } else {
       throw new TxValidationError('Unsupported TxType')
+    }
+
+    if (optionalChecks.fee) {
+      const { feeManager } = optionalChecks.fee
+      const requiredFee = await feeManager.estimateFee({
+        txType,
+        nativeConvert,
+        txData: MOCK_CALLDATA + memo + (depositSignature || ''),
+      })
+      const denominatedFee = requiredFee.denominate(this.denominator).getEstimate()
+      await checkAssertion(() => checkFee(totalFee, denominatedFee))
+    }
+
+    const limits = await this.getLimitsFor(userAddress)
+    await checkAssertion(() => checkLimits(limits, delta.tokenAmount))
+
+    if (txType === TxType.PERMITTABLE_DEPOSIT) {
+      const { deadline } = txData as TxDataProverV2<TxType.PERMITTABLE_DEPOSIT>
+      logger.info('Deadline: %s', deadline)
+      await checkAssertion(() => checkDeadline(toBN(deadline), config.RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL))
+    }
+
+    if (txType === TxType.DEPOSIT || txType === TxType.PERMITTABLE_DEPOSIT || txType === TxType.WITHDRAWAL) {
+      if (optionalChecks.screener) {
+        const { screenerUrl, screenerToken } = optionalChecks.screener
+        await checkAssertion(() => checkScreener(userAddress, screenerUrl, screenerToken, traceId))
+      }
     }
   }
 
@@ -139,25 +234,40 @@ export class RelayPool extends BasePool {
     const calldata = data.join('')
 
     const memoTruncated = truncateMemoTxPrefixProverV2(memo, txType)
-
-    const {
-      pub: { root_after },
-      commitIndex,
-    } = this.optimisticState.getVirtualTreeProofInputs(outCommit)
+    // TODO: we call indexer twice (during validation and tx build)
+    const indexerInfo = await this.getIndexerInfo()
 
     return {
       data: calldata,
       func,
-      commitIndex,
       outCommit,
       nullifier,
       memo: memoTruncated,
-      mpc: false,
-      root: root_after,
+      // Commit index should be treated as an optimistic checkpoint
+      // It can increase after the transaction is included
+      commitIndex: indexerInfo.optimisticDeltaIndex,
     }
   }
 
-  async onSend(p: ProcessResult<this>, txHash: string): Promise<void> {}
+  async onSend({ outCommit, nullifier, memo, commitIndex }: ProcessResult<RelayPool>, txHash: string): Promise<void> {
+    const prefixedMemo = buildPrefixedMemo(
+      outCommit,
+      '0x0000000000000000000000000000000000000000000000000000000000000000',
+      memo
+    )
+
+    await this.txStore.add(commitIndex, prefixedMemo)
+
+    if (nullifier) {
+      logger.debug('Adding nullifier %s to OS', nullifier)
+      await this.optimisticState.nullifiers.add([nullifier])
+    }
+  }
 
   async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>): Promise<void> {}
+
+  async getIndexerInfo() {
+    const info = await fetchJson(this.indexerUrl, '/info', [])
+    return info
+  }
 }

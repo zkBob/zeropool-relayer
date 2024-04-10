@@ -68,18 +68,21 @@ export interface OptionalChecks {
   }
 }
 
-export interface RelayProcessResult {
+export interface BaseProcessResult {
   data: string
   func: string
-  commitIndex: number
+  nullifier?: string
   outCommit: string
   memo: string
-  nullifier?: string
+  commitIndex: number
+}
+
+export interface DefaultPoolProcessResult extends BaseProcessResult {
   root: string
   mpc: boolean
 }
 
-export type ProcessResult<P extends BasePool> = P extends RelayPool ? RelayProcessResult : RelayProcessResult
+export type ProcessResult<P extends BasePool> = P extends RelayPool ? BaseProcessResult : DefaultPoolProcessResult
 
 export interface BasePoolConfig {
   statePath: string

@@ -27,7 +27,8 @@ export async function init() {
         permitType: config.RELAYER_PERMIT_TYPE,
         token: config.RELAYER_TOKEN_ADDRESS,
       },
-      config.txManager.TX_ADDRESS
+      config.txManager.TX_ADDRESS,
+      config.base.COMMON_INDEXER_URL as string
     ),
   ])
 

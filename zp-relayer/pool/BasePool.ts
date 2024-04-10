@@ -7,6 +7,7 @@ import { PoolState } from '@/state/PoolState'
 import { OUTPLUSONE } from '@/utils/constants'
 import {
   buildPrefixedMemo,
+  fetchJson,
   toTxType,
   truncateHexPrefix,
   truncateMemoTxPrefix,
@@ -42,8 +43,8 @@ export abstract class BasePool<N extends Network = Network> {
 
   abstract init(...args: any): Promise<void>
 
-  abstract onSend(p: ProcessResult<BasePool>, txHash: string): Promise<void>
-  abstract onConfirmed(p: ProcessResult<BasePool>, txHash: string, callback?: () => Promise<void>): Promise<void>
+  abstract onSend(p: ProcessResult<any>, txHash: string): Promise<void>
+  abstract onConfirmed(p: ProcessResult<any>, txHash: string, callback?: () => Promise<void>): Promise<void>
 
   async onFailed(txHash: string): Promise<void> {
     logger.error('Transaction reverted', { txHash })
@@ -85,7 +86,7 @@ export abstract class BasePool<N extends Network = Network> {
     throw new Error('Method not implemented.')
   }
 
-  buildTx(tx: PoolTx<WorkerTxType>): Promise<ProcessResult<BasePool>> {
+  buildTx(tx: PoolTx<WorkerTxType>): Promise<ProcessResult<any>> {
     switch (tx.type) {
       case WorkerTxType.Normal:
         return this.buildNormalTx(tx as PoolTx<WorkerTxType.Normal>)
@@ -97,13 +98,13 @@ export abstract class BasePool<N extends Network = Network> {
         throw new Error(`Unknown tx type: ${tx.type}`)
     }
   }
-  buildNormalTx(tx: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult<BasePool>> {
+  buildNormalTx(tx: PoolTx<WorkerTxType.Normal>): Promise<ProcessResult<any>> {
     throw new Error('Method not implemented.')
   }
-  buildDirectDepositTx(tx: PoolTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult<BasePool>> {
+  buildDirectDepositTx(tx: PoolTx<WorkerTxType.DirectDeposit>): Promise<ProcessResult<any>> {
     throw new Error('Method not implemented.')
   }
-  buildFinalizeTx(tx: PoolTx<WorkerTxType.Finalize>): Promise<ProcessResult<BasePool>> {
+  buildFinalizeTx(tx: PoolTx<WorkerTxType.Finalize>): Promise<ProcessResult<any>> {
     throw new Error('Method not implemented.')
   }
 
@@ -199,16 +200,10 @@ export abstract class BasePool<N extends Network = Network> {
   }
 
   async fetchTransactionsFromIndexer(indexerUrl: string, offset: number, limit: number) {
-    const url = new URL('/transactions/v2', indexerUrl)
-    url.searchParams.set('limit', limit.toString())
-    url.searchParams.set('offset', offset.toString())
-
-    const res = await fetch(url)
-    if (!res.ok) {
-      throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
-    }
-
-    const txs: string[] = await res.json()
+    const txs: string[] = await fetchJson(indexerUrl, '/transactions/v2', [
+      ['limit', limit.toString()],
+      ['offset', offset.toString()],
+    ])
 
     return txs.map((tx, txIdx) => {
       // mined flag + txHash(32 bytes) + commitment(32 bytes) + memo
@@ -244,9 +239,8 @@ export abstract class BasePool<N extends Network = Network> {
     })) {
       for (const e of batch.events) {
         // Filter pending txs in case of decentralized relay pool
-        if (toBN(e.values.index).lte(toBN(contractIndex))) {
-          await this.addTxToState(e.txHash, e.values.index, e.values.message, 'all')
-        }
+        const state = toBN(e.values.index).lte(toBN(contractIndex)) ? 'all' : 'optimistic'
+        await this.addTxToState(e.txHash, e.values.index, e.values.message, state)
       }
     }
   }

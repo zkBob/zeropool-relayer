@@ -76,6 +76,7 @@ export class PoolState {
   }
 
   addCommitment(index: number, commit: Buffer) {
+    logger.debug(`Updating ${this.name} state tree`)
     this.tree.addCommitment(index, commit)
   }
 
@@ -121,6 +122,7 @@ export class PoolState {
   }
 
   addTx(i: number, tx: Buffer) {
+    logger.debug(`Adding tx to ${this.name} state storage`)
     this.txs.add(i, tx)
   }
 
@@ -129,10 +131,8 @@ export class PoolState {
   }
 
   updateState(commitIndex: number, outCommit: string, txData: string) {
-    logger.debug(`Updating ${this.name} state tree`)
     this.addCommitment(commitIndex, Helpers.strToNum(outCommit))
 
-    logger.debug(`Adding tx to ${this.name} state storage`)
     this.addTx(commitIndex * OUTPLUSONE, Buffer.from(txData, 'hex'))
   }
 

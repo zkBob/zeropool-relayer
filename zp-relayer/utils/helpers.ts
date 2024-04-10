@@ -294,3 +294,25 @@ export function inject<T>(values: T, f: (req: Request, res: Response, e: T) => v
     return f(req, res, values)
   }
 }
+
+export function txToV2Format(prefix: string, tx: string) {
+  const outCommit = tx.slice(0, 64)
+  const txHash = tx.slice(64, 128)
+  const memo = tx.slice(128)
+  return prefix + txHash + outCommit + memo
+}
+
+export async function fetchJson(serverUrl: string, path: string, query: [string, string][]) {
+  const url = new URL(path, serverUrl)
+
+  for (const [key, value] of query) {
+    url.searchParams.set(key, value)
+  }
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${path} from ${serverUrl}. Status: ${res.status}`)
+  }
+
+  return await res.json()
+}

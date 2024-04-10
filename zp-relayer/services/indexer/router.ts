@@ -1,7 +1,7 @@
 import { logger } from '@/lib/appLogger'
 import { BasePool } from '@/pool/BasePool'
-import { inject } from '@/utils/helpers'
-import { checkGetTransactionsV2, validateBatch } from '@/validation/api/validation'
+import { inject, txToV2Format } from '@/utils/helpers'
+import { checkGetRoot, checkGetTransactionsV2, validateBatch } from '@/validation/api/validation'
 import cors from 'cors'
 import express, { NextFunction, Request, Response } from 'express'
 
@@ -37,6 +37,7 @@ export function createRouter({ pool }: RouterConfig) {
 
   router.get('/transactions/v2', wrapErr(inject({ pool }, getTransactionsV2)))
   router.get('/info', wrapErr(inject({ pool }, relayerInfo)))
+  router.get('/root', wrapErr(inject({ pool }, getRoot)))
 
   return router
 }
@@ -48,24 +49,17 @@ interface PoolInjection {
 async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([[checkGetTransactionsV2, req.query]])
 
-  const toV2Format = (prefix: string) => (tx: string) => {
-    const outCommit = tx.slice(0, 64)
-    const txHash = tx.slice(64, 128)
-    const memo = tx.slice(128)
-    return prefix + txHash + outCommit + memo
-  }
-
   // Types checked at validation stage
   const limit = req.query.limit as unknown as number
   const offset = req.query.offset as unknown as number
 
   const txs: string[] = []
   const { txs: poolTxs, nextOffset } = await pool.state.getTransactions(limit, offset)
-  txs.push(...poolTxs.map(toV2Format('1')))
+  txs.push(...poolTxs.map(tx => txToV2Format('1', tx)))
 
   if (txs.length < limit) {
     const { txs: optimisticTxs } = await pool.optimisticState.getTransactions(limit - txs.length, nextOffset)
-    txs.push(...optimisticTxs.map(toV2Format('0')))
+    txs.push(...optimisticTxs.map(tx => txToV2Format('2', tx)))
   }
 
   res.json(txs)
@@ -83,4 +77,13 @@ function relayerInfo(req: Request, res: Response, { pool }: PoolInjection) {
     deltaIndex,
     optimisticDeltaIndex,
   })
+}
+
+function getRoot(req: Request, res: Response, { pool }: PoolInjection) {
+  validateBatch([[checkGetRoot, req.query]])
+
+  const index = req.query.index as unknown as number
+  const root = pool.state.getMerkleRootAt(index)
+
+  res.json({ root })
 }

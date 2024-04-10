@@ -1,11 +1,14 @@
+import { logger } from '@/lib/appLogger'
 import type { BasePool } from '@/pool/BasePool'
+import { RelayPool } from '@/pool/RelayPool'
 import { LimitsFetch } from '@/pool/types'
+import { txToV2Format } from '@/utils/helpers'
 import type { Queue } from 'bullmq'
 import { Request, Response } from 'express'
 import config from '../../configs/relayerConfig'
 import type { FeeManager } from '../../lib/fee'
 import { BasePoolTx, JobState, PoolTx as Tx, poolTxQueue, WorkerTxType } from '../../queue/poolTxQueue'
-import { HEADER_TRACE_ID } from '../../utils/constants'
+import { HEADER_TRACE_ID, OUTPLUSONE } from '../../utils/constants'
 import {
   checkGetLimits,
   checkGetSiblings,
@@ -92,7 +95,38 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
   if (!response.ok) {
     throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
   }
-  const txs: string[] = await response.json()
+  const indexerTxs: string[] = await response.json()
+
+  const lastIndex = offset + indexerTxs.length * OUTPLUSONE
+  const txStore = (pool as RelayPool).txStore
+  const indices = await txStore.getAll().then(keys => {
+    return Object.entries(keys)
+      .map(([i, v]) => [parseInt(i), v] as [number, string])
+      .filter(([i]) => offset <= i && i <= lastIndex)
+      .sort(([i1], [i2]) => i1 - i2)
+  })
+
+  // TODO: optimize
+  const optimisticTxs = new Set<string>()
+  const duplicates = new Set<string>()
+  for (const tx of indexerTxs) {
+    const commit = tx.slice(65, 129)
+    for (const [index, memoV2] of indices) {
+      const commitLocal = memoV2.slice(0, 64)
+      if (commit === commitLocal) {
+        duplicates.add(index.toString())
+      } else {
+        optimisticTxs.add(memoV2)
+      }
+    }
+  }
+
+  for (const index of duplicates) {
+    logger.info('Deleting index from optimistic state', { index })
+    await txStore.remove(index.toString())
+  }
+
+  const txs: string[] = [...indexerTxs, ...Array.from(optimisticTxs.values()).map(tx => txToV2Format('0', tx))]
 
   res.json(txs)
 }
