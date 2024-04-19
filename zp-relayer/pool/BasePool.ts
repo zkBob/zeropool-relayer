@@ -185,7 +185,7 @@ export abstract class BasePool<N extends Network = Network> {
 
   async syncStateFromIndexer(indexerUrl: string) {
     let txs = []
-    let commitIndex = this.optimisticState.getNextIndex()
+    let commitIndex = this.optimisticState.getNextIndex() / OUTPLUSONE
     do {
       txs = await this.fetchTransactionsFromIndexer(indexerUrl, this.optimisticState.getNextIndex(), 200)
       for (const tx of txs) {
