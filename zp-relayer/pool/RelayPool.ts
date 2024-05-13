@@ -2,7 +2,7 @@ import config from '@/configs/relayerConfig'
 import { logger } from '@/lib/appLogger'
 import { Network } from '@/lib/network'
 import { redis } from '@/lib/redisClient'
-import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import { JobState, PoolTx, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 import { TxStore } from '@/state/TxStore'
 import { ENERGY_SIZE, MOCK_CALLDATA, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import {
@@ -264,7 +264,19 @@ export class RelayPool extends BasePool<Network> {
     }
   }
 
-  async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>): Promise<void> {}
+  async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>, jobId?: string): Promise<void> {
+    logger.debug("Updating pool job %s completed, txHash %s", jobId, txHash);
+    if(jobId) {
+      const poolJob = await poolTxQueue.getJob(jobId);
+      if (!poolJob) {
+        logger.error('Pool job not found', { jobId });
+      } else {
+        poolJob.data.transaction.state = JobState.COMPLETED;
+        poolJob.data.transaction.txHash = txHash;
+        await poolJob.update(poolJob.data);
+      }
+    }
+  }
 
   async getIndexerInfo() {
     const info = await fetchJson(this.indexerUrl, '/info', [])
