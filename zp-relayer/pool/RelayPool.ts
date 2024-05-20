@@ -3,7 +3,6 @@ import { logger } from '@/lib/appLogger'
 import { Network } from '@/lib/network'
 import { redis } from '@/lib/redisClient'
 import { JobState, PoolTx, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
-import { TxStore } from '@/state/TxStore'
 import { ENERGY_SIZE, MOCK_CALLDATA, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import {
   applyDenominator,
@@ -50,12 +49,9 @@ export class RelayPool extends BasePool<Network> {
   public permitRecover: PermitRecover | null = null
   private proxyAddress!: string
   private indexerUrl!: string
-  txStore!: TxStore
 
   async init(permitConfig: PermitConfig, proxyAddress: string, indexerUrl: string) {
     if (this.isInitialized) return
-
-    this.txStore = new TxStore('tmp-tx-store', redis)
 
     this.proxyAddress = proxyAddress
     this.indexerUrl = indexerUrl
@@ -255,8 +251,6 @@ export class RelayPool extends BasePool<Network> {
       '0x0000000000000000000000000000000000000000000000000000000000000000',
       memo
     )
-
-    await this.txStore.add(commitIndex, prefixedMemo)
 
     if (nullifier) {
       logger.debug('Adding nullifier %s to OS', nullifier)
