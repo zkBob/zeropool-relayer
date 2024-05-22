@@ -236,6 +236,12 @@ async function getProverFee(req: Request, res: Response) {
   res.json(fee)
 }
 
+async function getProverAddress(req: Request, res: Response) {
+  const url = new URL('/address', config.RELAYER_PROVER_URL)
+  const address = await fetch(url.toString()).then(r => r.json())
+  res.json(address)
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
@@ -252,6 +258,7 @@ export default {
   getSiblings,
   getParamsHash,
   getProverFee,
+  getProverAddress,
   relayerVersion,
   root,
 }
