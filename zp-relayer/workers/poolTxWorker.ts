@@ -36,13 +36,21 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
     const jobLogger = workerLogger.child({ jobId: job.id, traceId })
     jobLogger.info('Processing...')
 
-    await pool.validateTx(
-      job.data,
-      {
-        // TODO: optional checks
-      },
-      traceId
-    )
+    try {
+      await pool.validateTx(
+        job.data,
+        {
+          // TODO: optional checks
+        },
+        traceId
+      )
+    } catch(e) {
+      job.data.transaction.state = JobState.FAILED;
+      job.failedReason = (e as Error).message;
+      await job.update(job.data);
+      throw e;
+    }
+
     const processResult = await pool.buildTx(job.data)
     const { data, func } = processResult
 
