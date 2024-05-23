@@ -137,7 +137,7 @@ async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
     let result: GetJobResponse = {
       resolvedJobId: jobId,
       createdOn: job.timestamp,
-      failedReason: null,
+      failedReason: job.failedReason,
       finishedOn: null,
       state,
       txHash,
