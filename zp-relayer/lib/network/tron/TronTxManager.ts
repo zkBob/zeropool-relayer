@@ -1,4 +1,5 @@
 import { PreparedTx, SendAttempt, SendError, SendTx, TransactionManager, TxInfo } from '../types'
+import BN from 'bn.js'
 
 interface ExtraInfo {}
 
@@ -68,5 +69,9 @@ export class TronTxManager implements TransactionManager<ExtraInfo> {
   async sendTx(sendTx: SendTx<ExtraInfo>) {
     const preparedTx = await this.prepareTx(sendTx)
     return this.sendPreparedTx(preparedTx)
+  }
+
+  waitingForFunds(minimumBalance: BN, cb: (balance: BN) => void): Promise<void> {
+    throw new Error('Method not implemented');
   }
 }

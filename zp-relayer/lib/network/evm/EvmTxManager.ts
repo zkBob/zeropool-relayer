@@ -22,14 +22,17 @@ import { Mutex } from 'async-mutex'
 import BN from 'bn.js'
 import type { Redis } from 'ioredis'
 import Web3 from 'web3'
+import { toBN } from 'web3-utils'
 import type { TransactionConfig } from 'web3-core'
 import { Logger } from 'winston'
+import promiseRetry from 'promise-retry'
 
 export interface EvmTxManagerConfig {
   redis: Redis
   gasPriceBumpFactor: number
   gasPriceSurplus: number
   gasPriceMaxFeeLimit: BN | null
+  waitingFundsTimeout: number
 }
 
 type ExtraInfo = TransactionConfig
@@ -262,6 +265,29 @@ export class EvmTxManager implements TransactionManager<ExtraInfo> {
             rej(e)
           }
         })
+    )
+  }
+
+  waitingForFunds(minimumBalance: BN, cb: (balance: BN) => void): Promise<void> {
+    return promiseRetry(
+      async retry => {
+        logger.debug('Getting manager balance')
+        const newBalance = toBN(await this.web3.eth.getBalance(this.address))
+        const balanceLog = { balance: newBalance.toString(10), minimumBalance: minimumBalance.toString(10) }
+        if (newBalance.gte(minimumBalance)) {
+          logger.info('Relayer has minimum necessary balance', balanceLog)
+          cb(newBalance)
+        } else {
+          logger.warn('Relayer balance is still less than the minimum', balanceLog)
+          retry(new Error('Not enough balance'))
+        }
+      },
+      {
+        forever: true,
+        factor: 1,
+        maxTimeout: this.config.waitingFundsTimeout,
+        minTimeout: this.config.waitingFundsTimeout,
+      }
     )
   }
 }

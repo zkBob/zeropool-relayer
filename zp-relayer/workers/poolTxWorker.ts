@@ -1,5 +1,6 @@
 import { logger } from '@/lib/appLogger'
 import { JobState, PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import { poolTxQueue } from '@/queue/poolTxQueue'
 import { sentTxQueue } from '@/queue/sentTxQueue'
 import { TX_QUEUE_NAME } from '@/utils/constants'
 import { withErrorLog, withMutex } from '@/utils/helpers'
@@ -7,6 +8,8 @@ import { TxValidationError } from '@/validation/tx/common'
 import { Job, Worker } from 'bullmq'
 import Redis from 'ioredis'
 import type { IPoolWorkerConfig } from './workerTypes'
+import { isInsufficientBalanceError } from '@/utils/web3Errors'
+import { toBN } from 'web3-utils'
 
 const REVERTED_SET = 'reverted'
 const RECHECK_ERROR = 'Waiting for next check'
@@ -54,6 +57,7 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
     const processResult = await pool.buildTx(job.data)
     const { data, func } = processResult
 
+    const gas = 2000000;
     const preparedTx = await txManager.prepareTx({
       txDesc: {
         to: pool.network.pool.address(), // TODO: mpc
@@ -68,13 +72,26 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
       },
       extraData: {
         // TODO: abstract gas for EVM
-        gas: 2000000,
+        gas,
       },
     })
     const sendAttempt = preparedTx[1]
     try {
       await txManager.sendPreparedTx(preparedTx)
     } catch (e) {
+      if (isInsufficientBalanceError(e as Error)) {
+        if (sendAttempt.extraData.gas && sendAttempt.extraData.gasPrice) {
+          const minimumBalance = toBN(sendAttempt.extraData.gas).mul(toBN(sendAttempt.extraData.gasPrice));
+          logger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
+          
+          await Promise.all([poolTxQueue.pause(), sentTxQueue.pause()])
+          txManager.waitingForFunds(
+            minimumBalance,
+            () => Promise.all([poolTxQueue.resume(), sentTxQueue.resume()])
+          )
+        }
+      }
+      
       logger.warn('Tx send failed; it will be re-sent later', {
         txHash: preparedTx[1].txHash,
         error: (e as Error).message,

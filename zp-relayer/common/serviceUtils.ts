@@ -102,6 +102,7 @@ export function buildTxManager(
       gasPriceBumpFactor: tmConfig.TX_MIN_GAS_PRICE_BUMP_FACTOR,
       gasPriceSurplus: tmConfig.TX_GAS_PRICE_SURPLUS,
       gasPriceMaxFeeLimit: tmConfig.TX_MAX_FEE_PER_GAS_LIMIT,
+      waitingFundsTimeout: tmConfig.BALANCE_CHECK_TIMEOUT
     })
   } else {
     throw new Error('Unsupported network backend')

@@ -7,10 +7,12 @@ import { zBN } from './utils'
 const zBaseConfig = z
   .object({
     TX_PRIVATE_KEY: z.string(),
+    RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT: z.coerce.number().default(5000),
   })
   .transform(o => ({
     TX_ADDRESS: new Web3().eth.accounts.privateKeyToAccount(o.TX_PRIVATE_KEY).address,
     TX_PRIVATE_KEY: o.TX_PRIVATE_KEY,
+    BALANCE_CHECK_TIMEOUT: o.RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT,
   }))
 
 const zTxGas = z
