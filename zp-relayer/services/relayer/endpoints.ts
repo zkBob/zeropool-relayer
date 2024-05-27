@@ -96,7 +96,31 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
     throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
   }
   const indexerTxs: string[] = await response.json()
-  res.json(indexerTxs)
+  
+  const lastIndex = offset + indexerTxs.length * OUTPLUSONE
+  const txStore = (pool as RelayPool).txStore
+  const indices = await txStore.getAll().then(keys => {
+    return Object.entries(keys)
+      .map(([i, v]) => [parseInt(i), v] as [number, string])
+      .filter(([i]) => offset <= i && i <= lastIndex)
+      .sort(([i1], [i2]) => i1 - i2)
+  })
+
+  const indexerCommitments = indexerTxs.map(tx => tx.slice(65, 129));
+  const optimisticTxs: string[] = []
+  for (const [index, memo] of indices) {
+    const commitLocal = memo.slice(0, 64)
+    if (indexerCommitments.includes(commitLocal)) {
+      logger.info('Deleting index from optimistic state', { index })
+      await txStore.remove(index.toString())
+    } else {
+      optimisticTxs.push(txToV2Format('0', memo))
+    }
+  }
+
+  const txs: string[] = [...indexerTxs, ...optimisticTxs]
+
+  res.json(txs)
 }
 
 async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
