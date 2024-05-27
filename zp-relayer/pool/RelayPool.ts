@@ -250,18 +250,12 @@ export class RelayPool extends BasePool<Network> {
   }
 
   async onSend({ outCommit, nullifier, memo, commitIndex }: ProcessResult<RelayPool>, txHash: string): Promise<void> {
-    const prefixedMemo = buildPrefixedMemo(
-      outCommit,
-      txHash,
-      memo
-    )
-
-    await this.txStore.add(commitIndex, prefixedMemo)
-
     if (nullifier) {
       logger.debug('Adding nullifier %s to OS', nullifier)
       await this.optimisticState.nullifiers.add([nullifier])
     }
+
+    await this.cacheTxLocally(commitIndex, outCommit, txHash, memo);
   }
 
   async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>, jobId?: string): Promise<void> {
@@ -274,8 +268,21 @@ export class RelayPool extends BasePool<Network> {
         poolJob.data.transaction.state = JobState.COMPLETED;
         poolJob.data.transaction.txHash = txHash;
         await poolJob.update(poolJob.data);
+
+        await this.cacheTxLocally(res.commitIndex, res.outCommit, txHash, res.memo);
       }
     }
+  }
+
+  protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
+    // store or updating local tx store
+    // (we should keep sent transaction until the indexer grab them)
+    const prefixedMemo = buildPrefixedMemo(
+      commit,
+      txHash,
+      memo
+    );
+    await this.txStore.add(index, prefixedMemo);
   }
 
   async getIndexerInfo() {

@@ -187,6 +187,19 @@ async function relayerInfo(req: Request, res: Response, { pool }: PoolInjection)
   }
   const info = await response.json()
 
+  const indexerMaxIdx = Math.max(parseInt(info.deltaIndex ?? '0'), parseInt(info.optimisticDeltaIndex ?? '0'))
+
+  const txStore = (pool as RelayPool).txStore
+  const pendingCnt = await txStore.getAll()
+    .then(keys => {
+      return Object.entries(keys)
+        .map(([i]) => parseInt(i) as number)
+        .filter(i => indexerMaxIdx <= i)
+    })
+    .then(a => a.length);
+
+    info.pendingDeltaIndex = indexerMaxIdx + pendingCnt * OUTPLUSONE;
+
   res.json(info)
 }
 
