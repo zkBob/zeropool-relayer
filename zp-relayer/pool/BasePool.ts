@@ -46,7 +46,7 @@ export abstract class BasePool<N extends Network = Network> {
   abstract onSend(p: ProcessResult<any>, txHash: string): Promise<void>
   abstract onConfirmed( p: ProcessResult<any>, txHash: string, callback?: () => Promise<void>,jobId?: string): Promise<void>
 
-  async onFailed(txHash: string): Promise<void> {
+  async onFailed(txHash: string, jobId?: string): Promise<void> {
     logger.error('Transaction reverted', { txHash })
 
     await this.clearOptimisticState()

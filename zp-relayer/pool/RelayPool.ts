@@ -274,6 +274,23 @@ export class RelayPool extends BasePool<Network> {
     }
   }
 
+  async onFailed(txHash: string, jobId?: string): Promise<void> {
+    super.onFailed(txHash, jobId);
+
+    if(jobId) {
+      const poolJob = await poolTxQueue.getJob(jobId);
+      if (!poolJob) {
+        logger.error('Pool job not found', { jobId });
+      } else {
+        poolJob.data.transaction.state = JobState.REVERTED;
+        poolJob.data.transaction.txHash = txHash;
+        await poolJob.update(poolJob.data);
+      }
+    }
+
+    // TODO: remove cached tx from txStore
+  }
+
   protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
     // store or updating local tx store
     // (we should keep sent transaction until the indexer grab them)
