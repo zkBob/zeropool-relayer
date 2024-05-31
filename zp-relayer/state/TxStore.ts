@@ -19,4 +19,9 @@ export class TxStore {
   async getAll() {
     return await this.redis.hgetall(this.name)
   }
+
+  async removeAll() {
+    const allKeys = await this.getAll().then(res => Object.keys(res))
+    await this.redis.hdel(this.name, ...allKeys)
+  }
 }

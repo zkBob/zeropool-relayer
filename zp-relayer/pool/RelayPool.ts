@@ -276,6 +276,7 @@ export class RelayPool extends BasePool<Network> {
 
   async onFailed(txHash: string, jobId?: string): Promise<void> {
     super.onFailed(txHash, jobId);
+    this.txStore.removeAll();
 
     if(jobId) {
       const poolJob = await poolTxQueue.getJob(jobId);

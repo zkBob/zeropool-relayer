@@ -85,7 +85,7 @@ export async function createSentTxWorker({ redis, mutex, pool, txManager }: ISen
       // Successful
       jobLogger.info('Transaction was successfully mined', { txHash, blockNumber: tx.blockNumber })
 
-      await pool.onConfirmed(processResult, txHash, updatePoolJobState,poolJobId)
+      await pool.onConfirmed(processResult, txHash, updatePoolJobState, poolJobId)
     } else {
       await pool.onFailed(txHash, poolJobId);
       //await updatePoolJobState()
