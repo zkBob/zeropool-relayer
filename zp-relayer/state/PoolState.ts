@@ -126,20 +126,19 @@ export class PoolState {
     this.addTx(commitIndex * OUTPLUSONE, Buffer.from(txData, 'hex'))
   }
 
-  rollbackTo(otherState: PoolState) {
+  rollbackTo(index: number) {
     const stateNextIndex = this.tree.getNextIndex()
-    const otherStateNextIndex = otherState.tree.getNextIndex()
 
-    // Index of other state should be less than index of current state
-    if (!(otherStateNextIndex < stateNextIndex)) {
+    // `index` should be less than index of current state
+    if (index >= stateNextIndex) {
       return
     }
 
     // Rollback merkle tree
-    this.tree.rollback(otherStateNextIndex)
+    this.tree.rollback(index)
 
     // Clear txs
-    for (let i = otherStateNextIndex; i < stateNextIndex; i += OUTPLUSONE) {
+    for (let i = index; i < stateNextIndex; i += OUTPLUSONE) {
       this.txs.delete(i)
     }
   }
