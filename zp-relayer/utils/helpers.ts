@@ -250,7 +250,5 @@ export function getFileHash(path: string) {
 }
 
 export function applyDenominator(n: BN, d: BN) {
-  return d.testn(255)
-    ? n.div(d.maskn(255))
-    : n.mul(d)
+  return d.testn(255) ? n.div(d.maskn(255)) : n.mul(d)
 }

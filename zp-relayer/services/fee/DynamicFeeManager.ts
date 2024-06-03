@@ -25,6 +25,11 @@ export class DynamicFeeManager extends FeeManager {
   async _fetchFeeOptions(): Promise<DynamicFeeOptions> {
     const gasPrice = await this.gasPrice.fetchOnce()
     const oneByteFee = FeeManager.executionFee(gasPrice, toBN(NZERO_BYTE_GAS))
-    return DynamicFeeOptions.fromGasPice(gasPrice, oneByteFee, relayerConfig.minBaseFee)
+    return DynamicFeeOptions.fromParams({
+      gasPrice,
+      oneByteFee,
+      minFee: relayerConfig.minBaseFee,
+      baseExtra: toBN(0),
+    })
   }
 }
