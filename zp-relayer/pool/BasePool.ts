@@ -143,7 +143,7 @@ export abstract class BasePool<N extends Network = Network> {
     return lastBlockNumber
   }
 
-  async syncState(startBlock?: number, indexerUrl?: string) {
+  async syncState(startBlock?: number, lastBlock?: number, indexerUrl?: string) {
     logger.debug('Syncing state; starting from block %d', startBlock)
 
     const localIndex = this.state.getNextIndex()
@@ -166,10 +166,10 @@ export abstract class BasePool<N extends Network = Network> {
 
     if (indexerUrl) {
       await this.syncStateFromIndexer(indexerUrl)
-    } else if (startBlock) {
-      await this.syncStateFromContract(startBlock, contractIndex, localIndex)
+    } else if (startBlock && lastBlock) {
+      await this.syncStateFromContract(startBlock, lastBlock, contractIndex, localIndex)
     } else {
-      throw new Error('Either startBlock or indexerUrl should be provided for sync')
+      throw new Error('Either (startBlock, lastBlock) or indexerUrl should be provided for sync')
     }
 
     const newLocalIndex = this.state.getNextIndex()
@@ -217,23 +217,17 @@ export abstract class BasePool<N extends Network = Network> {
     })
   }
 
-  async syncStateFromContract(startBlock: number, contractIndex: number, localIndex: number) {
+  async syncStateFromContract(startBlock: number, lastBlock: number, contractIndex: number, localIndex: number) {
     const numTxs = Math.floor((contractIndex - localIndex) / OUTPLUSONE)
     if (numTxs < 0) {
       // TODO: rollback state
       throw new Error('State is corrupted, contract index is less than local index')
     }
 
-    const missedIndices = Array(numTxs)
-    for (let i = 0; i < numTxs; i++) {
-      missedIndices[i] = localIndex + (i + 1) * OUTPLUSONE
-    }
-
-    const lastBlockNumber = (await this.getLastBlockToProcess()) + 1
     for await (const batch of this.network.getEvents({
       contract: this.network.pool,
       startBlock,
-      lastBlock: lastBlockNumber,
+      lastBlock,
       event: 'Message',
       batchSize: this.config.eventsBatchSize,
     })) {

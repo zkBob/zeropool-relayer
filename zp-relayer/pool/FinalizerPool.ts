@@ -28,7 +28,7 @@ export class FinalizerPool extends BasePool {
     this.denominator = toBN(await this.network.pool.call('denominator'))
     this.poolId = toBN(await this.network.pool.call('pool_id'))
 
-    await this.syncState(undefined, indexerUrl)
+    await this.syncState(undefined, undefined, indexerUrl)
 
     this.isInitialized = true
   }
@@ -38,7 +38,7 @@ export class FinalizerPool extends BasePool {
   async buildFinalizeTx({
     transaction: { outCommit },
   }: PoolTx<WorkerTxType.Finalize>): Promise<ProcessResult<FinalizerPool>> {
-    await this.syncState(undefined, this.indexerUrl)
+    await this.syncState(undefined, undefined, this.indexerUrl)
 
     const func = 'proveTreeUpdate(uint256,uint256[8],uint256)'
 
