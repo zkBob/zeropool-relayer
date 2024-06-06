@@ -18,7 +18,7 @@ export async function init() {
   const startBlock = lastInitialSyncBlock + 1
   const watcher = new Watcher(networkBackend, networkBackend.pool, 'pool-indexer', {
     event: 'allEvents',
-    blockConfirmations: parseInt(process.env.INDEXER_BLOCK_CONFIRMATIONS || '1'),
+    blockConfirmations: config.INDEXER_BLOCK_CONFIRMATIONS,
     startBlock,
     eventPollingInterval: parseInt(process.env.WATCHER_EVENT_POLLING_INTERVAL || '10000'),
     batchSize: config.base.COMMON_EVENTS_PROCESSING_BATCH_SIZE,

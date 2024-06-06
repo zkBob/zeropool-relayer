@@ -10,6 +10,7 @@ const schema = z.object({
   INDEXER_STATE_DIR_PATH: z.string().default('./INDEXER_STATE'),
   INDEXER_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
   INDEXER_TOKEN_ADDRESS: z.string(),
+  INDEXER_BLOCK_CONFIRMATIONS: z.coerce.number().default(1),
 })
 
 const config = schema.parse(process.env)
