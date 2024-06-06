@@ -1,11 +1,11 @@
 import config from '@/configs/commitmentWatcherConfig'
 import { logger } from '@/lib/appLogger'
-import { FeeOptions } from '@/lib/fee'
 import { BasePool } from '@/pool/BasePool'
 import { poolTxQueue, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { ValidationError } from '@/validation/api/validation'
 import cors from 'cors'
 import express, { NextFunction, Request, Response } from 'express'
+import { toBN } from 'web3-utils'
 
 export function createRouter(pool: BasePool) {
   const router = express.Router()
@@ -28,10 +28,10 @@ export function createRouter(pool: BasePool) {
   })
 
   router.get('/fee', (req, res) => {
-    const fee = new FeeOptions({
-      fee: config.COMMITMENT_WATCHER_FEE,
-    }).denominate(pool.denominator);
-    res.json({ fee: fee.fees[0] })
+    const dInverse = toBN(1).shln(255)
+    const factor = pool.denominator.xor(dInverse)
+    const fee = config.COMMITMENT_WATCHER_FEE.mul(factor).divn(100)
+    res.json({ fee })
   })
 
   router.get('/job/:commitment', async (req, res) => {
