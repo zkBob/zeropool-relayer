@@ -113,4 +113,6 @@ export async function init() {
   workers.forEach(w => w.run())
 
   runWatcher(pool)
+
+  return pool
 }

@@ -3,7 +3,7 @@ import { getBaseConfig } from './baseConfig'
 import { getGasPriceConfig } from './common/gasPriceConfig'
 import { getNetworkConfig } from './common/networkConfig'
 import { getTxManagerConfig } from './common/txManagerConfig'
-import { zBooleanString } from './common/utils'
+import { zBN, zBooleanString } from './common/utils'
 
 const zSchema = z.object({
   COMMITMENT_WATCHER_PORT: z.coerce.number().default(8000),
@@ -14,7 +14,7 @@ const zSchema = z.object({
   COMMITMENT_WATCHER_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
   COMMITMENT_WATCHER_FETCH_INTERVAL: z.coerce.number().default(10000),
   COMMITMENT_WATCHER_TX_REDUNDANCY: zBooleanString().default('false'),
-  COMMITMENT_WATCHER_FEE: z.coerce.number().default(100_000_000),
+  COMMITMENT_WATCHER_FEE: zBN().default("100_000_000"),
 })
 
 const network = getNetworkConfig()

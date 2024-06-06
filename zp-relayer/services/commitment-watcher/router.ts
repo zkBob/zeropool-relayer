@@ -1,11 +1,13 @@
 import config from '@/configs/commitmentWatcherConfig'
 import { logger } from '@/lib/appLogger'
+import { FeeOptions } from '@/lib/fee'
+import { BasePool } from '@/pool/BasePool'
 import { poolTxQueue, WorkerTx, WorkerTxType } from '@/queue/poolTxQueue'
 import { ValidationError } from '@/validation/api/validation'
 import cors from 'cors'
 import express, { NextFunction, Request, Response } from 'express'
 
-export function createRouter() {
+export function createRouter(pool: BasePool) {
   const router = express.Router()
 
   router.use(cors())
@@ -26,7 +28,10 @@ export function createRouter() {
   })
 
   router.get('/fee', (req, res) => {
-    res.json({ fee: config.COMMITMENT_WATCHER_FEE })
+    const fee = new FeeOptions({
+      fee: config.COMMITMENT_WATCHER_FEE,
+    }).denominate(pool.denominator);
+    res.json({ fee: fee.fees[0] })
   })
 
   router.get('/job/:commitment', async (req, res) => {
