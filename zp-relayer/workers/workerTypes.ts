@@ -1,6 +1,5 @@
 import { TransactionManager } from '@/lib/network'
 import { BasePool } from '@/pool/BasePool'
-import type { Circuit, IProver } from '@/prover'
 import type { Mutex } from 'async-mutex'
 import type { Redis } from 'ioredis'
 
@@ -19,6 +18,4 @@ export interface ISentWorkerConfig extends IWorkerBaseConfig {
   txManager: TransactionManager<any>
 }
 
-export interface IDirectDepositWorkerConfig extends IWorkerBaseConfig {
-  directDepositProver: IProver<Circuit.DirectDeposit>
-}
+export interface IDirectDepositWorkerConfig extends IWorkerBaseConfig {}

@@ -1,7 +1,6 @@
+import { Network, NetworkContract } from '@/lib/network'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
-import { contractCallRetry } from '@/utils/helpers'
 import { Helpers } from 'libzkbob-rs-node'
-import type { Contract } from 'web3-eth-contract'
 import { toBN } from 'web3-utils'
 import { checkAssertion, checkScreener, TxValidationError } from './common'
 
@@ -36,10 +35,8 @@ function checkDirectDepositPK(pk: string) {
   return null
 }
 
-async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositContract: Contract) {
-  const ddFromContract: DirectDepositStruct = await contractCallRetry(directDepositContract, 'getDirectDeposit', [
-    dd.nonce,
-  ])
+async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositContract: NetworkContract<Network>) {
+  const ddFromContract: DirectDepositStruct = await directDepositContract.callRetry('getDirectDeposit', [dd.nonce])
   const errPrefix = `Direct deposit ${dd.nonce}`
 
   if (ddFromContract.status !== DirectDepositStatus.Pending) {
@@ -67,7 +64,11 @@ export interface TxScreener {
   token: string
 }
 
-export async function validateDirectDeposit(dd: DirectDeposit, directDepositContract: Contract, screener?: TxScreener) {
+export async function validateDirectDeposit(
+  dd: DirectDeposit,
+  directDepositContract: NetworkContract<Network>,
+  screener?: TxScreener
+) {
   await checkAssertion(() => checkDirectDepositPK(dd.zkAddress.pk))
   await checkAssertion(() => checkDirectDepositConsistency(dd, directDepositContract))
 

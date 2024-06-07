@@ -37,7 +37,6 @@ async function init() {
       logger.info('Adding direct-deposit events to queue', { count: ds.length })
       directDepositQueue.add('', ds)
     },
-    // @ts-ignore
     dd => validateDirectDeposit(dd, DirectDepositQueueInstance),
     redis
   )

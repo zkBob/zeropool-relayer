@@ -6,6 +6,7 @@ import { FinalizerPool, PendingCommitment } from '@/pool/FinalizerPool'
 import { Circuit, ProverType } from '@/prover'
 import { JobState, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 import { ZERO_ADDRESS } from '@/utils/constants'
+import { createDirectDepositWorker } from '@/workers/directDepositWorker'
 import { createPoolTxWorker } from '@/workers/poolTxWorker'
 import { createSentTxWorker } from '@/workers/sentTxWorker'
 import { IWorkerBaseConfig } from '@/workers/workerTypes'
@@ -82,11 +83,17 @@ export async function init() {
     config.COMMITMENT_WATCHER_TREE_UPDATE_PARAMS_PATH as string
   )
 
+  const directDepositProver = buildProver(
+    Circuit.DirectDeposit,
+    ProverType.Local,
+    config.COMMITMENT_WATCHER_TREE_UPDATE_PARAMS_PATH as string
+  )
+
   if (!config.base.COMMON_INDEXER_URL) {
     throw new Error('COMMON_INDEXER_URL is not set')
   }
 
-  await pool.init(treeProver, config.base.COMMON_INDEXER_URL)
+  await pool.init(treeProver, directDepositProver, config.base.COMMON_INDEXER_URL)
   await txManager.init()
 
   const workerBaseConfig: IWorkerBaseConfig = {
@@ -106,6 +113,9 @@ export async function init() {
       ...workerBaseConfig,
       mutex,
       txManager,
+    }),
+    createDirectDepositWorker({
+      ...workerBaseConfig,
     }),
   ]
 
