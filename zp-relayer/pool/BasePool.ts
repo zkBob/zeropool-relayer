@@ -247,8 +247,10 @@ export abstract class BasePool<N extends Network = Network> {
 
   async addTxToState(txHash: string, newPoolIndex: number, message: string, state: 'optimistic' | 'confirmed' | 'all') {
     const transactSelector = '0xaf989083'
-    const directDepositSelector = '0x1dc4cb33'
     const transactV2Selector = '0x5fd28f8c'
+
+    const directDepositOldSelector = '0x1dc4cb33'
+    const directDepositSelector = '0xe6b14272'
 
     const input = await this.network.getTxCalldata(txHash)
 
@@ -270,6 +272,20 @@ export abstract class BasePool<N extends Network = Network> {
         input.slice(10) // Cut off selector
       )
       outCommit = res[1]
+      memo = truncateHexPrefix(message || '')
+    } else if (input.startsWith(directDepositOldSelector)) {
+      // Old direct deposit case
+      const res = AbiCoder.decodeParameters(
+        [
+          'uint256', // Root after
+          'uint256[]', // Indices
+          'uint256', // Out commit
+          'uint256[8]', // Deposit proof
+          'uint256[8]', // Tree proof
+        ],
+        input.slice(10) // Cut off selector
+      )
+      outCommit = res[2]
       memo = truncateHexPrefix(message || '')
     } else if (input.startsWith(transactSelector)) {
       // Normal tx case
