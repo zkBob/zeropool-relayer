@@ -75,7 +75,8 @@ export class DefaultPool extends BasePool {
     }
     await this.permitRecover?.initializeDomain()
     if (startBlock) {
-      await this.syncState(startBlock)
+      const lastBlock = await this.getLastBlockToProcess()
+      await this.syncState(startBlock, lastBlock)
     }
     this.isInitialized = true
   }

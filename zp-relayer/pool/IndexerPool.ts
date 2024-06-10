@@ -6,14 +6,14 @@ import { type PermitRecover } from '@/utils/permit/types'
 export class IndexerPool extends BasePool {
   public permitRecover: PermitRecover | null = null
 
-  async init(startBlock: number | null = null) {
+  async init(startBlock: number | null = null, lastBlock: number | null = null) {
     if (this.isInitialized) return
 
     this.denominator = toBN(await this.network.pool.call('denominator'))
     this.poolId = toBN(await this.network.pool.call('pool_id'))
 
-    if (startBlock) {
-      await this.syncState(startBlock)
+    if (startBlock && lastBlock) {
+      await this.syncState(startBlock, lastBlock)
     }
     this.isInitialized = true
   }
