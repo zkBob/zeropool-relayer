@@ -262,15 +262,14 @@ export abstract class BasePool<N extends Network = Network> {
       // Direct deposit case
       const res = AbiCoder.decodeParameters(
         [
-          'uint256', // Root after
           'uint256[]', // Indices
           'uint256', // Out commit
           'uint256[8]', // Deposit proof
-          'uint256[8]', // Tree proof
+          'address', // Prover
         ],
         input.slice(10) // Cut off selector
       )
-      outCommit = res[2]
+      outCommit = res[1]
       memo = truncateHexPrefix(message || '')
     } else if (input.startsWith(transactSelector)) {
       // Normal tx case
