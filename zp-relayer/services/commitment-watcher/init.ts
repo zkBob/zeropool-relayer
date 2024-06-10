@@ -86,7 +86,7 @@ export async function init() {
   const directDepositProver = buildProver(
     Circuit.DirectDeposit,
     ProverType.Local,
-    config.COMMITMENT_WATCHER_TREE_UPDATE_PARAMS_PATH as string
+    config.COMMITMENT_WATCHER_DIRECT_DEPOSIT_PARAMS_PATH as string
   )
 
   if (!config.base.COMMON_INDEXER_URL) {
