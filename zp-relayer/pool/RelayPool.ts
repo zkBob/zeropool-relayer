@@ -289,7 +289,6 @@ export class RelayPool extends BasePool<Network> {
       }
     }
 
-    // TODO: remove cached tx from txStore
   }
 
   protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
