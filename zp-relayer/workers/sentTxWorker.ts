@@ -88,7 +88,6 @@ export async function createSentTxWorker({ redis, mutex, pool, txManager }: ISen
       await pool.onConfirmed(processResult, txHash, updatePoolJobState, poolJobId)
     } else {
       await pool.onFailed(txHash, poolJobId);
-      //await updatePoolJobState()
     }
   }
 
