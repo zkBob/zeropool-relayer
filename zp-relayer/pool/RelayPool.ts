@@ -260,7 +260,7 @@ export class RelayPool extends BasePool<Network> {
 
   async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>, jobId?: string): Promise<void> {
     logger.debug("Updating pool job %s completed, txHash %s", jobId, txHash);
-    if(jobId) {
+    if (jobId) {
       const poolJob = await poolTxQueue.getJob(jobId);
       if (!poolJob) {
         logger.error('Pool job not found', { jobId });
@@ -274,21 +274,17 @@ export class RelayPool extends BasePool<Network> {
     }
   }
 
-  async onFailed(txHash: string, jobId?: string): Promise<void> {
+  async onFailed(txHash: string, jobId: string): Promise<void> {
     super.onFailed(txHash, jobId);
-    this.txStore.removeAll();
-
-    if(jobId) {
-      const poolJob = await poolTxQueue.getJob(jobId);
-      if (!poolJob) {
-        logger.error('Pool job not found', { jobId });
-      } else {
-        poolJob.data.transaction.state = JobState.REVERTED;
-        poolJob.data.transaction.txHash = txHash;
-        await poolJob.update(poolJob.data);
-      }
+    this.txStore.remove(jobId);
+    const poolJob = await poolTxQueue.getJob(jobId);
+    if (!poolJob) {
+      logger.error('Pool job not found', { jobId });
+    } else {
+      poolJob.data.transaction.state = JobState.REVERTED;
+      poolJob.data.transaction.txHash = txHash;
+      await poolJob.update(poolJob.data);
     }
-
   }
 
   protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
