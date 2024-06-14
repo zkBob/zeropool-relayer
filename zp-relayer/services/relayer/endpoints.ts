@@ -96,7 +96,7 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
     throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
   }
   const indexerTxs: string[] = await response.json()
-
+  
   const lastIndex = offset + indexerTxs.length * OUTPLUSONE
   const txStore = (pool as RelayPool).txStore
   const indices = await txStore.getAll().then(keys => {
@@ -106,27 +106,19 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
       .sort(([i1], [i2]) => i1 - i2)
   })
 
-  // TODO: optimize
-  const optimisticTxs = new Set<string>()
-  const duplicates = new Set<string>()
-  for (const tx of indexerTxs) {
-    const commit = tx.slice(65, 129)
-    for (const [index, memoV2] of indices) {
-      const commitLocal = memoV2.slice(0, 64)
-      if (commit === commitLocal) {
-        duplicates.add(index.toString())
-      } else {
-        optimisticTxs.add(memoV2)
-      }
+  const indexerCommitments = indexerTxs.map(tx => tx.slice(65, 129));
+  const optimisticTxs: string[] = []
+  for (const [index, memo] of indices) {
+    const commitLocal = memo.slice(0, 64)
+    if (indexerCommitments.includes(commitLocal)) {
+      logger.info('Deleting index from optimistic state', { index })
+      await txStore.remove(index.toString())
+    } else {
+      optimisticTxs.push(txToV2Format('0', memo))
     }
   }
 
-  for (const index of duplicates) {
-    logger.info('Deleting index from optimistic state', { index })
-    await txStore.remove(index.toString())
-  }
-
-  const txs: string[] = [...indexerTxs, ...Array.from(optimisticTxs.values()).map(tx => txToV2Format('0', tx))]
+  const txs: string[] = [...indexerTxs, ...optimisticTxs]
 
   res.json(txs)
 }
@@ -169,7 +161,7 @@ async function getJob(req: Request, res: Response, { pool }: PoolInjection) {
     let result: GetJobResponse = {
       resolvedJobId: jobId,
       createdOn: job.timestamp,
-      failedReason: null,
+      failedReason: job.failedReason,
       finishedOn: null,
       state,
       txHash,
@@ -194,6 +186,19 @@ async function relayerInfo(req: Request, res: Response, { pool }: PoolInjection)
     throw new Error(`Failed to fetch info from indexer. Status: ${res.status}`)
   }
   const info = await response.json()
+
+  const indexerMaxIdx = Math.max(parseInt(info.deltaIndex ?? '0'), parseInt(info.optimisticDeltaIndex ?? '0'))
+
+  const txStore = (pool as RelayPool).txStore
+  const pendingCnt = await txStore.getAll()
+    .then(keys => {
+      return Object.entries(keys)
+        .map(([i]) => parseInt(i) as number)
+        .filter(i => indexerMaxIdx <= i)
+    })
+    .then(a => a.length);
+
+    info.pendingDeltaIndex = indexerMaxIdx + pendingCnt * OUTPLUSONE;
 
   res.json(info)
 }
@@ -268,6 +273,12 @@ async function getProverFee(req: Request, res: Response) {
   res.json(fee)
 }
 
+async function getProverAddress(req: Request, res: Response) {
+  const url = new URL('/address', config.RELAYER_PROVER_URL)
+  const address = await fetch(url.toString()).then(r => r.json())
+  res.json(address)
+}
+
 function root(req: Request, res: Response) {
   return res.sendStatus(200)
 }
@@ -284,6 +295,7 @@ export default {
   getSiblings,
   getParamsHash,
   getProverFee,
+  getProverAddress,
   relayerVersion,
   root,
 }

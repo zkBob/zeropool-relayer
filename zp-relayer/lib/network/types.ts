@@ -1,6 +1,7 @@
 import type { TransactionConfig } from 'web3-core'
 import type { EthereumContract } from './evm/EvmContract'
 import type { TronContract } from './tron/TronContract'
+import BN from 'bn.js'
 
 export enum Network {
   Tron = 'tron',
@@ -75,6 +76,7 @@ export interface TransactionManager<E> {
     attempt?: SendAttempt<E>
     error?: SendError
   }>
+  waitingForFunds(minimumBalance: BN, cb: (balance: BN) => void): Promise<void>;
 }
 
 export interface INetworkContract {

@@ -72,6 +72,7 @@ export function createRouter({ feeManager, pool }: IRouterConfig) {
     })
   )
   router.get('/proverFee', wrapErr(endpoints.getProverFee))
+  router.get('/proverAddress', wrapErr(endpoints.getProverAddress))
   router.post('/sendTransactions', wrapErr(inject({ pool }, endpoints.sendTransactions)))
   router.get('/transactions/v2', wrapErr(inject({ pool }, endpoints.getTransactionsV2)))
   router.get('/merkle/root/:index?', wrapErr(inject({ pool }, endpoints.merkleRoot)))

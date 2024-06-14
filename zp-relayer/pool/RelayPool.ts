@@ -2,7 +2,7 @@ import config from '@/configs/relayerConfig'
 import { logger } from '@/lib/appLogger'
 import { Network } from '@/lib/network'
 import { redis } from '@/lib/redisClient'
-import { PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import { JobState, PoolTx, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 import { TxStore } from '@/state/TxStore'
 import { ENERGY_SIZE, MOCK_CALLDATA, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import {
@@ -250,21 +250,53 @@ export class RelayPool extends BasePool<Network> {
   }
 
   async onSend({ outCommit, nullifier, memo, commitIndex }: ProcessResult<RelayPool>, txHash: string): Promise<void> {
-    const prefixedMemo = buildPrefixedMemo(
-      outCommit,
-      '0x0000000000000000000000000000000000000000000000000000000000000000',
-      memo
-    )
-
-    await this.txStore.add(commitIndex, prefixedMemo)
-
     if (nullifier) {
       logger.debug('Adding nullifier %s to OS', nullifier)
       await this.optimisticState.nullifiers.add([nullifier])
     }
+
+    await this.cacheTxLocally(commitIndex, outCommit, txHash, memo);
   }
 
-  async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>): Promise<void> {}
+  async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>, jobId?: string): Promise<void> {
+    logger.debug("Updating pool job %s completed, txHash %s", jobId, txHash);
+    if (jobId) {
+      const poolJob = await poolTxQueue.getJob(jobId);
+      if (!poolJob) {
+        logger.error('Pool job not found', { jobId });
+      } else {
+        poolJob.data.transaction.state = JobState.COMPLETED;
+        poolJob.data.transaction.txHash = txHash;
+        await poolJob.update(poolJob.data);
+
+        await this.cacheTxLocally(res.commitIndex, res.outCommit, txHash, res.memo);
+      }
+    }
+  }
+
+  async onFailed(txHash: string, jobId: string): Promise<void> {
+    super.onFailed(txHash, jobId);
+    this.txStore.remove(jobId);
+    const poolJob = await poolTxQueue.getJob(jobId);
+    if (!poolJob) {
+      logger.error('Pool job not found', { jobId });
+    } else {
+      poolJob.data.transaction.state = JobState.REVERTED;
+      poolJob.data.transaction.txHash = txHash;
+      await poolJob.update(poolJob.data);
+    }
+  }
+
+  protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
+    // store or updating local tx store
+    // (we should keep sent transaction until the indexer grab them)
+    const prefixedMemo = buildPrefixedMemo(
+      commit,
+      txHash,
+      memo
+    );
+    await this.txStore.add(index, prefixedMemo);
+  }
 
   async getIndexerInfo() {
     const info = await fetchJson(this.indexerUrl, '/info', [])
