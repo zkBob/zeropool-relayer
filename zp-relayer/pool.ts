@@ -210,12 +210,13 @@ export class Pool<N extends Network = Network> {
       let fingerprint = null
       const MESSAGE_TOPIC = '7d39f8a6bc8929456fba511441be7361aa014ac6f8e21b99990ce9e1c7373536'
       do {
-        const events = await this.network.tronWeb.getEventResult(this.network.pool.address(), {
+        const events: any[] = await this.network.tronWeb.getEventResult(this.network.pool.address(), {
           sinceTimestamp: 0,
           eventName: 'Message',
           onlyConfirmed: true,
           sort: 'block_timestamp',
           size: 200,
+          fingerprint,
         })
         if (events.length === 0) {
           break
