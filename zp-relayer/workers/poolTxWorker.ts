@@ -39,6 +39,7 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
     const jobLogger = workerLogger.child({ jobId: job.id, traceId })
     jobLogger.info('Processing...')
 
+    let processResult;
     try {
       await pool.validateTx(
         job.data,
@@ -47,6 +48,7 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
         },
         traceId
       )
+      processResult = await pool.buildTx(job.data)
     } catch(e) {
       job.data.transaction.state = JobState.FAILED;
       job.failedReason = (e as Error).message;
@@ -54,7 +56,6 @@ export async function createPoolTxWorker({ redis, mutex, pool, txManager }: IPoo
       throw e;
     }
 
-    const processResult = await pool.buildTx(job.data)
     const { data, func } = processResult
 
     const gas = 2000000;
