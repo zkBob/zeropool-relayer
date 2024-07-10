@@ -179,7 +179,7 @@ export abstract class BasePool<N extends Network = Network> {
       newLocalIndex,
     })
     if (newLocalIndex < contractIndex) {
-      throw new Error('Indexer is not syncronized with the contract yet')
+      throw new Error('Indexer is not synchronized with the contract yet')
     }
     if (newLocalRoot !== contractRoot) {
       throw new Error('State is corrupted, roots mismatch')

@@ -28,9 +28,14 @@ async function processCommitment(pendingCommitment: PendingCommitment) {
   }
 
   const existingJob = await poolTxQueue.getJob(commitment);
-  if (existingJob && existingJob.data.transaction.state !== JobState.FAILED) {
-    logger.info('Job already created, waiting...', { commitment })
-    return
+  if (existingJob) {
+    if (existingJob.data.transaction.state === JobState.FAILED) {
+      logger.info('Job failed, repeating...', { commitment })
+      await poolTxQueue.remove(commitment);
+    } else {
+      logger.info('Job already created, waiting...', { commitment })
+      return
+    }
   }
 
   const job = await poolTxQueue.add(
