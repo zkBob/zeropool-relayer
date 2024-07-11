@@ -143,16 +143,10 @@ export class FinalizerPool extends BasePool {
       logger.error('Pool job not found', { jobId });
       return;
     }
-    
+
     const poolJob = await poolTxQueue.getJob(jobId);
     if (poolJob?.data.type === WorkerTxType.Finalize) {
       this.state.updateState(commitIndex, outCommit, prefixedMemo)
-
-      // Add nullifier to confirmed state and remove from optimistic one
-      if (nullifier) {
-        logger.info('Adding nullifier %s to PS', nullifier)
-        await this.state.nullifiers.add([nullifier])
-      }
 
       const rootConfirmed = this.state.getMerkleRoot()
       logger.info('Assert roots are equal')
