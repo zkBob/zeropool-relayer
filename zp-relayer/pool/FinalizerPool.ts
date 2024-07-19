@@ -1,6 +1,6 @@
 import { logger } from '@/lib/appLogger'
 import { Circuit, IProver } from '@/prover'
-import { DirectDeposit, PoolTx, WorkerTxType } from '@/queue/poolTxQueue'
+import { DirectDeposit, PoolTx, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
 import { buildPrefixedMemo, flattenProof } from '@/utils/helpers'
 import { DelegatedDepositsData } from 'libzkbob-rs-node'
 import AbiCoder from 'web3-eth-abi'
@@ -133,24 +133,28 @@ export class FinalizerPool extends BasePool {
   async onConfirmed(
     { outCommit, memo, commitIndex, nullifier, root }: ProcessResult<this>,
     txHash: string,
-    callback?: (() => Promise<void>) | undefined
+    callback?: (() => Promise<void>) | undefined, 
+    jobId?: string
   ): Promise<void> {
     const prefixedMemo = buildPrefixedMemo(outCommit, txHash, memo)
-    this.state.updateState(commitIndex, outCommit, prefixedMemo)
     this.optimisticState.updateState(commitIndex, outCommit, prefixedMemo)
-
-    // Add nullifier to confirmed state and remove from optimistic one
-    if (nullifier) {
-      logger.info('Adding nullifier %s to PS', nullifier)
-      await this.state.nullifiers.add([nullifier])
+    
+    if (!jobId) {
+      logger.error('Pool job not found', { jobId });
+      return;
     }
 
-    const rootConfirmed = this.state.getMerkleRoot()
-    logger.info('Assert roots are equal')
-    if (rootConfirmed !== root) {
-      // TODO: Should be impossible but in such case
-      // we should recover from some checkpoint
-      logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
+    const poolJob = await poolTxQueue.getJob(jobId);
+    if (poolJob?.data.type === WorkerTxType.Finalize) {
+      this.state.updateState(commitIndex, outCommit, prefixedMemo)
+
+      const rootConfirmed = this.state.getMerkleRoot()
+      logger.info('Assert roots are equal')
+      if (rootConfirmed !== root) {
+        // TODO: Should be impossible but in such case
+        // we should recover from some checkpoint
+        logger.error('Roots are not equal: %s should be %s', rootConfirmed, root)
+      }
     }
 
     if (callback) {
