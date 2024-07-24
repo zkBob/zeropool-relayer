@@ -15,16 +15,6 @@ import { zBN, zBooleanString, zNullishString } from './common/utils'
 const defaultHeaderBlacklist =
   'accept accept-language accept-encoding connection content-length content-type postman-token referer upgrade-insecure-requests'
 
-const zTreeProver = z.discriminatedUnion('RELAYER_TREE_PROVER_TYPE', [
-  z.object({ RELAYER_TREE_PROVER_TYPE: z.literal(ProverType.Local) }),
-  z.object({ RELAYER_TREE_PROVER_TYPE: z.literal(ProverType.Remote) }), // TODO remote prover url
-])
-
-const zDirectDepositProver = z.discriminatedUnion('RELAYER_DD_PROVER_TYPE', [
-  z.object({ RELAYER_DD_PROVER_TYPE: z.literal(ProverType.Local) }),
-  z.object({ RELAYER_DD_PROVER_TYPE: z.literal(ProverType.Remote) }), // TODO remote prover url
-])
-
 const zBaseTxGas = z
   .object({
     RELAYER_BASE_TX_GAS_DEPOSIT: zBN().default('650000'),
@@ -57,11 +47,6 @@ const zFeeManager = z
     ])
   )
 
-const zGuards = z.object({
-  RELAYER_GUARDS_CONFIG_PATH: z.string().optional(),
-  RELAYER_MPC_GUARD_CONTRACT: z.string().optional(),
-})
-
 const zSchema = z
   .object({
     RELAYER_REF: zNullishString(),
@@ -73,19 +58,15 @@ const zSchema = z
     RELAYER_MAX_NATIVE_AMOUNT: zBN().default('0'),
     RELAYER_TREE_UPDATE_PARAMS_PATH: z.string().default('../params/tree_params.bin'),
     RELAYER_TRANSFER_PARAMS_PATH: z.string().default('../params/transfer_params.bin'),
-    RELAYER_DIRECT_DEPOSIT_PARAMS_PATH: z.string().default('../params/delegated_deposit_params.bin'),
     RELAYER_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
     RELAYER_REQUEST_LOG_PATH: z.string().default('./zp.log'),
     RELAYER_STATE_DIR_PATH: z.string().default('./POOL_STATE'),
-    RELAYER_TX_REDUNDANCY: zBooleanString().default('false'),
-    RELAYER_SENT_TX_DELAY: z.coerce.number().default(30000),
-    RELAYER_SENT_TX_ERROR_THRESHOLD: z.coerce.number().default(3),
-    RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT: z.coerce.number().default(60000),
+    RELAYER_SENT_TX_DELAY: z.coerce.number().default(30000), // NOT USED
+    RELAYER_SENT_TX_ERROR_THRESHOLD: z.coerce.number().default(3), // NOT USED
     RELAYER_PERMIT_DEADLINE_THRESHOLD_INITIAL: z.coerce.number().default(300),
     RELAYER_REQUIRE_TRACE_ID: zBooleanString().default('false'),
     RELAYER_REQUIRE_LIBJS_VERSION: zBooleanString().default('false'),
     RELAYER_EXPRESS_TRUST_PROXY: zBooleanString().default('false'),
-    RELAYER_PRECOMPUTE_PARAMS: zBooleanString().default('false'),
     RELAYER_PROVER_URL: z.string(),
     RELAYER_LOG_IGNORE_ROUTES: z
       .string()
@@ -111,11 +92,8 @@ const zSchema = z
         })
       ),
   })
-  .and(zTreeProver)
-  .and(zDirectDepositProver)
   .and(zBaseTxGas)
   .and(zFeeManager)
-  .and(zGuards)
 
 const network = getNetworkConfig()
 

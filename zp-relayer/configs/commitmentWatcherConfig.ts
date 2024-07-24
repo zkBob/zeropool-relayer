@@ -14,7 +14,6 @@ const zSchema = z.object({
   COMMITMENT_WATCHER_STATE_DIR_PATH: z.string().default('./POOL_STATE'),
   COMMITMENT_WATCHER_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
   COMMITMENT_WATCHER_FETCH_INTERVAL: z.coerce.number().default(10000),
-  COMMITMENT_WATCHER_TX_REDUNDANCY: zBooleanString().default('false'),
   COMMITMENT_WATCHER_FEE: zBN().default("100_000_000"),
 })
 
