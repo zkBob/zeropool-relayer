@@ -65,7 +65,7 @@ export enum WorkerTxType {
 export const WorkerTxTypePriority: Record<WorkerTxType, number> = {
   [WorkerTxType.Normal]: 1,
   [WorkerTxType.DirectDeposit]: 2,
-  [WorkerTxType.Finalize]: 3, // TODO
+  [WorkerTxType.Finalize]: 3,
 }
 
 export type WorkerTx<T extends WorkerTxType> = T extends WorkerTxType.Normal

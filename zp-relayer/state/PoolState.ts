@@ -22,16 +22,6 @@ export class PoolState {
     this.jobIdsMapping = new JobIdsMapping('job-id-mapping', redis)
   }
 
-  async withLock<R>(f: () => Promise<R>): Promise<R> {
-    const release = await this.mutex.acquire()
-    try {
-      const res = await f()
-      return res
-    } finally {
-      release()
-    }
-  }
-
   getVirtualTreeProofInputs(outCommit: string, transferNum?: number) {
     logger.debug(`Building virtual tree proof...`)
 

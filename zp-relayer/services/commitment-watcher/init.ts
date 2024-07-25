@@ -86,13 +86,15 @@ export async function init() {
   const treeProver = buildProver(
     Circuit.Tree,
     ProverType.Local,
-    config.COMMITMENT_WATCHER_TREE_UPDATE_PARAMS_PATH as string
+    config.COMMITMENT_WATCHER_TREE_UPDATE_PARAMS_PATH as string,
+    config.COMMITMENT_WATCHER_PRECOMPUTE_PARAMS
   )
 
   const directDepositProver = buildProver(
     Circuit.DirectDeposit,
     ProverType.Local,
-    config.COMMITMENT_WATCHER_DIRECT_DEPOSIT_PARAMS_PATH as string
+    config.COMMITMENT_WATCHER_DIRECT_DEPOSIT_PARAMS_PATH as string,
+    config.COMMITMENT_WATCHER_PRECOMPUTE_PARAMS
   )
 
   if (!config.base.COMMON_INDEXER_URL) {

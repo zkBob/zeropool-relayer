@@ -40,7 +40,7 @@ These environment variables are required for all services.
 | RELAYER_MIN_GAS_PRICE_BUMP_FACTOR | Minimum `gasPrice` bump factor to meet RPC node requirements. Default `0.1`. | float |
 | RELAYER_MAX_FEE_PER_GAS_LIMIT | Max limit on `maxFeePerGas` parameter for each transaction in wei | integer |
 | RELAYER_MAX_SENT_QUEUE_SIZE | Maximum number of jobs waiting in the `sentTxQueue` at a time. | integer |
-| RELAYER_TX_REDUNDANCY | If set to `true`, instructs relayer to send `eth_sendRawTransaction` requests through all available RPC urls defined in `RPC_URL` variables instead of using first available one. Defaults to `false` | boolean |
+| TX_REDUNDANCY | If set to `true`, instructs relayer to send `eth_sendRawTransaction` requests through all available RPC urls defined in `RPC_URL` variables instead of using first available one. Defaults to `false` | boolean |
 | RELAYER_INSUFFICIENT_BALANCE_CHECK_TIMEOUT | Interval in milliseconds to check for relayer balance update if transaction send failed with insufficient balance error. Default `60000` | integer |
 | RELAYER_SENT_TX_DELAY | Delay in milliseconds for sentTxWorker to verify submitted transactions | integer |
 | RELAYER_SENT_TX_ERROR_THRESHOLD | Maximum number of re-sends which is considered to be normal. After this threshold each re-send will log a corresponding error (but re-send loop will continue). Defaults to `3`. | integer |

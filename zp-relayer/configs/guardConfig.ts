@@ -8,7 +8,6 @@ const schema = z.object({
   GUARD_NETWORK: z.nativeEnum(Network),
   COMMON_RPC_URL: z.string().transform(us => us.split(' ').filter(url => url.length > 0)),
   GUARD_ADDRESS_PRIVATE_KEY: z.string(),
-  GUARD_TOKEN_ADDRESS: z.string(),
   COMMON_REQUIRE_RPC_HTTPS: zBooleanString().default('false'),
   COMMON_POOL_ADDRESS: z.string(),
   GUARD_TX_VK_PATH: z.string().default('../params/transfer_verification_key.json'),
