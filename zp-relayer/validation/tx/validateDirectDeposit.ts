@@ -1,8 +1,7 @@
-import { toBN } from 'web3-utils'
-import type { Contract } from 'web3-eth-contract'
+import { Network, NetworkContract } from '@/lib/network'
 import type { DirectDeposit } from '@/queue/poolTxQueue'
 import { Helpers } from 'libzkbob-rs-node'
-import { contractCallRetry } from '@/utils/helpers'
+import { toBN } from 'web3-utils'
 import { checkAssertion, checkScreener, TxValidationError } from './common'
 
 const SNARK_SCALAR_FIELD = toBN('21888242871839275222246405745257275088548364400416034343698204186575808495617')
@@ -36,10 +35,8 @@ function checkDirectDepositPK(pk: string) {
   return null
 }
 
-async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositContract: Contract) {
-  const ddFromContract: DirectDepositStruct = await contractCallRetry(directDepositContract, 'getDirectDeposit', [
-    dd.nonce,
-  ])
+async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositContract: NetworkContract<Network>) {
+  const ddFromContract: DirectDepositStruct = await directDepositContract.callRetry('getDirectDeposit', [dd.nonce])
   const errPrefix = `Direct deposit ${dd.nonce}`
 
   if (ddFromContract.status !== DirectDepositStatus.Pending) {
@@ -62,9 +59,21 @@ async function checkDirectDepositConsistency(dd: DirectDeposit, directDepositCon
   return null
 }
 
-export async function validateDirectDeposit(dd: DirectDeposit, directDepositContract: Contract) {
+export interface TxScreener {
+  url: string
+  token: string
+}
+
+export async function validateDirectDeposit(
+  dd: DirectDeposit,
+  directDepositContract: NetworkContract<Network>,
+  screener?: TxScreener
+) {
   await checkAssertion(() => checkDirectDepositPK(dd.zkAddress.pk))
   await checkAssertion(() => checkDirectDepositConsistency(dd, directDepositContract))
-  await checkAssertion(() => checkScreener(dd.sender))
-  await checkAssertion(() => checkScreener(dd.fallbackUser))
+
+  if (screener) {
+    await checkAssertion(() => checkScreener(dd.sender, screener.url, screener.token))
+    await checkAssertion(() => checkScreener(dd.fallbackUser, screener.url, screener.token))
+  }
 }

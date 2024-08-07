@@ -1,6 +1,6 @@
 import { expect } from 'chai'
 import { toBN } from 'web3-utils'
-import { EIP1559GasPriceWithinLimit, addExtraGasPrice } from '../../services/gas-price/GasPrice'
+import { addExtraGasPrice, EIP1559GasPriceWithinLimit } from '../../services/gas-price/GasPrice'
 
 describe('GasPrice', () => {
   it('correctly calculates fee limit', () => {

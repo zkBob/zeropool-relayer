@@ -1,7 +1,7 @@
-import { Queue } from 'bullmq'
+import { redis } from '@/lib/redisClient'
 import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'
+import { Queue } from 'bullmq'
 import { DirectDeposit } from './poolTxQueue'
-import { redis } from '@/services/redisClient'
 
 export const directDepositQueue = new Queue<DirectDeposit[], [string, string]>(DIRECT_DEPOSIT_QUEUE_NAME, {
   connection: redis,

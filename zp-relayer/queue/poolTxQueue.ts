@@ -1,14 +1,26 @@
-import { Queue } from 'bullmq'
+import { redis } from '@/lib/redisClient'
 import { TX_QUEUE_NAME } from '@/utils/constants'
+import { Queue } from 'bullmq'
 import type { Proof } from 'libzkbob-rs-node'
 import type { TxType } from 'zp-memo-parser'
-import { redis } from '@/services/redisClient'
 
-export interface TxPayload {
-  amount: string
-  txProof: Proof
+export enum JobState {
+  WAITING = 'waiting',
+  SENT = 'sent',
+  COMPLETED = 'completed',
+  REVERTED = 'reverted',
+  FAILED = 'failed',
+}
+
+export interface BasePayload {
+  txHash: string | null
+  state: JobState
+}
+
+export interface BasePoolTx {
+  proof: Proof
+  memo: string
   txType: TxType
-  rawMemo: string
   depositSignature: string | null
 }
 
@@ -25,37 +37,51 @@ export interface DirectDeposit {
   deposit: string
 }
 
-export interface DirectDepositTxPayload {
-  deposits: DirectDeposit[]
+export interface DirectDepositTx {
   txProof: Proof
+  deposits: DirectDeposit[]
   outCommit: string
   memo: string
 }
 
+export interface FinalizeTx {
+  outCommit: string
+  privilegedProver: string
+  fee: string
+  timestamp: string
+  gracePeriodEnd: string
+}
+
+export interface TxPayload extends BasePayload, BasePoolTx {}
+export interface DirectDepositTxPayload extends BasePayload, DirectDepositTx {}
+export interface FinalizeTxPayload extends BasePayload, FinalizeTx {}
+
 export enum WorkerTxType {
   Normal = 'normal',
   DirectDeposit = 'dd',
+  Finalize = 'finalize',
 }
 
 export const WorkerTxTypePriority: Record<WorkerTxType, number> = {
   [WorkerTxType.Normal]: 1,
   [WorkerTxType.DirectDeposit]: 2,
+  [WorkerTxType.Finalize]: 3,
 }
 
 export type WorkerTx<T extends WorkerTxType> = T extends WorkerTxType.Normal
   ? TxPayload
   : T extends WorkerTxType.DirectDeposit
   ? DirectDepositTxPayload
+  : T extends WorkerTxType.Finalize
+  ? FinalizeTxPayload
   : never
 
-export interface BatchTx<T extends WorkerTxType, M extends boolean = true> {
+export interface PoolTx<T extends WorkerTxType> {
   type: T
-  transactions: M extends true ? WorkerTx<T>[] : WorkerTx<T>
+  transaction: WorkerTx<T>
   traceId?: string
 }
 
-export type PoolTxResult = [string, string]
-
-export const poolTxQueue = new Queue<BatchTx<WorkerTxType>, PoolTxResult[]>(TX_QUEUE_NAME, {
+export const poolTxQueue = new Queue<PoolTx<WorkerTxType>>(TX_QUEUE_NAME, {
   connection: redis,
 })

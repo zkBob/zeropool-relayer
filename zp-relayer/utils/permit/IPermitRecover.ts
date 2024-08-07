@@ -1,7 +1,6 @@
-import type Web3 from 'web3'
-import type { Contract } from 'web3-eth-contract'
+import { NetworkBackend } from '@/lib/network/NetworkBackend'
+import { Network, NetworkContract } from '@/lib/network/types'
 import { ethers } from 'ethers'
-import { contractCallRetry } from '../helpers'
 
 export class PreconditionError extends Error {
   name = 'PreconditionError'
@@ -14,7 +13,7 @@ export interface CommonMessageParams {
   owner: string
   deadline: string
   spender: string
-  tokenContract: Contract
+  tokenContract: NetworkContract<Network>
   amount: string
   nullifier: string
 }
@@ -25,10 +24,10 @@ export abstract class IPermitRecover<Message extends Record<string, any>> {
   DOMAIN_SEPARATOR: string | null = null
   abstract TYPES: { [key: string]: TypedMessage<Record<string, any>> }
 
-  constructor(protected web3: Web3, protected verifyingContract: string) {}
+  constructor(protected network: NetworkBackend<Network>, protected verifyingContract: string) {}
 
   async initializeDomain() {
-    const contract = new this.web3.eth.Contract(
+    const contract = this.network.contract(
       [
         {
           inputs: [],
@@ -46,7 +45,7 @@ export abstract class IPermitRecover<Message extends Record<string, any>> {
       ],
       this.verifyingContract
     )
-    this.DOMAIN_SEPARATOR = await contractCallRetry(contract, 'DOMAIN_SEPARATOR')
+    this.DOMAIN_SEPARATOR = await contract.callRetry('DOMAIN_SEPARATOR')
   }
 
   abstract precondition(params: CommonMessageParams): Promise<null | PreconditionError>
