@@ -43,10 +43,4 @@ export class EthereumContract implements INetworkContract {
     )
   }
 
-  getEvents(event: string) {
-    return this.instance.getPastEvents(event, {
-      fromBlock: 0,
-      toBlock: 'latest',
-    })
-  }
 }

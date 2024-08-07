@@ -21,15 +21,4 @@ export class TronContract implements INetworkContract {
     return this.instance[method](...args).call()
   }
 
-  async getEvents(eventName: string) {
-    const res = await this.instance._getEvents({
-      eventName,
-      size: 0,
-      onlyConfirmed: true,
-    })
-    return res.map((e: any) => ({
-      returnValues: e.result,
-      transactionHash: e.transaction,
-    }))
-  }
 }

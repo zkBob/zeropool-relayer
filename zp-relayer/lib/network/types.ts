@@ -85,5 +85,4 @@ export interface INetworkContract {
   address(): string
   call(method: string, args: any[]): Promise<any>
   callRetry(method: string, args: any[]): Promise<any>
-  getEvents(event: string): Promise<any[]>
 }

@@ -34,25 +34,6 @@ export function createRouter(pool: BasePool) {
     res.json({ fee: fee.toString(10) })
   })
 
-  router.get('/job/:commitment', async (req, res) => {
-    const jobId = req.params.commitment
-    const job = await poolTxQueue.getJob(jobId)
-    if (job) {
-      const { outCommit, privilegedProver, fee, timestamp, gracePeriodEnd, txHash, state } = job.data
-        .transaction as WorkerTx<WorkerTxType.Finalize>
-      res.json({
-        outCommit,
-        privilegedProver,
-        fee,
-        timestamp,
-        gracePeriodEnd,
-        txHash,
-        state,
-      })
-    } else {
-      res.json(`Job ${jobId} not found`)
-    }
-  })
 
   // Error handler middleware
   router.use((error: any, req: Request, res: Response, next: NextFunction) => {
