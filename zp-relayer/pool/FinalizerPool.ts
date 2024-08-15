@@ -124,7 +124,11 @@ export class FinalizerPool extends BasePool {
       const res = await this.network.pool.call('pendingCommitment')
       return res as PendingCommitment
     } catch (e) {
-      return null
+       if ((e as any).data?.endsWith("195a6b426f62506f6f6c3a20717565756520697320656d70747900000000000000")) {
+        return
+       }
+       logger.error(e)
+      return 
     }
   }
 

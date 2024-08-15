@@ -37,11 +37,7 @@ export class Watcher<N extends Network> {
     const lastBlockToProcess = lastBlockNumber - this.config.blockConfirmations
 
     const fromBlock = this.lastProcessedBlock + 1
-
-    if (fromBlock <= this.lastProcessedBlock) {
-      logger.debug('All blocks already processed')
-      return
-    }
+//TODO: remove
 
     const rangeEndBlock = fromBlock + this.config.batchSize
     let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
