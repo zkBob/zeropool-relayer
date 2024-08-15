@@ -10,6 +10,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.relayer
     command: yarn run start:indexer:prod
+    container_name: indexer
     volumes:
       - ./zp-relayer/params:/app/zp-relayer/params/
     env_file: ./zp-relayer/indexer.env
@@ -18,6 +19,7 @@ services:
       - COMMON_REDIS_URL=redis_indexer:6379
     ports:
       - 8000:80
+    restart: always
     depends_on:
       - redis_indexer
   redis_relayer:
@@ -28,6 +30,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.relayer
+    container_name: relayer
     volumes:
       - ./zp-relayer/params:/app/zp-relayer/params/
     env_file: ./zp-relayer/relayer-decentralized.env
@@ -38,6 +41,7 @@ services:
       - COMMON_REDIS_URL=redis_relayer:6379
     ports:
       - 8001:80
+    restart: always
     depends_on:
       - redis_relayer
   redis_prover:
@@ -49,6 +53,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.relayer
     command: yarn run start:commitment-watcher:prod
+    container_name: commitment_watcher
     volumes:
       - ./zp-relayer/params:/app/zp-relayer/params/
     env_file: ./zp-relayer/commitment-watcher.env
@@ -58,5 +63,6 @@ services:
       - COMMON_REDIS_URL=redis_prover:6379
     ports:
       - 8002:80
+    restart: always
     depends_on:
       - redis_prover
