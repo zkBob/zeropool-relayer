@@ -38,7 +38,6 @@ export class Watcher<N extends Network> {
 
     const fromBlock = this.lastProcessedBlock + 1
 
-
     const rangeEndBlock = fromBlock + this.config.batchSize
     let toBlock = Math.min(lastBlockToProcess, rangeEndBlock)
 
