@@ -93,7 +93,7 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
 
   const response = await fetch(url)
   if (!response.ok) {
-    throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
+    throw new Error(`Failed to fetch transactions from indexer. Status: ${response.status}`)
   }
   const indexerTxs: string[] = await response.json()
   
@@ -111,8 +111,9 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
   for (const [index, memo] of indices) {
     const commitLocal = memo.slice(0, 64)
     if (indexerCommitments.includes(commitLocal)) {
-      logger.info('Deleting index from optimistic state', { index })
-      await txStore.remove(index.toString())
+      // !!! we shouldn't modify local cache from here. Just filter entries to return correct response
+      //logger.info('Deleting index from optimistic state', { index })
+      //await txStore.remove(index.toString())
     } else {
       optimisticTxs.push(txToV2Format('0', memo))
     }
