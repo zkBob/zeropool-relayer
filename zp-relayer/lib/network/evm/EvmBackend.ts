@@ -62,6 +62,7 @@ export class EvmBackend implements INetworkBackend<Network.Ethereum> {
             events: events.map(e => ({
               txHash: e.transactionHash,
               values: e.returnValues,
+              blockNumber: e.blockNumber,
             })),
             fromBlock,
             toBlock,

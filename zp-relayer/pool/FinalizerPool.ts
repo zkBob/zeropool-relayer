@@ -21,6 +21,8 @@ export class FinalizerPool extends BasePool {
   directDepositProver!: IProver<Circuit.DirectDeposit>
   indexerUrl!: string
 
+  protected poolName(): string { return 'finalizer-pool'; }
+
   async init(
     treeProver: IProver<Circuit.Tree>,
     directDepositProver: IProver<Circuit.DirectDeposit>,

@@ -144,6 +144,16 @@ export class PoolState {
     }
   }
 
+  wipe() {
+    const stateNextIndex = this.tree.getNextIndex();
+    this.tree.wipe();
+    for (let i = 0; i < stateNextIndex; i += OUTPLUSONE) {
+      this.txs.delete(i)
+    }
+    this.jobIdsMapping.clear();
+    this.nullifiers.clear();
+  }
+
   async getTransactions(limit: number, offset: number) {
     // Round offset to OUTPLUSONE
     offset = Math.floor(offset / OUTPLUSONE) * OUTPLUSONE

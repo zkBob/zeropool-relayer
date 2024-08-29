@@ -54,6 +54,8 @@ export class RelayPool extends BasePool<Network> {
   private observePromise: Promise<void> | undefined;
   txStore!: TxStore
 
+  protected poolName(): string { return 'relay-pool'; }
+
   async init(permitConfig: PermitConfig, proxyAddress: string, indexerUrl: string) {
     if (this.isInitialized) return
 

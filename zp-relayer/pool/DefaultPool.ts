@@ -54,6 +54,8 @@ export class DefaultPool extends BasePool {
   treeProver!: IProver<Circuit.Tree>
   public permitRecover: PermitRecover | null = null
 
+  protected poolName(): string { return 'default-pool'; }
+
   async init(startBlock: number | null = null, treeProver: IProver<Circuit.Tree>) {
     if (this.isInitialized) return
 

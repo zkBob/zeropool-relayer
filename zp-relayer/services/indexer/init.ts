@@ -26,10 +26,10 @@ export async function init() {
       for (let event of batch) {
         if (event.values.message) {
           // Message event
-          await pool.addTxToState(event.txHash, event.values.index, event.values.message, 'optimistic')
+          await pool.addTxToState(event.txHash, event.values.index, event.values.message, 'optimistic', event.blockNumber)
         } else if (event.values.commitment) {
           // RootUpdated event
-          pool.propagateOptimisticState(event.values.index)
+          pool.propagateOptimisticState(event.values.index, event.blockNumber)
         }
       }
     },
