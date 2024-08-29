@@ -238,8 +238,10 @@ export class RelayPool extends BasePool<Network> {
     const calldata = data.join('')
 
     const memoTruncated = truncateMemoTxPrefixProverV2(memo, txType)
-    // TODO: we call indexer twice (during validation and tx build)
-    const indexerInfo = await this.getIndexerInfo()
+
+    // Commit index should be treated as an optimistic checkpoint
+    // It can increase after the transaction is included into the Merkle tree
+    const commitIndex = await this.assumeNextPendingTxIndex();
 
     return {
       data: calldata,
@@ -247,9 +249,7 @@ export class RelayPool extends BasePool<Network> {
       outCommit,
       nullifier,
       memo: memoTruncated,
-      // Commit index should be treated as an optimistic checkpoint
-      // It can increase after the transaction is included
-      commitIndex: indexerInfo.optimisticDeltaIndex,
+      commitIndex,
     }
   }
 
@@ -311,6 +311,7 @@ export class RelayPool extends BasePool<Network> {
     return info
   }
 
+  // It's just an assumption needed for internal purposes. The final index may be changed
   private async assumeNextPendingTxIndex() {
     const [indexerInfo, localCache] = await Promise.all([this.getIndexerInfo(), this.txStore.getAll()]);
     
