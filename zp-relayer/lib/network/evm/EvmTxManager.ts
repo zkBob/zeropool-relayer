@@ -190,13 +190,11 @@ export class EvmTxManager implements TransactionManager<ExtraInfo> {
         // const minimumBalance = toBN(txConfig.gas!).mul(toBN(getMaxRequiredGasPrice(gasPrice)))
         // jobLogger.error('Insufficient balance, waiting for funds', { minimumBalance: minimumBalance.toString(10) })
       } else if (isNonceError(err)) {
+        logger.warn('Nonce error', { error: err.message, nonce: preparedTx[1].extraData.nonce })
         return {
           attempt: preparedTx[1],
           error: SendError.NONCE_ERROR,
         }
-        // jobLogger.warn('Nonce error', { error: err.message, txHash })
-        // // Throw suppressed error to be treated as a warning
-        // throw new Error(RECHECK_ERROR)
       }
     }
 
