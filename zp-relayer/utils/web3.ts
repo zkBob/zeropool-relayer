@@ -64,7 +64,7 @@ export async function getChainId(web3: Web3) {
 
 export async function getBlockNumber(network: NetworkBackend<Network>) {
   try {
-    logger.debug('Getting block number')
+    //logger.debug('Getting block number')
     const blockNumber = await network.getBlockNumber()
     logger.debug('Block number obtained', { blockNumber })
     return blockNumber
