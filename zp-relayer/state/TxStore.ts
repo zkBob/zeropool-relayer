@@ -3,16 +3,16 @@ import type { Redis } from 'ioredis'
 export class TxStore {
   constructor(public name: string, private redis: Redis) {}
 
-  async add(index: number, memo: string) {
-    await this.redis.hset(this.name, { [index]: memo })
+  async add(commitment: string, memo: string) {
+    await this.redis.hset(this.name, { [commitment]: memo })
   }
 
-  async remove(index: string) {
-    await this.redis.hdel(this.name, index)
+  async remove(commitment: string) {
+    await this.redis.hdel(this.name, commitment)
   }
 
-  async get(index: string) {
-    const memo = await this.redis.hget(this.name, index)
+  async get(commitment: string) {
+    const memo = await this.redis.hget(this.name, commitment)
     return memo
   }
 

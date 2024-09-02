@@ -97,23 +97,16 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
   }
   const indexerTxs: string[] = await response.json()
   
-  const lastIndex = offset + indexerTxs.length * OUTPLUSONE
   const txStore = (pool as RelayPool).txStore
-  const indices = await txStore.getAll().then(keys => {
-    return Object.entries(keys)
-      .map(([i, v]) => [parseInt(i), v] as [number, string])
-      .filter(([i]) => offset <= i && i <= lastIndex)
-      .sort(([i1], [i2]) => i1 - i2)
-  })
+  const localEntries = Object.entries(await txStore.getAll());
 
   const indexerCommitments = indexerTxs.map(tx => tx.slice(65, 129));
   const optimisticTxs: string[] = []
-  for (const [index, memo] of indices) {
-    const commitLocal = memo.slice(0, 64)
-    if (indexerCommitments.includes(commitLocal)) {
+  for (const [commit, memo] of localEntries) {
+    if (indexerCommitments.includes(commit)) {
       // !!! we shouldn't modify local cache from here. Just filter entries to return correct response
       //logger.info('Deleting index from optimistic state', { index })
-      //await txStore.remove(index.toString())
+      //await txStore.remove(commit)
     } else {
       optimisticTxs.push(txToV2Format('0', memo))
     }

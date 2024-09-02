@@ -262,7 +262,7 @@ export class RelayPool extends BasePool<Network> {
     }
 
     // cache transaction locally
-    await this.cacheTxLocally(commitIndex, outCommit, txHash, memo);
+    await this.cacheTxLocally(outCommit, txHash, memo);
     // start monitoring local cache against the indexer to cleanup already indexed txs
     this.startLocalCacheObserver(commitIndex);
   }
@@ -278,7 +278,7 @@ export class RelayPool extends BasePool<Network> {
         poolJob.data.transaction.txHash = txHash;
         await poolJob.update(poolJob.data);
 
-        await this.cacheTxLocally(res.commitIndex, res.outCommit, txHash, res.memo);
+        await this.cacheTxLocally(res.outCommit, txHash, res.memo);
       }
     }
   }
@@ -296,7 +296,7 @@ export class RelayPool extends BasePool<Network> {
     }
   }
 
-  protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
+  protected async cacheTxLocally(commit: string, txHash: string, memo: string) {
     // store or updating local tx store
     // (we should keep sent transaction until the indexer grab them)
     const prefixedMemo = buildPrefixedMemo(
@@ -304,8 +304,8 @@ export class RelayPool extends BasePool<Network> {
       txHash,
       memo
     );
-    await this.txStore.add(index, prefixedMemo);
-    logger.info(`Tx @${index} with commit ${commit} has been CACHED locally`);
+    await this.txStore.add(commit, prefixedMemo);
+    logger.info(`Tx with commit ${commit} has been CACHED locally`);
   }
 
   private async getIndexerInfo() {
@@ -350,9 +350,7 @@ export class RelayPool extends BasePool<Network> {
     const CACHE_OBSERVE_INTERVAL_MS = 1000; // waiting time between checks
     const EXTEND_LIMIT_TO_FETCH = 10; // taking into account non-atomic nature of /info and /transactions/v2 requests
     while (true) {
-      const localEntries = Object.entries(await this.txStore.getAll())
-        .map(([i, v]) => [parseInt(i), v] as [number, string])
-        .sort(([i1], [i2]) => i1 - i2)
+      const localEntries = Object.entries(await this.txStore.getAll());
       let localEntriesCnt = localEntries.length;
 
       if (localEntries.length == 0) {
@@ -367,11 +365,10 @@ export class RelayPool extends BasePool<Network> {
         const indexerCommitments = (await this.getIndexerTxs(fromIndex, limit)).map(tx => tx.slice(65, 129));
 
         // find cached commitments in the indexer's response
-        for (const [index, memo] of localEntries) {
-          const commitLocal = memo.slice(0, 64)
-          if (indexerCommitments.includes(commitLocal)) {
-            logger.info('Deleting index from optimistic state', { index, commitLocal })
-            await this.txStore.remove(index.toString())
+        for (const [commit, memo] of localEntries) {
+          if (indexerCommitments.includes(commit)) {
+            logger.info('Deleting cached entry', { commit })
+            await this.txStore.remove(commit)
             localEntriesCnt--;
           }
         }
