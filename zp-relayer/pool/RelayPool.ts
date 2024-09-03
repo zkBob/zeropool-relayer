@@ -262,7 +262,7 @@ export class RelayPool extends BasePool<Network> {
     }
 
     // cache transaction locally
-    await this.cacheTxLocally(outCommit, txHash, memo);
+    await this.cacheTxLocally(outCommit, txHash, memo, commitIndex);
     // start monitoring local cache against the indexer to cleanup already indexed txs
     this.startLocalCacheObserver(commitIndex);
   }
@@ -278,7 +278,7 @@ export class RelayPool extends BasePool<Network> {
         poolJob.data.transaction.txHash = txHash;
         await poolJob.update(poolJob.data);
 
-        await this.cacheTxLocally(res.outCommit, txHash, res.memo);
+        await this.cacheTxLocally(res.outCommit, txHash, res.memo, res.commitIndex);
       }
     }
   }
@@ -296,7 +296,7 @@ export class RelayPool extends BasePool<Network> {
     }
   }
 
-  protected async cacheTxLocally(commit: string, txHash: string, memo: string) {
+  protected async cacheTxLocally(commit: string, txHash: string, memo: string, index: number) {
     // store or updating local tx store
     // (we should keep sent transaction until the indexer grab them)
     const prefixedMemo = buildPrefixedMemo(
@@ -304,7 +304,7 @@ export class RelayPool extends BasePool<Network> {
       txHash,
       memo
     );
-    await this.txStore.add(commit, prefixedMemo);
+    await this.txStore.add(commit, prefixedMemo, index);
     logger.info(`Tx with commit ${commit} has been CACHED locally`);
   }
 
