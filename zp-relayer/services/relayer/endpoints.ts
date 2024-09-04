@@ -102,7 +102,7 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
 
   const indexerCommitments = indexerTxs.map(tx => tx.slice(65, 129));
   const optimisticTxs: string[] = []
-  for (const [commit, memo] of localEntries) {
+  for (const [commit, {memo, index}] of localEntries) {
     if (indexerCommitments.includes(commit)) {
       // !!! we shouldn't modify local cache from here. Just filter entries to return correct response
       //logger.info('Deleting index from optimistic state', { index })
@@ -187,7 +187,7 @@ async function relayerInfo(req: Request, res: Response, { pool }: PoolInjection)
   const pendingCnt = await txStore.getAll()
     .then(keys => {
       return Object.entries(keys)
-        .map(([i]) => parseInt(i) as number)
+        .map(([commit, {memo, index}]) => index)
         .filter(i => indexerMaxIdx <= i)
     })
     .then(a => a.length);

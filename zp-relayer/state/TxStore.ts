@@ -23,9 +23,9 @@ export class TxStore {
     } : null;
   }
 
-  async getAll() {
-    return await this.redis.hgetall(this.name).then(keys => {
-      return Object.entries(keys)
+  async getAll(): Promise<Record<string, {memo: string, index: number}>> {
+    return this.redis.hgetall(this.name).then(keys => Object.fromEntries(
+      Object.entries(keys)
         .map(([commit, data]) => 
           [commit,
           { 
@@ -33,7 +33,7 @@ export class TxStore {
             index: hexToNumber(data.slice(0, INDEX_BYTES * 2)),
           }] as [string, {memo: string, index: number}]
         )
-      }
+      ));
   }
 
   async removeAll() {

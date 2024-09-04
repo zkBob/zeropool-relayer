@@ -365,7 +365,7 @@ export class RelayPool extends BasePool<Network> {
         const indexerCommitments = (await this.getIndexerTxs(fromIndex, limit)).map(tx => tx.slice(65, 129));
 
         // find cached commitments in the indexer's response
-        for (const [commit, memo] of localEntries) {
+        for (const [commit, {memo, index}] of localEntries) {
           if (indexerCommitments.includes(commit)) {
             logger.info('Deleting cached entry', { commit })
             await this.txStore.remove(commit)
