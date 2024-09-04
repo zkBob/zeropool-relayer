@@ -97,8 +97,12 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
   }
   const indexerTxs: string[] = await response.json()
   
-  const txStore = (pool as RelayPool).txStore
-  const localEntries = Object.entries(await txStore.getAll());
+  const lastRequestedIndex = offset + limit * OUTPLUSONE;
+  const txStore = (pool as RelayPool).txStore;
+  const localEntries = await txStore.getAll().then(entries =>
+    Object.entries(entries)
+    .filter(([commit, {memo, index}]) => offset <= index && index < lastRequestedIndex)
+  );
 
   const indexerCommitments = indexerTxs.map(tx => tx.slice(65, 129));
   const optimisticTxs: string[] = []
