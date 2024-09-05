@@ -2,7 +2,7 @@ import config from '@/configs/relayerConfig'
 import { logger } from '@/lib/appLogger'
 import { Network } from '@/lib/network'
 import { redis } from '@/lib/redisClient'
-import { JobState, PoolTx, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
+import { BasePoolTx, JobState, PoolTx, poolTxQueue, TxPayload, WorkerTxType } from '@/queue/poolTxQueue'
 import { TxStore } from '@/state/TxStore'
 import { ENERGY_SIZE, MOCK_CALLDATA, OUTPLUSONE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import {
@@ -285,13 +285,19 @@ export class RelayPool extends BasePool<Network> {
 
   async onFailed(txHash: string, jobId: string): Promise<void> {
     super.onFailed(txHash, jobId);
-    this.txStore.remove(jobId);
     const poolJob = await poolTxQueue.getJob(jobId);
     if (!poolJob) {
       logger.error('Pool job not found', { jobId });
     } else {
       poolJob.data.transaction.state = JobState.REVERTED;
       poolJob.data.transaction.txHash = txHash;
+
+      const txPayload = poolJob.data.transaction as TxPayload;
+      if (txPayload.proof.inputs.length > 2) {
+        const commit = txPayload.proof.inputs[2];
+        this.txStore.remove(commit);
+        logger.info('Removing local cached transaction', {commit});
+      }
       await poolJob.update(poolJob.data);
     }
   }
@@ -305,7 +311,7 @@ export class RelayPool extends BasePool<Network> {
       memo
     );
     await this.txStore.add(commit, prefixedMemo, index);
-    logger.info(`Tx with commit ${commit} has been CACHED locally`);
+    logger.info(`Tx with commit ${commit} has been CACHED locally`, { index });
   }
 
   private async getIndexerInfo() {
@@ -317,7 +323,7 @@ export class RelayPool extends BasePool<Network> {
   private async assumeNextPendingTxIndex() {
     const [indexerInfo, localCache] = await Promise.all([this.getIndexerInfo(), this.txStore.getAll()]);
     
-    return Number(indexerInfo.optimisticDeltaIndex + Object.keys(localCache).length);
+    return Number(indexerInfo.optimisticDeltaIndex + Object.keys(localCache).length * OUTPLUSONE);
   }
 
   private async getIndexerTxs(offset: number, limit: number): Promise<string[]> {
@@ -366,7 +372,7 @@ export class RelayPool extends BasePool<Network> {
 
         // find cached commitments in the indexer's response
         for (const [commit, {memo, index}] of localEntries) {
-          if (indexerCommitments.includes(commit)) {
+          if (indexerCommitments.includes(commit) || index < indexerOptimisticIndex) {
             logger.info('Deleting cached entry', { commit })
             await this.txStore.remove(commit)
             localEntriesCnt--;
