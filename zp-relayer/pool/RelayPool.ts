@@ -2,7 +2,7 @@ import config from '@/configs/relayerConfig'
 import { logger } from '@/lib/appLogger'
 import { Network } from '@/lib/network'
 import { redis } from '@/lib/redisClient'
-import { BasePoolTx, JobState, PoolTx, poolTxQueue, TxPayload, WorkerTxType } from '@/queue/poolTxQueue'
+import { JobState, PoolTx, poolTxQueue, TxPayload, WorkerTxType } from '@/queue/poolTxQueue'
 import { TxStore } from '@/state/TxStore'
 import { ENERGY_SIZE, MOCK_CALLDATA, OUTPLUSONE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import {
@@ -44,6 +44,7 @@ import { bytesToHex, toBN } from 'web3-utils'
 import { getTxDataProverV2, TxDataProverV2, TxType } from 'zp-memo-parser'
 import { BasePool } from './BasePool'
 import { OptionalChecks, PermitConfig, ProcessResult } from './types'
+import BigNumber from 'bignumber.js'
 
 const ZERO = toBN(0)
 
@@ -262,9 +263,10 @@ export class RelayPool extends BasePool<Network> {
     }
 
     // cache transaction locally
+    const indexerOptimisticIndex = Number((await this.getIndexerInfo()).deltaIndex);
     await this.cacheTxLocally(outCommit, txHash, memo, commitIndex);
     // start monitoring local cache against the indexer to cleanup already indexed txs
-    this.startLocalCacheObserver(commitIndex);
+    this.startLocalCacheObserver(indexerOptimisticIndex);
   }
 
   async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>, jobId?: string): Promise<void> {
@@ -277,8 +279,6 @@ export class RelayPool extends BasePool<Network> {
         poolJob.data.transaction.state = JobState.COMPLETED;
         poolJob.data.transaction.txHash = txHash;
         await poolJob.update(poolJob.data);
-
-        await this.cacheTxLocally(res.outCommit, txHash, res.memo, res.commitIndex);
       }
     }
   }
@@ -311,7 +311,7 @@ export class RelayPool extends BasePool<Network> {
       memo
     );
     await this.txStore.add(commit, prefixedMemo, index);
-    logger.info(`Tx with commit ${commit} has been CACHED locally`, { index });
+    logger.info('Tx has been CACHED locally', { commit, index });
   }
 
   private async getIndexerInfo() {
@@ -368,14 +368,16 @@ export class RelayPool extends BasePool<Network> {
       try {
         const indexerOptimisticIndex = Number((await this.getIndexerInfo()).optimisticDeltaIndex);
         const limit = (indexerOptimisticIndex - fromIndex) / OUTPLUSONE + localEntries.length + EXTEND_LIMIT_TO_FETCH;
-        const indexerCommitments = (await this.getIndexerTxs(fromIndex, limit)).map(tx => tx.slice(65, 129));
+        const indexerCommitments = (await this.getIndexerTxs(fromIndex, limit)).map(tx => BigNumber(tx.slice(65, 129), 16).toString(10));
 
         // find cached commitments in the indexer's response
         for (const [commit, {memo, index}] of localEntries) {
           if (indexerCommitments.includes(commit) || index < indexerOptimisticIndex) {
-            logger.info('Deleting cached entry', { commit })
+            logger.info('Deleting cached entry', { commit, index })
             await this.txStore.remove(commit)
             localEntriesCnt--;
+          } else {
+            //logger.info('Cached entry is still in the local cache', { commit, index });
           }
         }
       } catch(e) {
@@ -383,7 +385,7 @@ export class RelayPool extends BasePool<Network> {
       }
 
       if (localEntriesCnt > 0) {
-        sleep(CACHE_OBSERVE_INTERVAL_MS);
+        await sleep(CACHE_OBSERVE_INTERVAL_MS);
       }
     }
 
