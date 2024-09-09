@@ -2,15 +2,16 @@ import config from '@/configs/relayerConfig'
 import { logger } from '@/lib/appLogger'
 import { Network } from '@/lib/network'
 import { redis } from '@/lib/redisClient'
-import { JobState, PoolTx, poolTxQueue, WorkerTxType } from '@/queue/poolTxQueue'
+import { JobState, PoolTx, poolTxQueue, TxPayload, WorkerTxType } from '@/queue/poolTxQueue'
 import { TxStore } from '@/state/TxStore'
-import { ENERGY_SIZE, MOCK_CALLDATA, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
+import { ENERGY_SIZE, MOCK_CALLDATA, OUTPLUSONE, PERMIT2_CONTRACT, TOKEN_SIZE, TRANSFER_INDEX_SIZE } from '@/utils/constants'
 import {
   applyDenominator,
   buildPrefixedMemo,
   encodeProof,
   fetchJson,
   numToHex,
+  sleep,
   truncateHexPrefix,
   truncateMemoTxPrefixProverV2,
 } from '@/utils/helpers'
@@ -43,6 +44,7 @@ import { bytesToHex, toBN } from 'web3-utils'
 import { getTxDataProverV2, TxDataProverV2, TxType } from 'zp-memo-parser'
 import { BasePool } from './BasePool'
 import { OptionalChecks, PermitConfig, ProcessResult } from './types'
+import BigNumber from 'bignumber.js'
 
 const ZERO = toBN(0)
 
@@ -50,7 +52,10 @@ export class RelayPool extends BasePool<Network> {
   public permitRecover: PermitRecover | null = null
   private proxyAddress!: string
   private indexerUrl!: string
+  private observePromise: Promise<void> | undefined;
   txStore!: TxStore
+
+  protected poolName(): string { return 'relay-pool'; }
 
   async init(permitConfig: PermitConfig, proxyAddress: string, indexerUrl: string) {
     if (this.isInitialized) return
@@ -77,6 +82,8 @@ export class RelayPool extends BasePool<Network> {
     await this.permitRecover?.initializeDomain()
 
     this.isInitialized = true
+
+    this.observePromise = undefined;
   }
 
   async validateTx(
@@ -234,8 +241,10 @@ export class RelayPool extends BasePool<Network> {
     const calldata = data.join('')
 
     const memoTruncated = truncateMemoTxPrefixProverV2(memo, txType)
-    // TODO: we call indexer twice (during validation and tx build)
-    const indexerInfo = await this.getIndexerInfo()
+
+    // Commit index should be treated as an optimistic checkpoint
+    // It can increase after the transaction is included into the Merkle tree
+    const commitIndex = await this.assumeNextPendingTxIndex();
 
     return {
       data: calldata,
@@ -243,9 +252,7 @@ export class RelayPool extends BasePool<Network> {
       outCommit,
       nullifier,
       memo: memoTruncated,
-      // Commit index should be treated as an optimistic checkpoint
-      // It can increase after the transaction is included
-      commitIndex: indexerInfo.optimisticDeltaIndex,
+      commitIndex,
     }
   }
 
@@ -255,7 +262,11 @@ export class RelayPool extends BasePool<Network> {
       await this.optimisticState.nullifiers.add([nullifier])
     }
 
-    await this.cacheTxLocally(commitIndex, outCommit, txHash, memo);
+    // cache transaction locally
+    const indexerOptimisticIndex = Number((await this.getIndexerInfo()).deltaIndex);
+    await this.cacheTxLocally(outCommit, txHash, memo, commitIndex);
+    // start monitoring local cache against the indexer to cleanup already indexed txs
+    this.startLocalCacheObserver(indexerOptimisticIndex);
   }
 
   async onConfirmed(res: ProcessResult<RelayPool>, txHash: string, callback?: () => Promise<void>, jobId?: string): Promise<void> {
@@ -268,26 +279,30 @@ export class RelayPool extends BasePool<Network> {
         poolJob.data.transaction.state = JobState.COMPLETED;
         poolJob.data.transaction.txHash = txHash;
         await poolJob.update(poolJob.data);
-
-        await this.cacheTxLocally(res.commitIndex, res.outCommit, txHash, res.memo);
       }
     }
   }
 
   async onFailed(txHash: string, jobId: string): Promise<void> {
     super.onFailed(txHash, jobId);
-    this.txStore.remove(jobId);
     const poolJob = await poolTxQueue.getJob(jobId);
     if (!poolJob) {
       logger.error('Pool job not found', { jobId });
     } else {
       poolJob.data.transaction.state = JobState.REVERTED;
       poolJob.data.transaction.txHash = txHash;
+
+      const txPayload = poolJob.data.transaction as TxPayload;
+      if (txPayload.proof.inputs.length > 2) {
+        const commit = txPayload.proof.inputs[2];
+        this.txStore.remove(commit);
+        logger.info('Removing local cached transaction', {commit});
+      }
       await poolJob.update(poolJob.data);
     }
   }
 
-  protected async cacheTxLocally(index: number, commit: string, txHash: string, memo: string) {
+  protected async cacheTxLocally(commit: string, txHash: string, memo: string, index: number) {
     // store or updating local tx store
     // (we should keep sent transaction until the indexer grab them)
     const prefixedMemo = buildPrefixedMemo(
@@ -295,11 +310,85 @@ export class RelayPool extends BasePool<Network> {
       txHash,
       memo
     );
-    await this.txStore.add(index, prefixedMemo);
+    await this.txStore.add(commit, prefixedMemo, index);
+    logger.info('Tx has been CACHED locally', { commit, index });
   }
 
-  async getIndexerInfo() {
+  private async getIndexerInfo() {
     const info = await fetchJson(this.indexerUrl, '/info', [])
     return info
+  }
+
+  // It's just an assumption needed for internal purposes. The final index may be changed
+  private async assumeNextPendingTxIndex() {
+    const [indexerInfo, localCache] = await Promise.all([this.getIndexerInfo(), this.txStore.getAll()]);
+    
+    return Number(indexerInfo.optimisticDeltaIndex + Object.keys(localCache).length * OUTPLUSONE);
+  }
+
+  private async getIndexerTxs(offset: number, limit: number): Promise<string[]> {
+    const url = new URL('/transactions/v2', config.base.COMMON_INDEXER_URL)
+    url.searchParams.set('limit', limit.toString())
+    url.searchParams.set('offset', offset.toString())
+
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transactions from indexer. Status: ${response.status}`)
+    }
+    return response.json() as Promise<string[]>;
+  }
+
+  // observe the current local cache and indexer to remove local record
+  // after adding it to the indexer's optimistic/persistent state
+  // return when local cache is empty
+  protected async startLocalCacheObserver(fromIndex: number): Promise<void> {
+    if (this.observePromise == undefined) {
+      this.observePromise = this.localCacheObserverWorker(fromIndex).finally(() => {
+        this.observePromise = undefined;
+      });
+    }
+
+    return this.observePromise;
+  }
+
+  protected async localCacheObserverWorker(fromIndex: number): Promise<void> {
+    logger.debug('Local cache observer worker was started', { fromIndex })
+    const CACHE_OBSERVE_INTERVAL_MS = 1000; // waiting time between checks
+    const EXTEND_LIMIT_TO_FETCH = 10; // taking into account non-atomic nature of /info and /transactions/v2 requests
+    while (true) {
+      const localEntries = Object.entries(await this.txStore.getAll());
+      let localEntriesCnt = localEntries.length;
+
+      if (localEntries.length == 0) {
+        // stop observer when localCache is empty
+        break;
+      }
+
+      // there are entries in the local cache
+      try {
+        const indexerOptimisticIndex = Number((await this.getIndexerInfo()).optimisticDeltaIndex);
+        const limit = (indexerOptimisticIndex - fromIndex) / OUTPLUSONE + localEntries.length + EXTEND_LIMIT_TO_FETCH;
+        const indexerCommitments = (await this.getIndexerTxs(fromIndex, limit)).map(tx => BigNumber(tx.slice(65, 129), 16).toString(10));
+
+        // find cached commitments in the indexer's response
+        for (const [commit, {memo, index}] of localEntries) {
+          if (indexerCommitments.includes(commit) || index < indexerOptimisticIndex) {
+            logger.info('Deleting cached entry', { commit, index })
+            await this.txStore.remove(commit)
+            localEntriesCnt--;
+          } else {
+            //logger.info('Cached entry is still in the local cache', { commit, index });
+          }
+        }
+      } catch(e) {
+        logger.error(`Cannot check local cache against indexer : ${(e as Error).message}`);
+      }
+
+      if (localEntriesCnt > 0) {
+        await sleep(CACHE_OBSERVE_INTERVAL_MS);
+      }
+    }
+
+    logger.debug('Local cache observer worker has finished', { fromIndex })
   }
 }

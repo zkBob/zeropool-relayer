@@ -29,6 +29,8 @@ export abstract class BasePool<N extends Network = Network> {
   public poolId: BN = toBN(0)
   public isInitialized = false
 
+  protected poolName(): string { return 'base-pool'; }
+
   constructor(public network: NetworkBackend<N>, private config: BasePoolConfig) {
     this.txVK = require(config.txVkPath)
 
@@ -146,11 +148,11 @@ export abstract class BasePool<N extends Network = Network> {
   async syncState(startBlock?: number, lastBlock?: number, indexerUrl?: string) {
     logger.debug('Syncing state; starting from block %d', startBlock)
 
-    const localIndex = this.state.getNextIndex()
-    const localRoot = this.state.getMerkleRoot()
+    let localIndex = this.state.getNextIndex()
+    let localRoot = this.state.getMerkleRoot()
 
-    const contractIndex = await this.getContractIndex()
-    const contractRoot = await this.getContractMerkleRoot(contractIndex)
+    let contractIndex = await this.getContractIndex()
+    let contractRoot = await this.getContractMerkleRoot(contractIndex)
 
     logger.debug('State info', {
       localRoot,
@@ -164,25 +166,34 @@ export abstract class BasePool<N extends Network = Network> {
       return
     }
 
-    if (indexerUrl) {
-      await this.syncStateFromIndexer(indexerUrl)
-    } else if (startBlock && lastBlock) {
-      await this.syncStateFromContract(startBlock, lastBlock, contractIndex, localIndex)
-    } else {
-      throw new Error('Either (startBlock, lastBlock) or indexerUrl should be provided for sync')
+    while (localIndex < contractIndex) {
+      if (indexerUrl) {
+        await this.syncStateFromIndexer(indexerUrl)
+      } else if (startBlock && lastBlock) {
+        const savedBlockNumberOfLastConfirmedTx = await this.getLastConfirmedTxBlock();
+        const actualStartBlock = Math.max(startBlock, savedBlockNumberOfLastConfirmedTx);
+
+        logger.debug('Syncing from contract; starting from block %d', actualStartBlock)
+
+        await this.syncStateFromContract(actualStartBlock, lastBlock, contractIndex, localIndex);
+      } else {
+        throw new Error('Either (startBlock, lastBlock) or indexerUrl should be provided for sync')
+      }
+
+      localIndex = this.state.getNextIndex()
+      localRoot = this.state.getMerkleRoot()
+      logger.debug('Local state after update', {
+        localRoot,
+        localIndex,
+      })
     }
 
-    const newLocalIndex = this.state.getNextIndex()
-    const newLocalRoot = this.state.getMerkleRoot()
-    logger.debug('Local state after update', {
-      newLocalRoot,
-      newLocalIndex,
-    })
-    if (newLocalIndex < contractIndex) {
-      throw new Error('Indexer is not synchronized with the contract yet')
-    }
-    if (newLocalRoot !== contractRoot) {
-      throw new Error('State is corrupted, roots mismatch')
+    if (localRoot !== contractRoot) {
+      await this.state.wipe();
+      await this.optimisticState.wipe();
+      await this.setLastConfirmedTxBlockForced(0);
+
+      throw new Error('State is corrupted, roots mismatch. State was wiped')
     }
   }
 
@@ -239,12 +250,12 @@ export abstract class BasePool<N extends Network = Network> {
       for (const e of batch.events) {
         // Filter pending txs in case of decentralized relay pool
         const state = toBN(e.values.index).lte(toBN(contractIndex)) ? 'all' : 'optimistic'
-        await this.addTxToState(e.txHash, e.values.index, e.values.message, state)
+        await this.addTxToState(e.txHash, e.values.index, e.values.message, state, e.blockNumber)
       }
     }
   }
 
-  async addTxToState(txHash: string, newPoolIndex: number, message: string, state: 'optimistic' | 'confirmed' | 'all') {
+  async addTxToState(txHash: string, newPoolIndex: number, message: string, state: 'optimistic' | 'confirmed' | 'all', blockNumber: number) {
     const transactSelector = '0xaf989083'
     const transactV2Selector = '0x5fd28f8c'
 
@@ -301,10 +312,12 @@ export abstract class BasePool<N extends Network = Network> {
 
       memo = truncateMemoTxPrefix(memoRaw, txType)
 
-      // Save nullifier in confirmed state
+      // Save nullifier and tx's block number in confirmed state
       if (state !== 'optimistic') {
         const nullifier = parser.getField('nullifier')
         await this.state.nullifiers.add([hexToNumberString(nullifier)])
+
+        this.setLastConfirmedTxBlock(blockNumber);
       }
     } else if (input.startsWith(transactV2Selector)) {
       const calldata = Buffer.from(truncateHexPrefix(input), 'hex')
@@ -320,10 +333,12 @@ export abstract class BasePool<N extends Network = Network> {
 
       memo = truncateMemoTxPrefixProverV2(memoRaw, txType)
 
-      // Save nullifier in confirmed state
+      // Save nullifier and tx's block number in confirmed state
       if (state !== 'optimistic') {
         const nullifier = parser.getField('nullifier')
         await this.state.nullifiers.add([hexToNumberString(nullifier)])
+
+        this.setLastConfirmedTxBlock(blockNumber);
       }
     } else {
       throw new Error(`Unknown transaction type: ${input}`)
@@ -336,7 +351,7 @@ export abstract class BasePool<N extends Network = Network> {
     }
   }
 
-  propagateOptimisticState(index: number) {
+  propagateOptimisticState(index: number, blockNumber: number) {
     index = Math.floor(index / OUTPLUSONE)
     const opIndex = Math.floor(this.optimisticState.getNextIndex() / OUTPLUSONE)
     const stateIndex = Math.floor(this.state.getNextIndex() / OUTPLUSONE)
@@ -352,6 +367,8 @@ export abstract class BasePool<N extends Network = Network> {
       const outCommit = hexToNumberString('0x' + tx.slice(0, 64))
       this.state.updateState(i, outCommit, tx)
     }
+
+    this.setLastConfirmedTxBlock(blockNumber);
   }
 
   verifyProof(proof: SnarkProof, inputs: Array<string>) {
@@ -424,5 +441,29 @@ export abstract class BasePool<N extends Network = Network> {
       tier: limits.tier.toString(10),
     }
     return limitsFetch
+  }
+
+
+  // The following key in Redis DB will use to restore sync from the last confirmed tx
+  private lastConfirmedTxBlockRedisKey = `${this.poolName}:LastConfirmedTxBlock`;
+
+  protected async setLastConfirmedTxBlock(blockNumber: number) {
+    const curValue = await this.getLastConfirmedTxBlock();
+    if (blockNumber > curValue) {
+      this.setLastConfirmedTxBlockForced(blockNumber);
+    }
+  }
+
+  private async setLastConfirmedTxBlockForced(blockNumber: number) {
+    redis.set(this.lastConfirmedTxBlockRedisKey, blockNumber);
+  }
+
+  protected async getLastConfirmedTxBlock(): Promise<number> {
+    const result = await redis.get(this.lastConfirmedTxBlockRedisKey);
+    try{
+      return Number(result);
+    } catch(_) {};
+
+    return 0;
   }
 }

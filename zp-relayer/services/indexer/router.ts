@@ -83,7 +83,7 @@ function getRoot(req: Request, res: Response, { pool }: PoolInjection) {
   validateBatch([[checkGetRoot, req.query]])
 
   const index = req.query.index as unknown as number
-  const root = pool.state.getMerkleRootAt(index)
+  const root = pool.state.getMerkleRootAt(index) ?? pool.optimisticState.getMerkleRootAt(index)
 
   res.json({ root })
 }

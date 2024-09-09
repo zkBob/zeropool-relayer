@@ -6,6 +6,8 @@ import { type PermitRecover } from '@/utils/permit/types'
 export class IndexerPool extends BasePool {
   public permitRecover: PermitRecover | null = null
 
+  protected poolName(): string { return 'indexer-pool'; }
+
   async init(startBlock: number | null = null, lastBlock: number | null = null) {
     if (this.isInitialized) return
 

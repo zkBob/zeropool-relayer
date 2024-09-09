@@ -20,6 +20,7 @@ import {
   validateCountryIP,
   ValidationFunction,
 } from '../../validation/api/validation'
+import BigNumber from 'bignumber.js'
 
 interface PoolInjection {
   pool: BasePool
@@ -93,26 +94,25 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
 
   const response = await fetch(url)
   if (!response.ok) {
-    throw new Error(`Failed to fetch transactions from indexer. Status: ${res.status}`)
+    throw new Error(`Failed to fetch transactions from indexer. Status: ${response.status}`)
   }
   const indexerTxs: string[] = await response.json()
   
-  const lastIndex = offset + indexerTxs.length * OUTPLUSONE
-  const txStore = (pool as RelayPool).txStore
-  const indices = await txStore.getAll().then(keys => {
-    return Object.entries(keys)
-      .map(([i, v]) => [parseInt(i), v] as [number, string])
-      .filter(([i]) => offset <= i && i <= lastIndex)
-      .sort(([i1], [i2]) => i1 - i2)
-  })
+  const lastRequestedIndex = offset + limit * OUTPLUSONE;
+  const lastReceivedIndex = offset + indexerTxs.length * OUTPLUSONE;
+  const txStore = (pool as RelayPool).txStore;
+  const localEntries = await txStore.getAll().then(entries =>
+    Object.entries(entries)
+    .filter(([commit, {memo, index}]) => offset <= index && index < lastRequestedIndex)
+  );
 
-  const indexerCommitments = indexerTxs.map(tx => tx.slice(65, 129));
+  const indexerCommitments = indexerTxs.map(tx => BigNumber(tx.slice(65, 129), 16).toString(10));
   const optimisticTxs: string[] = []
-  for (const [index, memo] of indices) {
-    const commitLocal = memo.slice(0, 64)
-    if (indexerCommitments.includes(commitLocal)) {
-      logger.info('Deleting index from optimistic state', { index })
-      await txStore.remove(index.toString())
+  for (const [commit, {memo, index}] of localEntries) {
+    if (indexerCommitments.includes(commit) || index < lastReceivedIndex) {
+      // !!! we shouldn't modify local cache from here. Just filter entries to return correct response
+      //logger.info('Deleting index from optimistic state', { index })
+      //await txStore.remove(commit)
     } else {
       optimisticTxs.push(txToV2Format('0', memo))
     }
@@ -193,8 +193,8 @@ async function relayerInfo(req: Request, res: Response, { pool }: PoolInjection)
   const pendingCnt = await txStore.getAll()
     .then(keys => {
       return Object.entries(keys)
-        .map(([i]) => parseInt(i) as number)
-        .filter(i => indexerMaxIdx <= i)
+        .map(([commit, {memo, index}]) => index)
+        .filter(i => i >= indexerMaxIdx)
     })
     .then(a => a.length);
 

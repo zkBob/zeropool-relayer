@@ -8,7 +8,7 @@ import type { SnarkProof } from 'libzkbob-rs-node'
 import promiseRetry from 'promise-retry'
 import type Web3 from 'web3'
 import type { Contract } from 'web3-eth-contract'
-import { padLeft, toBN } from 'web3-utils'
+import { padLeft, toBN, numberToHex } from 'web3-utils'
 import { TxType } from 'zp-memo-parser'
 import { isContractCallError } from './web3Errors'
 
@@ -315,4 +315,12 @@ export async function fetchJson(serverUrl: string, path: string, query: [string,
   }
 
   return await res.json()
+}
+
+export function numberToHexPadded(num: number, numBytes: number): string {
+  return padLeft(numberToHex(num).slice(2), numBytes * 2);
+}
+
+export function hexToNumber(hex: string): number {
+  return parseInt(hex, 16);
 }

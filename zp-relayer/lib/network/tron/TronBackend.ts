@@ -49,6 +49,7 @@ export class TronBackend implements INetworkBackend<Network.Tron> {
       yield events.map((e: any) => ({
         txHash: e.transaction,
         values: e.result,
+        blockNumber: e.block,
       }))
 
       fingerprint = events[events.length - 1].fingerprint || null

@@ -11,6 +11,7 @@ export function isEthereum(n: NetworkBackend<Network>): n is NetworkBackend<Netw
 export interface Event {
   txHash: string
   values: Record<string, any>
+  blockNumber: number
 }
 
 export interface GetEventsConfig<N extends Network> {
