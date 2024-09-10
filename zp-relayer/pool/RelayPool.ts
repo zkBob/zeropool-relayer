@@ -354,7 +354,7 @@ export class RelayPool extends BasePool<Network> {
   protected async localCacheObserverWorker(fromIndex: number): Promise<void> {
     // we start checking transactions slightly earlier than the current optimistic index
     // to cover the case when the indexer was already updated before onSend was called
-    const OFFSET_MARGIN = 10;
+    const OFFSET_MARGIN = 10 * OUTPLUSONE;
     fromIndex = Math.max(fromIndex - OFFSET_MARGIN, 0);
     logger.debug('Local cache observer worker was started', { fromIndex })
     const CACHE_OBSERVE_INTERVAL_MS = 1000; // waiting time between checks
