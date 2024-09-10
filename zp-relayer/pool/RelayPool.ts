@@ -302,7 +302,7 @@ export class RelayPool extends BasePool<Network> {
     }
   }
 
-  protected async cacheTxLocally(commit: string, txHash: string, memo: string, index: number) {
+  protected async cacheTxLocally(commit: string, txHash: string, memo: string, timestamp: number) {
     // store or updating local tx store
     // (we should keep sent transaction until the indexer grab them)
     const prefixedMemo = buildPrefixedMemo(
@@ -310,8 +310,8 @@ export class RelayPool extends BasePool<Network> {
       txHash,
       memo
     );
-    await this.txStore.add(commit, prefixedMemo, index);
-    logger.info('Tx has been CACHED locally', { commit, index });
+    await this.txStore.add(commit, prefixedMemo, timestamp);
+    logger.info('Tx has been CACHED locally', { commit, timestamp });
   }
 
   private async getIndexerInfo() {
