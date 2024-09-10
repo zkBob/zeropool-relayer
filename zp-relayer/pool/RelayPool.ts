@@ -264,7 +264,7 @@ export class RelayPool extends BasePool<Network> {
 
     // cache transaction locally
     const indexerOptimisticIndex = Number((await this.getIndexerInfo()).deltaIndex);
-    await this.cacheTxLocally(outCommit, txHash, memo, commitIndex);
+    await this.cacheTxLocally(outCommit, txHash, memo, Date.now());
     // start monitoring local cache against the indexer to cleanup already indexed txs
     this.startLocalCacheObserver(indexerOptimisticIndex);
   }
@@ -352,15 +352,20 @@ export class RelayPool extends BasePool<Network> {
   }
 
   protected async localCacheObserverWorker(fromIndex: number): Promise<void> {
+    // we start checking transactions slightly earlier than the current optimistic index
+    // to cover the case when the indexer was already updated before onSend was called
+    const OFFSET_MARGIN = 10;
+    fromIndex = Math.max(fromIndex - OFFSET_MARGIN, 0);
     logger.debug('Local cache observer worker was started', { fromIndex })
     const CACHE_OBSERVE_INTERVAL_MS = 1000; // waiting time between checks
     const EXTEND_LIMIT_TO_FETCH = 10; // taking into account non-atomic nature of /info and /transactions/v2 requests
+    const EXPIRATION_MS = 1000 * 60 * 60 * 24; // we drop entries older than 24 hours, unlikely that they ever will be indexed
+    
     while (true) {
       const localEntries = Object.entries(await this.txStore.getAll());
       let localEntriesCnt = localEntries.length;
 
       if (localEntries.length == 0) {
-        // stop observer when localCache is empty
         break;
       }
 
@@ -371,12 +376,17 @@ export class RelayPool extends BasePool<Network> {
         const indexerCommitments = (await this.getIndexerTxs(fromIndex, limit)).map(tx => BigNumber(tx.slice(65, 129), 16).toString(10));
 
         // find cached commitments in the indexer's response
-        for (const [commit, {memo, index}] of localEntries) {
-          if (indexerCommitments.includes(commit) || index < indexerOptimisticIndex) {
-            logger.info('Deleting cached entry', { commit, index })
+        for (const [commit, {memo, timestamp}] of localEntries) {
+          if (indexerCommitments.includes(commit)) {
+            logger.info('Deleting cached entry', { commit, timestamp })
             await this.txStore.remove(commit)
             localEntriesCnt--;
           } else {
+            if (Date.now() - timestamp > EXPIRATION_MS) {
+              logger.error('Cached transaction was not indexed for a long time, removing', { commit, timestamp });
+              await this.txStore.remove(commit)
+              localEntriesCnt--;
+            }
             //logger.info('Cached entry is still in the local cache', { commit, index });
           }
         }

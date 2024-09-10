@@ -98,18 +98,20 @@ async function getTransactionsV2(req: Request, res: Response, { pool }: PoolInje
   }
   const indexerTxs: string[] = await response.json()
   
-  const lastRequestedIndex = offset + limit * OUTPLUSONE;
-  const lastReceivedIndex = offset + indexerTxs.length * OUTPLUSONE;
   const txStore = (pool as RelayPool).txStore;
   const localEntries = await txStore.getAll().then(entries =>
     Object.entries(entries)
-    .filter(([commit, {memo, index}]) => offset <= index && index < lastRequestedIndex)
+    .sort((a, b) => a[1].timestamp - b[1].timestamp)
   );
 
   const indexerCommitments = indexerTxs.map(tx => BigNumber(tx.slice(65, 129), 16).toString(10));
   const optimisticTxs: string[] = []
-  for (const [commit, {memo, index}] of localEntries) {
-    if (indexerCommitments.includes(commit) || index < lastReceivedIndex) {
+  for (const [commit, {memo, timestamp}] of localEntries) {
+    if (indexerTxs.length + optimisticTxs.length >= limit) {
+      break
+    }
+    
+    if (indexerCommitments.includes(commit)) {
       // !!! we shouldn't modify local cache from here. Just filter entries to return correct response
       //logger.info('Deleting index from optimistic state', { index })
       //await txStore.remove(commit)
@@ -190,16 +192,11 @@ async function relayerInfo(req: Request, res: Response, { pool }: PoolInjection)
   const indexerMaxIdx = Math.max(parseInt(info.deltaIndex ?? '0'), parseInt(info.optimisticDeltaIndex ?? '0'))
 
   const txStore = (pool as RelayPool).txStore
-  const pendingCnt = await txStore.getAll()
-    .then(keys => {
-      return Object.entries(keys)
-        .map(([commit, {memo, index}]) => index)
-        .filter(i => i >= indexerMaxIdx)
-    })
-    .then(a => a.length);
-
-    info.pendingDeltaIndex = indexerMaxIdx + pendingCnt * OUTPLUSONE;
-
+  const pendingCnt = await txStore.getAll().then(map => Object.keys(map).length)
+  // This number is not accurate since some txs might be already included in the indexer
+  // but still be available in the local cache
+  // This value should be used ONLY as some estimate of the total number of txs including pending ones
+  info.pendingDeltaIndex = indexerMaxIdx + pendingCnt * OUTPLUSONE;
   res.json(info)
 }
 
