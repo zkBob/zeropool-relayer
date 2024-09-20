@@ -1,47 +1,68 @@
 version: '3.8'
 
 services:
-  ganache:
-    image: trufflesuite/ganache-cli
-    command: >
-      --deterministic
-      --gasLimit 20000000
-      --allowUnlimitedContractSize
-      --networkId 1337
-      --chainId 1337
-    ports:
-      - 8545:8545
-  contracts:
-    image: lok52/zp-contracts:latest
-  verifier:
-    image: lok52/verifier:latest
-    build:
-      context: ./docker
-      dockerfile: Dockerfile.verifier
-  redis:
+  redis_indexer:
     command: [redis-server, --appendonly, 'yes']
     image: redis:6.2.6
+  indexer:
+    image: ghcr.io/zkbob/zkbob-relayer:${RELAYER_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.relayer
+    command: yarn run start:indexer:prod
+    container_name: indexer
+    volumes:
+      - ./zp-relayer/params:/app/zp-relayer/params/
+    env_file: ./zp-relayer/indexer.env
+    environment:
+      - INDEXER_PORT=80
+      - COMMON_REDIS_URL=redis_indexer:6379
     ports:
-      - 6379:6379
+      - 8000:80
+    restart: always
+    depends_on:
+      - redis_indexer
+  redis_relayer:
+    command: [redis-server, --appendonly, 'yes']
+    image: redis:6.2.6
   relayer:
     image: ghcr.io/zkbob/zkbob-relayer:${RELAYER_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.relayer
+    container_name: relayer
     volumes:
-      - relayer_tree:/app/tree.db
-      - relayer_txs:/app/txs.db
-      - $PARAMS_PATH:/app/zp-relayer/params/
-    env_file: ./zp-relayer/relayer.env
+      - ./zp-relayer/params:/app/zp-relayer/params/
+    env_file: ./zp-relayer/relayer-decentralized.env
+    environment:
+      - RELAYER_PORT=80
+      - RELAYER_PROVER_URL=http://commitment_watcher:80
+      - COMMON_INDEXER_URL=http://indexer:80
+      - COMMON_REDIS_URL=redis_relayer:6379
     ports:
-      - 8000:8000
-  watcher:
+      - 8001:80
+    restart: always
+    depends_on:
+      - redis_relayer
+  redis_prover:
+    command: [redis-server, --appendonly, 'yes']
+    image: redis:6.2.6
+  commitment_watcher:
     image: ghcr.io/zkbob/zkbob-relayer:${RELAYER_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.relayer
-    command: yarn run start:direct-deposit-watcher:prod
-    env_file: ./zp-relayer/watcher.env
-volumes:
-  relayer_tree:
-  relayer_txs:
+    command: yarn run start:commitment-watcher:prod
+    container_name: commitment_watcher
+    volumes:
+      - ./zp-relayer/params:/app/zp-relayer/params/
+    env_file: ./zp-relayer/commitment-watcher.env
+    environment:
+      - COMMITMENT_WATCHER_PORT=80
+      - COMMON_INDEXER_URL=http://indexer:80
+      - COMMON_REDIS_URL=redis_prover:6379
+    ports:
+      - 8002:80
+    restart: always
+    depends_on:
+      - redis_prover

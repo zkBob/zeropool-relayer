@@ -1,11 +1,11 @@
-import Ajv, { JSONSchemaType } from 'ajv'
-import { isAddress } from 'web3-utils'
-import { Proof, SnarkProof } from 'libzkbob-rs-node'
-import { TxType } from 'zp-memo-parser'
-import type { PoolTx } from '@/pool'
+// @ts-ignore
+import { logger } from '@/lib/appLogger'
+import { BasePoolTx } from '@/queue/poolTxQueue'
 import { HEADER_TRACE_ID, ZERO_ADDRESS } from '@/utils/constants'
-import config from '@/configs/relayerConfig'
-import { logger } from '@/services/appLogger'
+import Ajv, { JSONSchemaType } from 'ajv'
+import { Proof, SnarkProof } from 'libzkbob-rs-node'
+import { isAddress } from 'web3-utils'
+import { TxType } from 'zp-memo-parser'
 
 const ajv = new Ajv({ allErrors: true, coerceTypes: true, useDefaults: true })
 
@@ -30,7 +30,6 @@ const AjvNullableString: JSONSchemaType<string> = { type: 'string', nullable: tr
 
 const AjvNullableAddress: JSONSchemaType<string> = {
   type: 'string',
-  pattern: '^0x[a-fA-F0-9]{40}$',
   default: ZERO_ADDRESS,
   isAddress: true,
 }
@@ -71,7 +70,7 @@ const AjvProofSchema: JSONSchemaType<Proof> = {
   required: ['inputs', 'proof'],
 }
 
-const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
+const AjvSendTransactionSchema: JSONSchemaType<BasePoolTx> = {
   type: 'object',
   properties: {
     proof: AjvProofSchema,
@@ -85,7 +84,23 @@ const AjvSendTransactionSchema: JSONSchemaType<PoolTx> = {
   required: ['proof', 'memo', 'txType'],
 }
 
-const AjvSendTransactionsSchema: JSONSchemaType<PoolTx[]> = {
+// @ts-ignore
+const AjvSignMPCSchema: JSONSchemaType<any> = {
+  type: 'object',
+  properties: {
+    txProof: AjvProofSchema,
+    treeProof: AjvProofSchema,
+    txType: {
+      type: 'string',
+      enum: [TxType.DEPOSIT, TxType.PERMITTABLE_DEPOSIT, TxType.TRANSFER, TxType.WITHDRAWAL],
+    },
+    memo: AjvString,
+    depositSignature: AjvNullableString,
+  },
+  required: ['txProof', 'treeProof', 'txType', 'memo'],
+}
+
+const AjvSendTransactionsSchema: JSONSchemaType<BasePoolTx[]> = {
   type: 'array',
   items: AjvSendTransactionSchema,
 }
@@ -149,7 +164,21 @@ const AjvGetSiblingsSchema: JSONSchemaType<{
 const AjvTraceIdSchema: JSONSchemaType<{ [HEADER_TRACE_ID]: string }> = {
   type: 'object',
   properties: { [HEADER_TRACE_ID]: AjvNullableString },
-  required: config.requireTraceId ? [HEADER_TRACE_ID] : [],
+  required: [HEADER_TRACE_ID],
+}
+
+const AjvGetRootSchema: JSONSchemaType<{
+  index: string | number
+}> = {
+  type: 'object',
+  properties: {
+    index: {
+      type: 'integer',
+      minimum: 0,
+      isDivBy128: true,
+    },
+  },
+  required: ['index'],
 }
 
 function checkErrors<T>(schema: JSONSchemaType<T>) {
@@ -165,12 +194,17 @@ function checkErrors<T>(schema: JSONSchemaType<T>) {
   }
 }
 
-type ValidationFunction = ReturnType<typeof checkErrors>
+export type ValidationFunction = ReturnType<typeof checkErrors>
 
 export class ValidationError extends Error {
   constructor(public validationErrors: ReturnType<ValidationFunction>) {
     super()
   }
+}
+
+export function validateBatchWithTrace(req: any, validationSet: [ValidationFunction, any][]) {
+  validationSet.push([checkTraceId, req.headers])
+  return validateBatch(validationSet)
 }
 
 export function validateBatch(validationSet: [ValidationFunction, any][]) {
@@ -183,10 +217,12 @@ export function validateBatch(validationSet: [ValidationFunction, any][]) {
 
 export const checkMerkleRootErrors = checkErrors(AjvMerkleRootSchema)
 export const checkSendTransactionsErrors = checkErrors(AjvSendTransactionsSchema)
+export const checkSignMPCSchema = checkErrors(AjvSignMPCSchema)
 export const checkGetTransactionsV2 = checkErrors(AjvGetTransactionsV2Schema)
 export const checkGetLimits = checkErrors(AjvGetLimitsSchema)
 export const checkGetSiblings = checkErrors(AjvGetSiblingsSchema)
 export const checkTraceId = checkErrors(AjvTraceIdSchema)
+export const checkGetRoot = checkErrors(AjvGetRootSchema)
 
 async function fetchSafe(url: string) {
   const r = await fetch(url)
@@ -196,8 +232,8 @@ async function fetchSafe(url: string) {
   return r
 }
 
-export async function validateCountryIP(ip: string) {
-  if (config.blockedCountries.length === 0) return null
+export async function validateCountryIP(ip: string, blockedCountries: string[]) {
+  if (blockedCountries.length === 0) return null
 
   const apis = [
     fetchSafe(`https://ipapi.co/${ip}/country`).then(res => res.text()),
@@ -216,7 +252,7 @@ export async function validateCountryIP(ip: string) {
     ])
   })
 
-  if (config.blockedCountries.includes(country)) {
+  if (blockedCountries.includes(country)) {
     logger.warn('Restricted country', { ip, country })
     throw new ValidationError([
       {

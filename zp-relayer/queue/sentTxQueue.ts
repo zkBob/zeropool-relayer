@@ -1,21 +1,13 @@
-import { Queue } from 'bullmq'
+import { SendAttempt } from '@/lib/network'
+import { redis } from '@/lib/redisClient'
+import { ProcessResult } from '@/pool/types'
 import { SENT_TX_QUEUE_NAME } from '@/utils/constants'
-import { redis } from '@/services/redisClient'
-import type { TransactionConfig } from 'web3-core'
-import type { GasPriceValue } from '@/services/gas-price'
-import type { BatchTx, WorkerTxType } from './poolTxQueue'
+import { Queue } from 'bullmq'
 
-export type SendAttempt = [string, GasPriceValue]
 export interface SentTxPayload {
   poolJobId: string
-  root: string
-  outCommit: string
-  commitIndex: number
-  truncatedMemo: string
-  txConfig: TransactionConfig
-  nullifier?: string
-  txPayload: BatchTx<WorkerTxType, false>
-  prevAttempts: SendAttempt[]
+  processResult: ProcessResult<any>
+  prevAttempts: SendAttempt<any>[]
 }
 
 export enum SentTxState {
@@ -24,8 +16,6 @@ export enum SentTxState {
   SKIPPED = 'SKIPPED',
 }
 
-export type SentTxResult = [SentTxState, string, string[]]
-
-export const sentTxQueue = new Queue<SentTxPayload, SentTxResult>(SENT_TX_QUEUE_NAME, {
+export const sentTxQueue = new Queue<SentTxPayload>(SENT_TX_QUEUE_NAME, {
   connection: redis,
 })

@@ -1,6 +1,6 @@
 import BN from 'bn.js'
-import { toBN } from 'web3-utils'
 import { Helpers, Proof } from 'libzkbob-rs-node'
+import { toBN } from 'web3-utils'
 
 export interface Delta {
   transferIndex: BN

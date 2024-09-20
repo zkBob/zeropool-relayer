@@ -1,28 +1,21 @@
-import type { Redis } from 'ioredis'
+import { TransactionManager } from '@/lib/network'
+import { BasePool } from '@/pool/BasePool'
 import type { Mutex } from 'async-mutex'
-import type { TxManager } from '@/tx/TxManager'
-import type { Pool } from '@/pool'
-import type { TxPayload } from '@/queue/poolTxQueue'
-import type { Circuit, IProver } from '@/prover'
-import type { FeeManager } from '@/services/fee'
+import type { Redis } from 'ioredis'
 
 export interface IWorkerBaseConfig {
   redis: Redis
+  pool: BasePool
 }
 
 export interface IPoolWorkerConfig extends IWorkerBaseConfig {
-  validateTx: (tx: TxPayload, pool: Pool, feeManager: FeeManager, traceId?: string) => Promise<void>
-  treeProver: IProver<Circuit.Tree>
   mutex: Mutex
-  txManager: TxManager
-  feeManager: FeeManager
+  txManager: TransactionManager<any>
 }
 
 export interface ISentWorkerConfig extends IWorkerBaseConfig {
   mutex: Mutex
-  txManager: TxManager
+  txManager: TransactionManager<any>
 }
 
-export interface IDirectDepositWorkerConfig extends IWorkerBaseConfig {
-  directDepositProver: IProver<Circuit.DirectDeposit>
-}
+export interface IDirectDepositWorkerConfig extends IWorkerBaseConfig {}
