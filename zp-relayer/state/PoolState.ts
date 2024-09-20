@@ -1,15 +1,17 @@
-import type { Redis } from 'ioredis'
-import { logger } from '@/services/appLogger'
+import { logger } from '@/lib/appLogger'
 import { OUTPLUSONE } from '@/utils/constants'
-import { MerkleTree, TxStorage, MerkleProof, Constants, Helpers } from 'libzkbob-rs-node'
-import { NullifierSet } from './nullifierSet'
+import { Mutex } from 'async-mutex'
+import type { Redis } from 'ioredis'
+import { Constants, Helpers, MerkleProof, MerkleTree, TxStorage } from 'libzkbob-rs-node'
 import { JobIdsMapping } from './jobIdsMapping'
+import { NullifierSet } from './nullifierSet'
 
 export class PoolState {
   private tree: MerkleTree
   private txs: TxStorage
   public nullifiers: NullifierSet
   public jobIdsMapping: JobIdsMapping
+  private mutex: Mutex = new Mutex()
 
   constructor(private name: string, redis: Redis, path: string) {
     this.tree = new MerkleTree(`${path}/${name}Tree.db`)
@@ -64,6 +66,7 @@ export class PoolState {
   }
 
   addCommitment(index: number, commit: Buffer) {
+    logger.debug(`Updating ${this.name} state tree`)
     this.tree.addCommitment(index, commit)
   }
 
@@ -75,13 +78,11 @@ export class PoolState {
     this.tree.addHash(i, hash)
   }
 
-  getDbTx(i: number): [string, string] | null {
+  getDbTx(i: number): string | null {
     const buf = this.txs.get(i)
     if (!buf) return null
-    const data = buf.toString()
-    const outCommit = data.slice(0, 64)
-    const memo = data.slice(64)
-    return [outCommit, memo]
+    const data = buf.toString('hex')
+    return data
   }
 
   getMerkleRootAt(index: number): string | null {
@@ -111,6 +112,7 @@ export class PoolState {
   }
 
   addTx(i: number, tx: Buffer) {
+    logger.debug(`Adding tx to ${this.name} state storage`)
     this.txs.add(i, tx)
   }
 
@@ -119,10 +121,8 @@ export class PoolState {
   }
 
   updateState(commitIndex: number, outCommit: string, txData: string) {
-    logger.debug(`Updating ${this.name} state tree`)
     this.addCommitment(commitIndex, Helpers.strToNum(outCommit))
 
-    logger.debug(`Adding tx to ${this.name} state storage`)
     this.addTx(commitIndex * OUTPLUSONE, Buffer.from(txData, 'hex'))
   }
 
@@ -142,6 +142,16 @@ export class PoolState {
     for (let i = otherStateNextIndex; i < stateNextIndex; i += OUTPLUSONE) {
       this.txs.delete(i)
     }
+  }
+
+  wipe() {
+    const stateNextIndex = this.tree.getNextIndex();
+    this.tree.wipe();
+    for (let i = 0; i < stateNextIndex; i += OUTPLUSONE) {
+      this.txs.delete(i)
+    }
+    this.jobIdsMapping.clear();
+    this.nullifiers.clear();
   }
 
   async getTransactions(limit: number, offset: number) {

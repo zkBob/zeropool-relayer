@@ -1,12 +1,12 @@
-import { Job, Worker } from 'bullmq'
-import { logger } from '@/services/appLogger'
-import { withErrorLog } from '@/utils/helpers'
+import { logger } from '@/lib/appLogger'
+import { FinalizerPool } from '@/pool/FinalizerPool'
+import { DirectDeposit, JobState, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
 import { DIRECT_DEPOSIT_QUEUE_NAME } from '@/utils/constants'
-import { DirectDeposit, poolTxQueue, WorkerTxType, WorkerTxTypePriority } from '@/queue/poolTxQueue'
+import { withErrorLog } from '@/utils/helpers'
+import { Job, Worker } from 'bullmq'
 import type { IDirectDepositWorkerConfig } from './workerTypes'
-import { getDirectDepositProof } from '@/txProcessor'
 
-export async function createDirectDepositWorker({ redis, directDepositProver }: IDirectDepositWorkerConfig) {
+export async function createDirectDepositWorker({ redis, pool }: IDirectDepositWorkerConfig) {
   const workerLogger = logger.child({ worker: 'dd-prove' })
   const WORKER_OPTIONS = {
     autorun: false,
@@ -22,21 +22,21 @@ export async function createDirectDepositWorker({ redis, directDepositProver }: 
     const directDeposits = job.data
 
     jobLogger.info('Building direct deposit proof', { count: directDeposits.length })
-    const { proof, memo: rawMemo, outCommit } = await getDirectDepositProof(directDeposits, directDepositProver)
+    const { proof, memo: rawMemo, outCommit } = await (pool as FinalizerPool).getDirectDepositProof(directDeposits)
 
     const memo = rawMemo.toString('hex')
     const poolJob = await poolTxQueue.add(
       '',
       {
         type: WorkerTxType.DirectDeposit,
-        transactions: [
-          {
-            deposits: directDeposits,
-            txProof: proof,
-            outCommit,
-            memo,
-          },
-        ],
+        transaction: {
+          deposits: directDeposits,
+          txProof: proof,
+          outCommit,
+          memo,
+          txHash: null,
+          state: JobState.WAITING,
+        },
       },
       {
         priority: WorkerTxTypePriority[WorkerTxType.DirectDeposit],

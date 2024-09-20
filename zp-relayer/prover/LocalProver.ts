@@ -1,4 +1,4 @@
-import { Proof, Params } from 'libzkbob-rs-node'
+import { Params, Proof } from 'libzkbob-rs-node'
 import { Circuit, IProver, PubInput, SecInput } from './IProver'
 
 type InternalProve<C extends Circuit> = (p: Params, pub: PubInput<C>, sec: SecInput<C>) => Promise<Proof>

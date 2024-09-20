@@ -1,10 +1,10 @@
-FROM rust:1.69.0-slim-buster as base
+FROM rust:1.77.0-slim-buster as base
 
 WORKDIR /app
 
 RUN apt-get update && \
     apt-get -y install curl && \
-    curl -sL https://deb.nodesource.com/setup_18.x | bash && \
+    curl -sL https://deb.nodesource.com/setup_20.x | bash && \
     apt-get -y install nodejs libclang-dev clang && \
     npm install -g yarn cargo-cp-artifact
 
@@ -29,7 +29,7 @@ RUN yarn build:relayer
 RUN yarn install --frozen-lockfile --production
 
 
-FROM node:18
+FROM node:20
 
 ARG RELAYER_REF
 ARG RELAYER_SHA

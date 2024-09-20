@@ -4,5 +4,6 @@
   "singleQuote": true,
   "arrowParens": "avoid",
   "bracketSpacing": true,
-  "quoteProps": "consistent"
+  "quoteProps": "consistent",
+  "plugins": ["prettier-plugin-organize-imports"]
 }

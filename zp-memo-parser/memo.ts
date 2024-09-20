@@ -1,5 +1,5 @@
+import { BinaryReader, deserialize } from 'borsh'
 import { Buffer } from 'buffer'
-import { deserialize, BinaryReader } from 'borsh'
 
 type Option<T> = T | null
 
@@ -10,25 +10,30 @@ export enum TxType {
   PERMITTABLE_DEPOSIT = '0003',
 }
 
-interface DefaultTxData {
-  fee: string
+interface BaseTxData {
+  transactFee: string
 }
 
-export interface WithdrawTxData extends DefaultTxData {
+export interface WithdrawTxData {
   nativeAmount: string
   receiver: Uint8Array
 }
 
-export interface PermittableDepositTxData extends DefaultTxData {
+export interface PermittableDepositTxData {
   deadline: string
   holder: Uint8Array
 }
 
-export type TxData<T extends TxType> = T extends TxType.WITHDRAWAL
-  ? WithdrawTxData
-  : T extends TxType.PERMITTABLE_DEPOSIT
-  ? PermittableDepositTxData
-  : DefaultTxData
+export type TxData<T extends TxType> = BaseTxData &
+  (T extends TxType.WITHDRAWAL ? WithdrawTxData : T extends TxType.PERMITTABLE_DEPOSIT ? PermittableDepositTxData : {})
+
+interface BaseTxDataProverV2 {
+  proxyAddress: Uint8Array
+  proverAddress: Uint8Array
+  treeUpdateFee: string
+}
+
+export type TxDataProverV2<T extends TxType> = BaseTxDataProverV2 & TxData<T>
 
 // Size in bytes
 const U256_SIZE = 32
@@ -100,34 +105,79 @@ function getAddress(data: Buffer, offset: number): Uint8Array {
   return new Uint8Array(data.subarray(offset, offset + 20))
 }
 
-export function getTxData<T extends TxType>(data: Buffer, txType: Option<T>): TxData<T> {
-  function readU64(offset: number) {
-    let uint = data.readBigUInt64BE(offset)
-    return uint.toString(10)
-  }
+function readU64(data: Buffer, offset: number) {
+  let uint = data.readBigUInt64BE(offset)
+  return uint.toString(10)
+}
+
+export function getTxData<T extends TxType>(m: Buffer, txType: Option<T>): TxData<T> {
   let offset = 0
-  const fee = readU64(offset)
+  const transactFee = readU64(m, offset)
   offset += 8
   if (txType === TxType.WITHDRAWAL) {
-    const nativeAmount = readU64(offset)
+    const nativeAmount = readU64(m, offset)
     offset += 8
-    const receiver = getAddress(data, offset)
+    const receiver = getAddress(m, offset)
     return {
-      fee,
+      transactFee,
       nativeAmount,
       receiver,
-    } as TxData<T>
+    } as unknown as TxData<T>
   } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
-    const deadline = readU64(offset)
+    const deadline = readU64(m, offset)
     offset += 8
-    const holder = getAddress(data, offset)
+    const holder = getAddress(m, offset)
     return {
-      fee,
+      transactFee,
       deadline,
       holder,
-    } as TxData<T>
+    } as unknown as TxData<T>
   }
-  return { fee } as TxData<T>
+  return { transactFee } as TxData<T>
+}
+
+export function getTxDataProverV2<T extends TxType>(m: Buffer, txType: Option<T>): TxDataProverV2<T> {
+  let offset = 0
+
+  const proxyAddress = getAddress(m, offset)
+  offset += 20
+
+  const proverAddress = getAddress(m, offset)
+  offset += 20
+
+  const transactFee = readU64(m, offset)
+  offset += 8
+
+  const treeUpdateFee = readU64(m, offset)
+  offset += 8
+
+  const base = {
+    proxyAddress,
+    proverAddress,
+    transactFee,
+    treeUpdateFee,
+  }
+
+  if (txType === TxType.WITHDRAWAL) {
+    const nativeAmount = readU64(m, offset)
+    offset += 8
+    const receiver = getAddress(m, offset)
+    return {
+      ...base,
+      nativeAmount,
+      receiver,
+    } as unknown as TxDataProverV2<T>
+  } else if (txType === TxType.PERMITTABLE_DEPOSIT) {
+    const deadline = readU64(m, offset)
+    offset += 8
+    const holder = getAddress(m, offset)
+    return {
+      ...base,
+      deadline,
+      holder,
+    } as unknown as TxDataProverV2<T>
+  }
+  return base as unknown as TxDataProverV2<T>
 }
 
 export function decodeMemo(data: Buffer, maxNotes = 127) {

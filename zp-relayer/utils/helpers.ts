@@ -1,14 +1,15 @@
-import fs from 'fs'
-import crypto from 'crypto'
-import type BN from 'bn.js'
-import type Web3 from 'web3'
+import { logger } from '@/lib/appLogger'
 import type { Mutex } from 'async-mutex'
-import type { Contract } from 'web3-eth-contract'
+import type BN from 'bn.js'
+import crypto from 'crypto'
+import type { Request, Response } from 'express'
+import fs from 'fs'
 import type { SnarkProof } from 'libzkbob-rs-node'
-import { TxType } from 'zp-memo-parser'
 import promiseRetry from 'promise-retry'
-import { padLeft, toBN } from 'web3-utils'
-import { logger } from '@/services/appLogger'
+import type Web3 from 'web3'
+import type { Contract } from 'web3-eth-contract'
+import { padLeft, toBN, numberToHex } from 'web3-utils'
+import { TxType } from 'zp-memo-parser'
 import { isContractCallError } from './web3Errors'
 
 const S_MASK = toBN('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
@@ -36,6 +37,18 @@ export function truncateMemoTxPrefix(memo: string, txType: TxType) {
   return memo.slice(txSpecificPrefixLen)
 }
 
+const txTypePrefixLenV2 = {
+  [TxType.DEPOSIT]: 116,
+  [TxType.TRANSFER]: 116,
+  [TxType.WITHDRAWAL]: 172,
+  [TxType.PERMITTABLE_DEPOSIT]: 172,
+}
+
+export function truncateMemoTxPrefixProverV2(memo: string, txType: TxType) {
+  const txSpecificPrefixLen = txTypePrefixLenV2[txType]
+  return memo.slice(txSpecificPrefixLen)
+}
+
 export function truncateHexPrefix(data: string) {
   if (data.startsWith('0x')) {
     data = data.slice(2)
@@ -53,6 +66,25 @@ export function numToHex(num: BN, pad = 64) {
     logger.error(`hex size overflow: ${hex}; pad: ${pad}`)
   }
   return padLeft(hex, pad)
+}
+
+export function packSignature(signature: string): string {
+  signature = truncateHexPrefix(signature)
+
+  if (signature.length > 128) {
+    let v = signature.slice(128, 130)
+    if (v == '1c') {
+      return `${signature.slice(0, 64)}${(parseInt(signature[64], 16) | 8).toString(16)}${signature.slice(65, 128)}`
+    } else if (v != '1b') {
+      throw 'invalid signature: v should be 27 or 28'
+    }
+
+    return signature.slice(0, 128)
+  } else if (signature.length < 128) {
+    throw 'invalid signature: it should consist at least 64 bytes (128 chars)'
+  }
+
+  return signature
 }
 
 export function unpackSignature(packedSign: string) {
@@ -101,7 +133,7 @@ export function encodeProof(p: SnarkProof): string {
 }
 
 export function buildPrefixedMemo(outCommit: string, txHash: string, truncatedMemo: string) {
-  return numToHex(toBN(outCommit)).concat(txHash.slice(2)).concat(truncatedMemo)
+  return numToHex(toBN(outCommit)).concat(truncateHexPrefix(txHash)).concat(truncatedMemo)
 }
 
 export async function setIntervalAndRun(f: () => Promise<void> | void, interval: number) {
@@ -142,7 +174,7 @@ export async function withErrorLog<R>(
   }
 }
 
-function sleep(ms: number) {
+export function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
@@ -242,7 +274,11 @@ export function contractCallRetry(contract: Contract, method: string, args: any[
   )
 }
 
-export function getFileHash(path: string) {
+export function getFileHash(path: string | null) {
+  if (!path) {
+    return null
+  }
+
   const buffer = fs.readFileSync(path)
   const hash = crypto.createHash('sha256')
   hash.update(buffer)
@@ -250,7 +286,41 @@ export function getFileHash(path: string) {
 }
 
 export function applyDenominator(n: BN, d: BN) {
-  return d.testn(255)
-    ? n.div(d.maskn(255))
-    : n.mul(d)
+  return d.testn(255) ? n.div(d.maskn(255)) : n.mul(d)
+}
+
+export function inject<T>(values: T, f: (req: Request, res: Response, e: T) => void) {
+  return (req: Request, res: Response) => {
+    return f(req, res, values)
+  }
+}
+
+export function txToV2Format(prefix: string, tx: string) {
+  const outCommit = tx.slice(0, 64)
+  const txHash = tx.slice(64, 128)
+  const memo = tx.slice(128)
+  return prefix + txHash + outCommit + memo
+}
+
+export async function fetchJson(serverUrl: string, path: string, query: [string, string][]) {
+  const url = new URL(path, serverUrl)
+
+  for (const [key, value] of query) {
+    url.searchParams.set(key, value)
+  }
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${path} from ${serverUrl}. Status: ${res.status}`)
+  }
+
+  return await res.json()
+}
+
+export function numberToHexPadded(num: number, numBytes: number): string {
+  return padLeft(numberToHex(num).slice(2), numBytes * 2);
+}
+
+export function hexToNumber(hex: string): number {
+  return parseInt(hex, 16);
 }
