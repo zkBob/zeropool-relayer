@@ -38,6 +38,11 @@ async function sendTransactions(req: Request, res: Response) {
       depositSignature,
     }
   })
+  if (txs.find(tx => tx.depositSignature!=null)) {
+    res.status(403).send(
+      "Deposits to the Polygon pool are disabled"
+    )
+  }
   const jobId = await pool.transact(txs, traceId)
   res.json({ jobId })
 }
